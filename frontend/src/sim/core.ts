@@ -290,8 +290,7 @@ export class EngineCore {
       const friction =
         (8 + 0.0014 * rpm + 0.00000022 * rpm * rpm) * this.frictionScale
       torque += (indicated - friction) / n
-      const starter =
-        this.controls.starter && rpm < 500 ? e.starterTorque : 0
+      const starter = this.controls.starter && rpm < 500 ? e.starterTorque : 0
       if (this.controls.holdRpm === null) {
         this.absorbedTorque = this.controls.load
         this.omega = Math.max(

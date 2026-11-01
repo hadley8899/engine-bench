@@ -13,6 +13,7 @@ import {
   ThemeProvider,
 } from '@mui/material'
 import { Link } from 'react-router'
+import { ZodError } from 'zod'
 import { buildTheme } from '../theme'
 import { useAuth } from '../auth/useAuth'
 import { crankingTorque, EngineCore } from '../sim/core'
@@ -27,7 +28,9 @@ import {
   normalConditions,
   recipeSchema,
   roadEngine,
+  scaledProportions,
   sportEngine,
+  undersizedForEngine,
   validateEngine,
   validateProcedure,
 } from '../sim/schema'
@@ -408,6 +411,12 @@ export function BenchPage() {
     () => (invalid ? null : crankingTorque(draft, conditions)),
     [draft, conditions, invalid],
   )
+  const undersizedLabels = (e: EngineDefinition) =>
+    undersizedForEngine(e).map((k) =>
+      numericFields.find((f) => f.key === k)!.label.toLowerCase(),
+    )
+  const draftUndersized = invalid ? [] : undersizedLabels(draft)
+  const benchUndersized = undersizedLabels(experiment.engine)
   const benchCranking = useMemo(
     () => crankingTorque(experiment.engine, experiment.conditions),
     [experiment.engine, experiment.conditions],
@@ -808,6 +817,24 @@ export function BenchPage() {
     : 0
   const powerPoint = displayed?.samples.find((s) => s.power === peak)
   const torquePoint = displayed?.samples.find((s) => s.torque === peakTorque)
+  // Starting a test stops a manually running engine, so only an active test,
+  // unapplied edits or an invalid procedure block the dyno.
+  const procedureError = (() => {
+    try {
+      validateProcedure(procedure, experiment.engine)
+      return ''
+    } catch (err) {
+      return err instanceof Error && !(err instanceof ZodError)
+        ? err.message
+        : 'Check the test settings: every value must be filled in and within range.'
+    }
+  })()
+  const dynoReason = activeTest
+    ? ''
+    : dirty
+      ? 'Rebuild the engine first. The dyno tests the engine on the stand, and the workshop has unapplied edits.'
+      : procedureError
+  const dynoBlocked = activeTest || busy || !!dynoReason
   const apply = () => {
     try {
       configure(draft, conditions)
@@ -1114,6 +1141,8 @@ export function BenchPage() {
                     <Alert severity="info">
                       Engine stalled. Press Start engine to unload the dyno and
                       restart.
+                      {benchUndersized.length > 0 &&
+                        ` For an engine this size the ${benchUndersized.join(', ')} ${benchUndersized.length > 1 ? 'are' : 'is'} very small, so it can fire on the starter but not keep itself running. Use “Scale to this size” in the engine workshop.`}
                     </Alert>
                   )}
                 {telemetry.starterStalled && (
@@ -1203,6 +1232,22 @@ export function BenchPage() {
                       />
                     ))}
                 </div>
+                {draftUndersized.length > 0 && (
+                  <div className="cranking-note warn">
+                    The {draftUndersized.join(', ')}{' '}
+                    {draftUndersized.length > 1 ? 'are' : 'is'} very small for
+                    this size. Big engines need bigger valves to breathe and a
+                    heavier rotating assembly to idle smoothly.{' '}
+                    <Button
+                      size="small"
+                      onClick={() =>
+                        setDraft((d) => ({ ...d, ...scaledProportions(d) }))
+                      }
+                    >
+                      Scale to this size
+                    </Button>
+                  </div>
+                )}
                 <Button
                   size="small"
                   className="advanced-toggle"
@@ -1383,19 +1428,24 @@ export function BenchPage() {
                 <Stack direction="row" spacing={1} mt={2}>
                   <Button
                     variant="contained"
-                    disabled={running || dirty || busy}
+                    disabled={dynoBlocked}
                     onClick={() => void test('live')}
                   >
                     Live pull
                   </Button>
                   <Button
                     variant="outlined"
-                    disabled={running || dirty || busy}
+                    disabled={dynoBlocked}
                     onClick={() => void test('quick')}
                   >
                     Quick test
                   </Button>
                 </Stack>
+                {dynoReason && !busy && (
+                  <p className="pending-note" data-testid="dyno-blocked">
+                    {dynoReason}
+                  </p>
+                )}
                 <p className="helper-text">
                   Automatic tests own throttle and RPM. Quick tests calculate
                   silently; they are not playback. Stop retains incomplete

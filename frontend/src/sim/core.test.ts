@@ -19,6 +19,8 @@ import {
   recipeSchema,
   roadEngine,
   runSchema,
+  scaledProportions,
+  undersizedForEngine,
   sportEngine,
   validateEngine,
   validateProcedure,
@@ -114,7 +116,12 @@ describe('engine integration', () => {
     expect(core.maxSubsteps).toBeLessThanOrEqual(4)
   })
   it('flags a starter too weak to turn the engine and starts with enough torque', () => {
-    const big = { ...roadEngine, bore: 0.105, stroke: 0.105, starterTorque: 70 }
+    const big = {
+      ...roadEngine,
+      bore: 0.105,
+      stroke: 0.105,
+      starterTorque: 70,
+    }
     const needed = crankingTorque(big, normalConditions)
     expect(needed).toBeGreaterThan(crankingTorque(roadEngine, normalConditions))
     expect(needed).toBeGreaterThan(70)
@@ -133,6 +140,29 @@ describe('engine integration', () => {
     advance(strong, 2)
     expect(strong.telemetry().rpm).toBeGreaterThan(500)
     expect(strong.telemetry().starterStalled).toBe(false)
+  })
+  it('idles at extreme sizes once valves and inertia are scaled to the engine', () => {
+    for (const [bore, stroke, rodLength] of [
+      [0.02, 0.02, 0.035],
+      [0.3, 0.3, 0.45],
+    ]) {
+      const raw = {
+        ...roadEngine,
+        bore,
+        stroke,
+        rodLength,
+        starterTorque: 20000,
+      }
+      expect(undersizedForEngine(raw).length).toBe(bore > 0.1 ? 3 : 0)
+      const scaled = { ...raw, ...scaledProportions(raw) }
+      expect(undersizedForEngine(scaled)).toEqual([])
+      const core = new EngineCore(scaled, normalConditions)
+      core.setControls({ ignition: true, starter: true })
+      advance(core, 1.2)
+      core.setControls({ starter: false })
+      advance(core, 2)
+      expect(core.telemetry().rpm).toBeGreaterThan(500)
+    }
   })
   it('does not blame the starter when dyno load stops the crank', () => {
     const core = new EngineCore(roadEngine, normalConditions)

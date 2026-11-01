@@ -58,6 +58,29 @@ export const displacement = (e: EngineDefinition) =>
   (Math.PI / 4) * e.bore ** 2 * e.stroke * e.cylinders
 /** Rod/crank-radius ratio of 1.5; shorter rods approach a geometric singularity. */
 export const MIN_ROD_STROKE = 0.75
+/**
+ * Valve areas scaled by piston area and inertia by displacement, relative to
+ * the Road preset. A guide for unusual sizes, not an optimum: Road-like
+ * proportions start and idle across the supported envelope.
+ */
+export function scaledProportions(e: EngineDefinition) {
+  const areaRatio = (e.bore / roadEngine.bore) ** 2
+  const sizeRatio = displacement(e) / displacement(roadEngine)
+  const fit = (v: number, lo: number, hi: number) =>
+    Math.min(hi, Math.max(lo, v))
+  return {
+    intakeArea: fit(roadEngine.intakeArea * areaRatio, 0.00001, 0.02),
+    exhaustArea: fit(roadEngine.exhaustArea * areaRatio, 0.00001, 0.025),
+    inertia: fit(roadEngine.inertia * sizeRatio, 0.01, 20),
+  }
+}
+/** Settings far below the scaled proportions, which commonly stop idling. */
+export function undersizedForEngine(e: EngineDefinition) {
+  const s = scaledProportions(e)
+  return (['intakeArea', 'exhaustArea', 'inertia'] as const).filter(
+    (k) => e[k] < s[k] * 0.4,
+  )
+}
 export function validateEngine(value: unknown): EngineDefinition {
   const e = engineSchema.parse(value)
   if (e.rodLength < e.stroke * MIN_ROD_STROKE - 1e-9)
