@@ -149,6 +149,16 @@ const numericFields: {
     help: '540° is intake bottom dead centre.',
   },
   {
+    key: 'intakeRunnerLength',
+    label: 'Intake runner length',
+    unit: 'mm',
+    scale: 1000,
+    min: 50,
+    max: 1500,
+    step: 10,
+    help: 'Air momentum in the runner fills the cylinder past bottom dead centre. Longer runners move the torque peak lower.',
+  },
+  {
     key: 'ignitionAdvance',
     label: 'Ignition advance',
     unit: '° BTDC',
@@ -1256,7 +1266,7 @@ export function BenchPage() {
                 >
                   {advanced
                     ? 'Hide advanced parameters'
-                    : `Show ${numericFields.length - 5} advanced parameters (valves, timing, mixture, inertia, limits)`}
+                    : `Show ${numericFields.length - 5} advanced parameters (valves, runners, timing, mixture, inertia, limits)`}
                 </Button>
                 <p className="derived-capacity">
                   Derived capacity{' '}

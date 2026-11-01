@@ -8,18 +8,27 @@ import type {
 import {
   atmosphere,
   clamp,
-  CP,
-  CV,
   CYCLE,
+  enthalpy,
   geometry,
+  internalEnergy,
   massFlow,
   omegaToRpm,
   powerKw,
   R,
   rpmToOmega,
+  temperatureFromEnergy,
   wiebe,
   wrap,
 } from './physics'
+
+/** Calibration constants; see docs/SIMULATION.md for their basis. */
+const EXHAUST_BACKFLOW_TEMPERATURE = 650
+const WALL_HEAT = 3
+const WALL_ABOVE_COOLANT = 80
+const FMEP_STATIC = 60000
+const FMEP_LINEAR = 4200
+const FMEP_QUADRATIC = 430
 
 export type Controls = {
   throttle: number
@@ -56,6 +65,8 @@ interface Cylinder {
   phase: number
   pressure: number
   volume: number
+  /** Intake runner mass flow, kg/s; positive into the cylinder. */
+  runner: number
 }
 /** Original 0D research prototype. All hosts advance this exact core at 48 kHz. */
 export class EngineCore {
@@ -94,8 +105,14 @@ export class EngineCore {
   private pistonArea: number
   private crankRadius: number
   private clearanceVolume: number
-  private frictionScale: number
+  private frictionPerPascal: number
   private audioScale: number
+  private intakeEnthalpy: number
+  private exhaustEnthalpy: number
+  private woschniBore: number
+  private airDensity: number
+  /** Runner cross-section divided by length, m. */
+  private runnerGain: number
 
   constructor(engine: EngineDefinition, conditions: Conditions) {
     this.engine = validateEngine(engine)
@@ -104,13 +121,21 @@ export class EngineCore {
     this.crankRadius = engine.stroke / 2
     this.clearanceVolume =
       (this.pistonArea * engine.stroke) / (engine.compression - 1)
-    // Friction and exhaust-pulse loudness were calibrated on a 2.0 L engine.
-    this.frictionScale = displacement(engine) / 0.002
+    // Friction mean effective pressure becomes torque in proportion to displacement.
+    this.frictionPerPascal = displacement(engine) / (4 * Math.PI)
+    // Exhaust-pulse loudness was calibrated on a 2.0 L engine.
     this.audioScale = 0.002 / displacement(engine)
+    this.intakeEnthalpy = enthalpy(conditions.temperature)
+    this.exhaustEnthalpy = enthalpy(EXHAUST_BACKFLOW_TEMPERATURE)
+    this.woschniBore = 3.26 * engine.bore ** -0.2
     this.manifold = conditions.pressure
     this.coolant = conditions.coolant
     const air = atmosphere(conditions)
     this.oxygen = air.oxygenMassFraction
+    this.airDensity = air.density
+    // Runner diameter about 0.39 × bore, and never narrower than the valve.
+    const runnerArea = Math.max(0.15 * this.pistonArea, 1.2 * engine.intakeArea)
+    this.runnerGain = runnerArea / engine.intakeRunnerLength
     this.airDensityRatio =
       air.density / (conditions.pressure / R / conditions.temperature)
     this.phases = Array.from(
@@ -123,13 +148,14 @@ export class EngineCore {
         (conditions.pressure * g.volume) / (R * conditions.temperature)
       this.cylinders.push({
         mass,
-        energy: mass * CV * conditions.temperature,
+        energy: mass * internalEnergy(conditions.temperature),
         fresh: 0,
         heat: 0,
         burn: 1,
         phase: wrap(-phase),
         pressure: conditions.pressure,
         volume: g.volume,
+        runner: 0,
       })
     }
   }
@@ -153,6 +179,9 @@ export class EngineCore {
     const throttle = Math.max(this.controls.throttle, idle)
     const targetMap = c.pressure * (0.04 + 0.95 * throttle)
     this.manifold += ((targetMap - this.manifold) * this.dt) / 0.045
+    const pistonSpeed = (2 * e.stroke * rpm) / 60
+    // Woschni-form gas velocity without its combustion term (calibrated by WALL_HEAT).
+    const gasVelocity = (2.28 * pistonSpeed + 1) ** 0.8 * WALL_HEAT
     const n = Math.max(1, Math.ceil((this.omega * this.dt) / (Math.PI / 180)))
     this.maxSubsteps = Math.max(this.maxSubsteps, n)
     if (n > 4)
@@ -179,7 +208,7 @@ export class EngineCore {
         const derivative =
           this.pistonArea * (r * sin + (r * r * sin * cos) / root)
         const previousVolume = cyl.volume
-        let temperature = cyl.energy / (cyl.mass * CV)
+        let temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
         let pressure = (cyl.mass * R * temperature) / previousVolume
         const inlet =
           deg >= 350 && deg < e.intakeClose
@@ -192,34 +221,47 @@ export class EngineCore {
             : 0
         // Enthalpy transport across each open valve; reverse flow is supported.
         if (inlet > 0) {
-          if (this.manifold > pressure) {
-            const dm =
+          // Lumped runner: gas momentum driven by manifold-to-cylinder
+          // pressure, resisted by the valve's quadratic loss. Solved
+          // implicitly so a nearly closed valve stays stable; capped at the
+          // valve's choked flow.
+          const drive =
+            cyl.runner + this.runnerGain * dt * (this.manifold - pressure)
+          const density =
+            drive >= 0
+              ? this.airDensity * (this.manifold / c.pressure)
+              : cyl.mass / previousVolume
+          const loss = (this.runnerGain * dt) / (2 * density * inlet * inlet)
+          const size = Math.abs(drive)
+          let flow =
+            (Math.sign(drive) * 2 * size) / (1 + Math.sqrt(1 + 4 * loss * size))
+          if (flow >= 0) {
+            flow = Math.min(
+              flow,
               massFlow(
                 this.manifold as Pascals,
-                pressure as Pascals,
+                0 as Pascals,
                 c.temperature,
                 inlet,
-              ) *
-              dt *
-              this.airDensityRatio
+              ) * this.airDensityRatio,
+            )
+            const dm = flow * dt
             cyl.mass += dm
             cyl.fresh += dm
-            cyl.energy += dm * CP * c.temperature
+            cyl.energy += dm * this.intakeEnthalpy
           } else {
-            const dm = Math.min(
-              cyl.mass * 0.08,
-              massFlow(
-                pressure as Pascals,
-                this.manifold as Pascals,
-                temperature,
-                inlet,
-              ) * dt,
+            flow = Math.max(
+              flow,
+              -massFlow(pressure as Pascals, 0 as Pascals, temperature, inlet),
+              (-cyl.mass * 0.08) / dt,
             )
+            const dm = -flow * dt
             cyl.fresh *= 1 - dm / cyl.mass
             cyl.mass -= dm
-            cyl.energy -= dm * CP * temperature
+            cyl.energy -= dm * enthalpy(temperature)
           }
-        }
+          cyl.runner = flow
+        } else cyl.runner = 0
         if (exhaust > 0) {
           if (pressure > c.pressure) {
             const dm = Math.min(
@@ -233,18 +275,18 @@ export class EngineCore {
             )
             cyl.fresh *= 1 - dm / cyl.mass
             cyl.mass -= dm
-            cyl.energy -= dm * CP * temperature
+            cyl.energy -= dm * enthalpy(temperature)
             audio += (dm / this.dt) * 5 * this.audioScale
           } else {
             const dm =
               massFlow(
                 c.pressure as Pascals,
                 pressure as Pascals,
-                650,
+                EXHAUST_BACKFLOW_TEMPERATURE,
                 exhaust,
               ) * dt
             cyl.mass += dm
-            cyl.energy += dm * CP * 650
+            cyl.energy += dm * this.exhaustEnthalpy
           }
         }
         const ignition = CYCLE - (e.ignitionAdvance * Math.PI) / 180
@@ -265,12 +307,21 @@ export class EngineCore {
         }
         // First law: dU = dQ - p dV; simple wall heat transfer, ideal gas.
         cyl.energy -= pressure * (volume - previousVolume)
-        temperature = cyl.energy / (cyl.mass * CV)
-        const surface =
-          (2 * Math.PI * e.bore ** 2) / 4 + (Math.PI * e.bore * e.stroke) / 2
+        temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
+        // Head, crown and the currently exposed liner.
+        const surface = 2 * this.pistonArea + (4 * volume) / e.bore
+        pressure = (cyl.mass * R * temperature) / volume
+        const coefficient =
+          this.woschniBore *
+          (pressure / 1000) ** 0.8 *
+          temperature ** -0.55 *
+          gasVelocity
         cyl.energy -=
-          (45 + rpm * 0.012) * surface * (temperature - this.coolant) * dt
-        temperature = cyl.energy / (cyl.mass * CV)
+          coefficient *
+          surface *
+          (temperature - this.coolant - WALL_ABOVE_COOLANT) *
+          dt
+        temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
         if (
           !Number.isFinite(temperature) ||
           temperature < 30 ||
@@ -287,8 +338,13 @@ export class EngineCore {
         cyl.volume = volume
         indicated += (pressure - c.pressure) * derivative
       }
+      // Mechanical friction mean effective pressure from mean piston speed;
+      // pumping work is simulated through the valves, not included here.
       const friction =
-        (8 + 0.0014 * rpm + 0.00000022 * rpm * rpm) * this.frictionScale
+        (FMEP_STATIC +
+          FMEP_LINEAR * pistonSpeed +
+          FMEP_QUADRATIC * pistonSpeed * pistonSpeed) *
+        this.frictionPerPascal
       torque += (indicated - friction) / n
       const starter = this.controls.starter && rpm < 500 ? e.starterTorque : 0
       if (this.controls.holdRpm === null) {

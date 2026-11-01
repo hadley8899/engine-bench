@@ -87,3 +87,14 @@ The measurements above were taken on `eb-0d-1.0.0`. Model 1.1.0 scales friction 
 - In the Chromium browser pane, the 105 × 105 build showed the stall warning with 70 Nm and idled at about 970 RPM with 300 Nm. An 85 L build with the 2.0 L preset's valve areas and inertia cranked and fired but stalled when the starter released, as expected for a starved engine; the generic stall message covers that case. The 3D framing change could not be checked visually because WebGL was unavailable in that browser pane.
 - The starter-stalled flag is only raised with the dyno unloaded, so a loaded dyno stopping a cranking engine is reported as an ordinary stall, not blamed on the starter. The browser suite found this.
 - Frontend: 22 Vitest tests, build and lint (one existing hook-cleanup warning) pass. Playwright: 24 passed in Chromium and Firefox, with the 2 storage cases skipped; `scripts/test-storage-browser.sh` was not re-run. Backend: 32 tests / 178 assertions pass. Exported JSON Schemas now use Zod's input form so documents saved before `starterTorque` existed remain valid.
+
+## Model 1.2.0: full-load calibration
+
+1.2.0 replaces fixed cold-air gas properties, a near-zero wall heat coefficient and RPM-polynomial friction, and adds intake runner inertia (see `SIMULATION.md`). Before the change, steady full-throttle holds on the Road preset gave 284 Nm at 1,000 RPM (BMEP 1.78 MPa, about 55% brake efficiency, 113 bar peak pressure) and only 77 kW at 4,000 RPM; volumetric efficiency fell from 0.95 to 0.47 between 1,000 and 6,000 RPM because 320 mm² of effective intake area choked the flow.
+
+- Road now peaks at 193 Nm at 4,500 RPM and 110 kW at 6,000 RPM. Volumetric efficiency rises from 0.84 at 1,000 RPM to 1.02 at about 5,000 RPM. Brake efficiency at peak torque is about 36% and peak cylinder pressure is 86 bar. Sport peaks at 186 Nm at 5,500–6,000 RPM and 131 kW at 7,000 RPM.
+- Vitest regressions check the plausibility bands (peak torque between 3,500 and 5,500 RPM, peak BMEP 1.0–1.3 MPa, peak power 90–130 kW above 5,500 RPM, 1,500 RPM torque at 75–95% of peak). They also check that Sport peaks later than Road, that a 600 mm runner gives more mid-range and less 6,000 RPM torque than a 150 mm runner, internal-energy inversion, and the legacy 300 mm runner default. These are trend checks, not validation against a measured engine.
+- Headless stress test: the 512-case 1.1.0 envelope, crossed with runner lengths of 50 and 1,500 mm (1,024 cases). All stayed finite with bounded audio. The Vitest corner set now includes both runner extremes.
+- Benchmark (Node 128-frame block, median): about 0.065 ms at 1,000, 4,000 and 7,500 RPM, up from 0.045 ms; quick sweep 0.20 s wall time for 46 samples.
+- Frontend: 28 Vitest tests, build and lint (one existing hook-cleanup warning) pass. Playwright: 24 passed in Chromium and Firefox. `scripts/test-storage-browser.sh`: 2 passed. Backend: 32 tests / 178 assertions pass with the re-exported schemas.
+

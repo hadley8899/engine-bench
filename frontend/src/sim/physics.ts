@@ -10,7 +10,23 @@ export const CYCLE = Math.PI * 4
 export const R = 287
 export const CV = 718
 export const CP = CV + R
+/** Valve flow keeps a fixed cold-air ratio of specific heats. */
 export const GAMMA = CP / CV
+/**
+ * In-cylinder gas uses cv rising linearly with temperature, a fitted
+ * approximation of air/burned-gas properties (γ ≈ 1.40 at 300 K, ≈ 1.26 at
+ * 2,500 K). It lowers peak temperature and cycle efficiency versus cold air.
+ */
+export const CV_A = 660
+export const CV_B = 0.17
+/** Specific internal energy (J/kg) relative to 0 K. */
+export const internalEnergy = (temperature: number) =>
+  temperature * (CV_A + 0.5 * CV_B * temperature)
+/** Inverse of internalEnergy, written to avoid cancellation. */
+export const temperatureFromEnergy = (energy: number) =>
+  (2 * energy) / (CV_A + Math.sqrt(CV_A * CV_A + 2 * CV_B * energy))
+export const enthalpy = (temperature: number) =>
+  internalEnergy(temperature) + R * temperature
 export const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v))
 export const wrap = (angle: number) => ((angle % CYCLE) + CYCLE) % CYCLE

@@ -10,7 +10,8 @@
       "type": "string",
       "enum": [
         "eb-0d-1.0.0",
-        "eb-0d-1.1.0"
+        "eb-0d-1.1.0",
+        "eb-0d-1.2.0"
       ]
     },
     "id": {
@@ -77,6 +78,12 @@
           "type": "number",
           "minimum": 550,
           "maximum": 610
+        },
+        "intakeRunnerLength": {
+          "default": 0.3,
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.5
         },
         "ignitionAdvance": {
           "type": "number",

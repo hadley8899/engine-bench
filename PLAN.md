@@ -206,6 +206,7 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 
 ### 4. Real-engine presets and additional layouts
 
+- [x] Recalibrate the generic presets (model 1.2.0) to plausible naturally aspirated 2.0 L full-load trends, with intake runner inertia. These are textbook plausibility bands, not a sourced reference.
 - [ ] Source and validate a documented naturally aspirated inline-four as the first reference preset.
 - [ ] Before expanding the preset library or completing forced induction, add one contrasting engine layout and sound after the inline-four bench is proven. Choose the layout using prototype cost and audible/visual variety; verify its full editor, motion, audio and dyno workflow.
 - [ ] Add shareable build links after downloadable recipes work; mark submitted results as unverified unless independently verified.

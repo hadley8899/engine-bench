@@ -1,9 +1,16 @@
 import { z } from 'zod'
 
-/** 1.1.0: friction scales with displacement; starter torque is configurable. */
-export const MODEL_VERSION = 'eb-0d-1.1.0'
+/**
+ * 1.2.0: temperature-dependent gas properties, Woschni-form wall heat,
+ * piston-speed friction and intake runner inertia; recalibrated presets.
+ */
+export const MODEL_VERSION = 'eb-0d-1.2.0'
 /** Runs recorded by earlier model versions remain readable as history. */
-export const MODEL_VERSIONS = ['eb-0d-1.0.0', MODEL_VERSION] as const
+export const MODEL_VERSIONS = [
+  'eb-0d-1.0.0',
+  'eb-0d-1.1.0',
+  MODEL_VERSION,
+] as const
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
@@ -18,6 +25,8 @@ export const engineSchema = z.strictObject({
   intakeArea: z.number().min(0.00001).max(0.02),
   exhaustArea: z.number().min(0.00001).max(0.025),
   intakeClose: z.number().min(550).max(610),
+  // Defaulted so builds saved before runners were modelled stay valid.
+  intakeRunnerLength: z.number().min(0.05).max(1.5).default(0.3),
   ignitionAdvance: z.number().min(5).max(38),
   burnDuration: z.number().min(35).max(75),
   lambda: z.number().min(0.8).max(1.15),
@@ -108,10 +117,11 @@ export const roadEngine: EngineDefinition = {
   stroke: 0.086,
   rodLength: 0.143,
   compression: 10.2,
-  intakeArea: 0.00032,
-  exhaustArea: 0.0004,
-  intakeClose: 570,
-  ignitionAdvance: 24,
+  intakeArea: 0.0007,
+  exhaustArea: 0.0006,
+  intakeClose: 590,
+  intakeRunnerLength: 0.3,
+  ignitionAdvance: 20,
   burnDuration: 52,
   lambda: 1,
   inertia: 0.22,
@@ -124,9 +134,11 @@ export const sportEngine: EngineDefinition = {
   ...roadEngine,
   name: 'Workshop 2.0 • Sport',
   compression: 11.3,
-  intakeArea: 0.00043,
-  exhaustArea: 0.00052,
-  intakeClose: 590,
+  intakeArea: 0.0009,
+  exhaustArea: 0.00075,
+  intakeClose: 605,
+  intakeRunnerLength: 0.24,
+  ignitionAdvance: 18,
   burnDuration: 45,
   inertia: 0.16,
   revLimit: 7600,

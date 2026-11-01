@@ -7,7 +7,9 @@ import {
   massFlow,
   pistonTravel,
   powerKw,
+  internalEnergy,
   rpmToOmega,
+  temperatureFromEnergy,
   wiebe,
 } from './physics'
 import type { Metres, Pascals } from './schema'
@@ -31,6 +33,26 @@ function advance(core: EngineCore, seconds: number) {
 function complete(test: DynoTest) {
   while (test.run.status === 'running') test.advance(4800)
   return test.run
+}
+
+/** Mean brake torque at a held speed and wide-open throttle. */
+function heldTorque(engine = roadEngine, rpm: number) {
+  const core = new EngineCore(engine, normalConditions)
+  core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+  advance(core, 1.2)
+  let sum = 0
+  const steps = Math.round((6 * 120 * 48000) / rpm)
+  for (let i = 0; i < steps; i++) {
+    core.step()
+    sum += core.absorbedTorque
+  }
+  return sum / steps
+}
+function curve(engine = roadEngine) {
+  return [1500, 2500, 3500, 4500, 5500, 6500].map((rpm) => {
+    const torque = heldTorque(engine, rpm)
+    return { rpm, torque, kw: (torque * rpm * Math.PI) / 30000 }
+  })
 }
 
 describe('definitions and physical invariants', () => {
@@ -66,6 +88,14 @@ describe('definitions and physical invariants', () => {
         conditions: normalConditions,
       }),
     ).toThrow()
+  })
+  it('inverts temperature-dependent internal energy', () => {
+    for (const t of [30, 300, 1500, 2800, 6000])
+      expect(temperatureFromEnergy(internalEnergy(t))).toBeCloseTo(t, 9)
+    // Hot gas stores more energy per kelvin than cold air.
+    expect(internalEnergy(2501) - internalEnergy(2500)).toBeGreaterThan(
+      (internalEnergy(301) - internalEnergy(300)) * 1.4,
+    )
   })
   it('converts torque and speed to kW', () => {
     expect(powerKw(100, rpmToOmega(3000))).toBeCloseTo(31.4159265, 6)
@@ -170,6 +200,14 @@ describe('engine integration', () => {
     advance(core, 1.2)
     expect(core.telemetry().rpm).toBeLessThan(20)
     expect(core.telemetry().starterStalled).toBe(false)
+  })
+  it('reads builds saved before runners were modelled with a 300 mm runner', () => {
+    const legacy: Record<string, unknown> = { ...roadEngine }
+    delete legacy.intakeRunnerLength
+    expect(validateEngine(legacy).intakeRunnerLength).toBe(0.3)
+    expect(() =>
+      validateEngine({ ...roadEngine, intakeRunnerLength: 0.04 }),
+    ).toThrow()
   })
   it('reads builds saved before starter torque was configurable as 70 Nm', () => {
     const legacy: Record<string, unknown> = { ...roadEngine }
@@ -336,6 +374,7 @@ describe('supported environmental and configuration envelope', () => {
                 compression: 20,
                 intakeArea,
                 exhaustArea,
+                intakeRunnerLength: holdRpm > 1000 ? 0.05 : 1.5,
                 inertia: 0.01,
                 revLimit: 20000,
                 mechanicalLimit: 25000,
@@ -367,5 +406,43 @@ describe('supported environmental and configuration envelope', () => {
               .pressures.every((p) => Number.isFinite(p) && p > 0),
           ).toBe(true)
         }
+  })
+})
+
+// Plausibility bands for a naturally aspirated 2.0 L petrol engine, not a
+// replica of any production engine. They catch gross calibration regressions.
+describe('calibrated full-load trends', () => {
+  it('gives the Road preset a mid-range torque peak and plausible output', () => {
+    const points = curve()
+    const peak = points.reduce((a, b) => (b.torque > a.torque ? b : a))
+    const power = points.reduce((a, b) => (b.kw > a.kw ? b : a))
+    const bmep = (peak.torque * 4 * Math.PI) / displacement(roadEngine)
+    expect(peak.rpm).toBeGreaterThanOrEqual(3500)
+    expect(peak.rpm).toBeLessThanOrEqual(5500)
+    expect(bmep).toBeGreaterThan(1.0e6)
+    expect(bmep).toBeLessThan(1.3e6)
+    expect(power.rpm).toBeGreaterThanOrEqual(5500)
+    expect(power.kw).toBeGreaterThan(90)
+    expect(power.kw).toBeLessThan(130)
+    // Torque rises out of low speed rather than falling from idle.
+    expect(points[0].torque).toBeLessThan(peak.torque * 0.95)
+    expect(points[0].torque).toBeGreaterThan(peak.torque * 0.75)
+  })
+  it('makes the Sport preset peak later than Road', () => {
+    const peakRpm = (engine: typeof roadEngine) => {
+      let best = { rpm: 0, torque: -Infinity }
+      for (let rpm = 3000; rpm <= 6500; rpm += 500) {
+        const torque = heldTorque(engine, rpm)
+        if (torque > best.torque) best = { rpm, torque }
+      }
+      return best.rpm
+    }
+    expect(peakRpm(sportEngine)).toBeGreaterThan(peakRpm(roadEngine))
+  })
+  it('trades high-speed for mid-range torque with a longer intake runner', () => {
+    const long = { ...roadEngine, intakeRunnerLength: 0.6 }
+    const short = { ...roadEngine, intakeRunnerLength: 0.15 }
+    expect(heldTorque(long, 3500)).toBeGreaterThan(heldTorque(short, 3500) + 10)
+    expect(heldTorque(long, 6000)).toBeLessThan(heldTorque(short, 6000))
   })
 })

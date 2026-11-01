@@ -61,6 +61,12 @@
           "minimum": 550,
           "maximum": 610
         },
+        "intakeRunnerLength": {
+          "default": 0.3,
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.5
+        },
         "ignitionAdvance": {
           "type": "number",
           "minimum": 5,
