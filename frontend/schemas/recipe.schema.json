@@ -321,6 +321,107 @@
             }
           ]
         },
+        "fuelSystem": {
+          "default": {
+            "kind": "port",
+            "transientCorrection": true,
+            "overrunCut": true
+          },
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "carburettor"
+                },
+                "chokeDiameter": {
+                  "type": "number",
+                  "minimum": 0.012,
+                  "maximum": 0.07
+                },
+                "chokes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "acceleratorPump": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "chokeDiameter",
+                "chokes",
+                "acceleratorPump"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "throttleBody"
+                },
+                "transientCorrection": {
+                  "type": "boolean"
+                },
+                "overrunCut": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "transientCorrection",
+                "overrunCut"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "port"
+                },
+                "transientCorrection": {
+                  "type": "boolean"
+                },
+                "overrunCut": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "transientCorrection",
+                "overrunCut"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "direct"
+                },
+                "transientCorrection": {
+                  "type": "boolean"
+                },
+                "overrunCut": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "transientCorrection",
+                "overrunCut"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
         "firingOrder": {
           "type": "array",
           "prefixItems": [

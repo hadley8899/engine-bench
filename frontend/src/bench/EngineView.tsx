@@ -605,6 +605,76 @@ export function EngineView({
       beltPulley(frontX - 0.25 * u, 0, 0, 0.45 * u)
       belt(0, 0, pulleyY, -0.36 * u)
     }
+    // Fuel system on the intake (-z) side, raised above the cam cover so it
+    // reads from the default view: a plenum on runners carrying the
+    // carburettor or throttle body, injectors in the runners, or (direct
+    // injection) injectors beside the spark plugs.
+    const fuelSystem = engine.fuelSystem
+    const injectorTip = new THREE.MeshStandardMaterial({
+      color: 0x3f8fd8,
+      roughness: 0.4,
+    })
+    const injector = (x: number, y: number, z: number, tilt: number) => {
+      mesh(
+        new THREE.CylinderGeometry(0.06 * u, 0.04 * u, 0.36 * u, 12),
+        injectorTip,
+        x,
+        y,
+        z,
+      ).rotation.x = tilt
+    }
+    if (fuelSystem.kind === 'direct')
+      for (let i = 0; i < 4; i++)
+        injector((i - 1.5) * spacing + 0.22 * u, head + 0.45 * u, 0, -0.35)
+    else {
+      const plenumY = head + 1.0 * u
+      const plenumZ = -1.0 * u
+      for (let i = 0; i < 4; i++)
+        mesh(
+          new THREE.BoxGeometry(0.34 * u, 0.6 * u, 0.3 * u),
+          aluminium,
+          (i - 1.5) * spacing,
+          head + 0.62 * u,
+          -0.82 * u,
+        )
+      mesh(
+        new THREE.BoxGeometry(width * 0.85, 0.34 * u, 0.42 * u),
+        aluminium,
+        0,
+        plenumY,
+        plenumZ,
+      ).castShadow = true
+      if (fuelSystem.kind === 'port')
+        for (let i = 0; i < 4; i++)
+          injector((i - 1.5) * spacing, plenumY + 0.1 * u, -0.7 * u, 0.5)
+      else {
+        // Carburettor barrels (up to four drawn) or a single throttle body.
+        const barrels =
+          fuelSystem.kind === 'carburettor' ? Math.min(fuelSystem.chokes, 4) : 1
+        const bore =
+          fuelSystem.kind === 'carburettor'
+            ? (fuelSystem.chokeDiameter / 0.032) * 0.16 * u
+            : 0.2 * u
+        for (let b = 0; b < barrels; b++)
+          mesh(
+            new THREE.CylinderGeometry(bore * 1.25, bore * 1.25, 0.42 * u, 24),
+            brass,
+            (b - (barrels - 1) / 2) * (2.6 * bore + 0.05 * u),
+            plenumY + 0.38 * u,
+            plenumZ,
+          )
+        const filter = Math.max(0.4 * u, barrels * 1.5 * bore)
+        mesh(
+          new THREE.CylinderGeometry(filter, filter, 0.16 * u, 32),
+          paint,
+          0,
+          plenumY + 0.66 * u,
+          plenumZ,
+        ).castShadow = true
+        if (fuelSystem.kind === 'throttleBody')
+          injector(0, plenumY + 0.86 * u, plenumZ, 0)
+      }
+    }
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(1.2 * Math.max(size, 1), 64),
       new THREE.ShadowMaterial({ opacity: 0.35 }),

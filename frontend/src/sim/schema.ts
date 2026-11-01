@@ -4,13 +4,16 @@ import { z } from 'zod'
  * 1.2.0: temperature-dependent gas properties, Woschni-form wall heat,
  * piston-speed friction and intake runner inertia; recalibrated presets.
  * 1.3.0: turbochargers, superchargers and intercoolers.
+ * 1.4.0: fuel systems (carburettor, throttle-body, port and direct
+ * injection) with wall-film fuel transport and mixture limits.
  */
-export const MODEL_VERSION = 'eb-0d-1.3.0'
+export const MODEL_VERSION = 'eb-0d-1.4.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
   'eb-0d-1.1.0',
   'eb-0d-1.2.0',
+  'eb-0d-1.3.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -93,6 +96,40 @@ export const inductionDefaults = {
     intercooler: { effectiveness: 0.6, pressureDrop: 4000 },
   },
 } satisfies { [K in InductionKind]: Extract<Induction, { kind: K }> }
+/** How fuel is metered and where it enters the air. */
+const ecu = {
+  /** Electronic correction for fuel lost to, or released from, the wall film. */
+  transientCorrection: z.boolean(),
+  /** Cut fuel on a closed throttle above 1,800 RPM; resume below 1,400. */
+  overrunCut: z.boolean(),
+}
+export const fuelSystemSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('carburettor'),
+    /** Venturi (choke) throat diameter of each barrel. */
+    chokeDiameter: z.number().min(0.012).max(0.07),
+    /** Total barrels (chokes) feeding the engine. */
+    chokes: z.number().int().min(1).max(8),
+    acceleratorPump: z.boolean(),
+  }),
+  z.strictObject({ kind: z.literal('throttleBody'), ...ecu }),
+  z.strictObject({ kind: z.literal('port'), ...ecu }),
+  z.strictObject({ kind: z.literal('direct'), ...ecu }),
+])
+export type FuelSystem = z.infer<typeof fuelSystemSchema>
+export type FuelSystemKind = FuelSystem['kind']
+const ecuDefaults = { transientCorrection: true, overrunCut: true }
+export const fuelSystemDefaults = {
+  carburettor: {
+    kind: 'carburettor',
+    chokeDiameter: 0.032,
+    chokes: 2,
+    acceleratorPump: true,
+  },
+  throttleBody: { kind: 'throttleBody', ...ecuDefaults },
+  port: { kind: 'port', ...ecuDefaults },
+  direct: { kind: 'direct', ...ecuDefaults },
+} satisfies { [K in FuelSystemKind]: Extract<FuelSystem, { kind: K }> }
 
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
@@ -120,6 +157,8 @@ export const engineSchema = z.strictObject({
   starterTorque: z.number().min(1).max(20000).default(70),
   // Builds saved before forced induction existed are naturally aspirated.
   induction: inductionSchema.default({ kind: 'none' }),
+  // Builds saved before fuel systems existed used ideal port injection.
+  fuelSystem: fuelSystemSchema.default(fuelSystemDefaults.port),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -214,6 +253,7 @@ export const roadEngine: EngineDefinition = {
   mechanicalLimit: 7400,
   starterTorque: 150,
   induction: { kind: 'none' },
+  fuelSystem: fuelSystemDefaults.port,
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {

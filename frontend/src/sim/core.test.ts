@@ -17,6 +17,7 @@ import {
   conditionsSchema,
   defaultProcedure,
   displacement,
+  fuelSystemDefaults,
   inductionDefaults,
   normalConditions,
   recipeSchema,
@@ -620,5 +621,117 @@ describe('forced induction', () => {
     a.advance(0.1)
     for (let i = 0; i < 10; i++) b.advance(0.01)
     expect(a.telemetry()).toEqual(b.telemetry())
+  })
+})
+
+const fuelled = (
+  fuelSystem: EngineDefinition['fuelSystem'],
+  engine = roadEngine,
+): EngineDefinition => ({ ...engine, fuelSystem })
+const carb = fuelSystemDefaults.carburettor
+/** Running warm idle, then a wide-open throttle step against a light load. */
+function tipIn(engine: EngineDefinition, load = 40) {
+  const core = new EngineCore(engine, normalConditions)
+  core.setControls({ ignition: true, starter: true })
+  advance(core, 0.5)
+  core.setControls({ starter: false })
+  advance(core, 2)
+  core.setControls({ throttle: 1, load })
+  let lean = 0
+  let misfire = false
+  for (let i = 0; i < 50; i++) {
+    core.advance(0.01)
+    const fuel = core.telemetry().fuel
+    lean = Math.max(lean, fuel.lambda)
+    misfire ||= fuel.misfire
+  }
+  return { lean, misfire, core }
+}
+
+describe('fuel systems', () => {
+  it('reads builds saved before fuel systems as port injected', () => {
+    const legacy: Record<string, unknown> = { ...roadEngine }
+    delete legacy.fuelSystem
+    expect(validateEngine(legacy).fuelSystem).toEqual(fuelSystemDefaults.port)
+    const core = new EngineCore(roadEngine, normalConditions)
+    core.setControls({ ignition: true, throttle: 1, holdRpm: 4000 })
+    advance(core, 1.5)
+    const fuel = core.telemetry().fuel
+    expect(fuel.lambda).toBeCloseTo(roadEngine.lambda, 2)
+    // Steady fuel flow matches the air drawn at the commanded mixture.
+    expect(fuel.fuelFlow).toBeCloseTo(core.fuel.airFlow / 14.7, 3)
+  })
+  it('a carburettor richens in thin air while injection holds lambda', () => {
+    const at = (
+      fuelSystem: EngineDefinition['fuelSystem'],
+      pressure: number,
+    ) => {
+      const core = new EngineCore(fuelled(fuelSystem), {
+        ...normalConditions,
+        pressure,
+      })
+      core.setControls({ ignition: true, throttle: 1, holdRpm: 4000 })
+      advance(core, 1.5)
+      return core.telemetry().fuel.lambda
+    }
+    expect(at(carb, 101325)).toBeCloseTo(1, 1)
+    expect(at(carb, 80000)).toBeLessThan(0.92)
+    expect(at(fuelSystemDefaults.port, 80000)).toBeCloseTo(1, 2)
+  })
+  it('a small venturi restricts top-end torque', () => {
+    const small = fuelled({ ...carb, chokes: 1, chokeDiameter: 0.024 })
+    expect(heldTorque(small, 6000)).toBeLessThan(
+      heldTorque(fuelled(carb), 6000) * 0.9,
+    )
+    // At low speed the same venturi costs little.
+    expect(heldTorque(small, 1500)).toBeGreaterThan(
+      heldTorque(fuelled(carb), 1500) * 0.97,
+    )
+  })
+  it('direct injection cools the charge in the cylinder for more torque', () => {
+    const port = heldTorque(fuelled(fuelSystemDefaults.port), 4500)
+    const direct = heldTorque(fuelled(fuelSystemDefaults.direct), 4500)
+    expect(direct).toBeGreaterThan(port * 1.02)
+    expect(direct).toBeLessThan(port * 1.08)
+  })
+  it('wall film leans the mixture on tip-in unless corrected', () => {
+    const corrected = tipIn(fuelled(fuelSystemDefaults.port)).lean
+    const raw = tipIn(
+      fuelled({ ...fuelSystemDefaults.port, transientCorrection: false }),
+    ).lean
+    expect(raw).toBeGreaterThan(corrected + 0.08)
+    expect(tipIn(fuelled(fuelSystemDefaults.direct)).lean).toBeLessThan(1.02)
+  })
+  it('an accelerator pump covers the carburettor tip-in stumble', () => {
+    const pumped = tipIn(fuelled(carb))
+    const dry = tipIn(fuelled({ ...carb, acceleratorPump: false }))
+    expect(dry.lean).toBeGreaterThan(pumped.lean + 0.2)
+    // Too lean to ignite: the classic flat spot.
+    expect(dry.misfire).toBe(true)
+    expect(pumped.misfire).toBe(false)
+  })
+  it('injection cuts fuel on the overrun; a carburettor keeps fuelling', () => {
+    const overrun = (fuelSystem: EngineDefinition['fuelSystem']) => {
+      const core = new EngineCore(fuelled(fuelSystem), normalConditions)
+      core.setControls({ ignition: true, throttle: 0, holdRpm: 3000 })
+      advance(core, 1)
+      const t = core.telemetry()
+      core.setControls({ holdRpm: 1200 })
+      advance(core, 0.3)
+      return { during: t, after: core.telemetry().fuel }
+    }
+    const port = overrun(fuelSystemDefaults.port)
+    expect(port.during.fuel.overrunCut).toBe(true)
+    expect(port.during.fuel.fuelFlow).toBeLessThan(1e-5)
+    expect(port.after.overrunCut).toBe(false)
+    const carburettor = overrun(carb)
+    expect(carburettor.during.fuel.overrunCut).toBe(false)
+    expect(carburettor.during.fuel.fuelFlow).toBeGreaterThan(1e-4)
+  })
+  it('a draw-through carburettor feeds a turbo', () => {
+    const t = boosted(fuelled(carb, withInduction(turbo)), 5000)
+    expect(t.boost).toBeGreaterThan(turbo.boostTarget - 10000)
+    expect(t.core.fuel.inletLoss).toBeGreaterThan(0)
+    expect(t.core.telemetry().fuel.lambda).toBeCloseTo(1, 1)
   })
 })

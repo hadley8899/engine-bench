@@ -88,6 +88,29 @@ it('accepts forced-induction builds and rejects invalid induction settings', fun
     expect(EngineBuild::query()->count())->toBe(1);
 });
 
+it('accepts fuel-system builds and rejects invalid fuel settings', function () {
+    [, , $token] = createAuthenticatedCompanyUser();
+    $carb = benchRecipe();
+    $carb['engine']['fuelSystem'] = [
+        'kind' => 'carburettor', 'chokeDiameter' => 0.032, 'chokes' => 2, 'acceleratorPump' => true,
+    ];
+    $this->withToken($token)->postJson('/api/auth/builds', $carb)->assertCreated()
+        ->assertJsonPath('revision.engine.fuelSystem.kind', 'carburettor');
+    $bad = $carb;
+    $bad['engine']['fuelSystem']['chokeDiameter'] = 0.2;
+    $this->withToken($token)->postJson('/api/auth/builds', $bad)->assertUnprocessable();
+    $bad = $carb;
+    $bad['engine']['fuelSystem']['chokes'] = 2.5;
+    $this->withToken($token)->postJson('/api/auth/builds', $bad)->assertUnprocessable();
+    $bad = $carb;
+    $bad['engine']['fuelSystem'] = ['kind' => 'direct', 'overrunCut' => true];
+    $this->withToken($token)->postJson('/api/auth/builds', $bad)->assertUnprocessable();
+    $direct = benchRecipe();
+    $direct['engine']['fuelSystem'] = ['kind' => 'direct', 'transientCorrection' => true, 'overrunCut' => false];
+    $this->withToken($token)->postJson('/api/auth/builds', $direct)->assertCreated();
+    expect(EngineBuild::query()->count())->toBe(2);
+});
+
 it('preserves old build revisions and rejects stale concurrent saves', function () {
     [, , $token] = createAuthenticatedCompanyUser();
     $original = benchRecipe();

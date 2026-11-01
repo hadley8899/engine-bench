@@ -31,7 +31,7 @@ Slow-motion inspection is a separate 15-RPM display mode and mutes sound. Select
 
 Sign in to use **Saved builds & runs**. Select your private personal workspace or a team, save the applied build, then save new revisions as you experiment. Save either comparison run, load historical revisions, or load saved results into Baseline/Modified. **Rerun into Modified** uses the saved engine, conditions and procedure. Saving an older run creates a build for its tested snapshot if necessary; retrying a run save reuses its original record. Results are labelled unverified.
 
-Builds can add a turbocharger, a centrifugal or roots supercharger and an intercooler from the workshop's Forced induction section; the bench then shows boost, shaft speed and charge-air temperature. Knock is not modelled, so boost cannot damage an engine. Sharing, additional layouts, real-engine presets (including VW AXX), direct injection and detailed damage are later phases. Signing in does not discard the guest experiment; loading a server record is always explicit.
+Builds can add a turbocharger, a centrifugal or roots supercharger and an intercooler from the workshop's Forced induction section; the bench then shows boost, shaft speed and charge-air temperature. Knock is not modelled, so boost cannot damage an engine. The Fuel system section chooses a carburettor, throttle-body, port or direct injection; the bench then shows mixture, air–fuel ratio, fuel flow and overrun-cut or misfire status. Sharing, additional layouts (two-stroke engines are planned next; see `docs/TWO_STROKE.md`), real-engine presets (including VW AXX), knock and detailed damage are later phases. Signing in does not discard the guest experiment; loading a server record is always explicit.
 
 ## Local account
 

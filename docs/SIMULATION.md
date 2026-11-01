@@ -1,6 +1,6 @@
 # Engine model and browser-host decision
 
-Model version: `eb-0d-1.3.0`. 1.3.0 adds forced induction (see Forced induction); naturally aspirated results are unchanged from 1.2.0. 1.1.0 scaled friction with displacement and made starter torque configurable. 1.2.0 adds temperature-dependent gas properties, Woschni-form wall heat transfer, piston-speed friction and intake runner inertia, and recalibrates the presets (see Calibration). Runs recorded by earlier model versions remain readable as history. Written in TypeScript. Scope: four-stroke, naturally aspirated, fictional inline-four petrol engines. The Road and Sport definitions are experimental starting points, not calibrated replicas of production engines.
+Model version: `eb-0d-1.4.0`. 1.4.0 adds fuel systems with wall-film fuel transport and misfire limits (see Fuel systems); steady full-load results for port injection, the default, match 1.3.0. 1.3.0 adds forced induction (see Forced induction); naturally aspirated results are unchanged from 1.2.0. 1.1.0 scaled friction with displacement and made starter torque configurable. 1.2.0 adds temperature-dependent gas properties, Woschni-form wall heat transfer, piston-speed friction and intake runner inertia, and recalibrates the presets (see Calibration). Runs recorded by earlier model versions remain readable as history. Written in TypeScript. Scope: four-stroke, fictional inline-four petrol engines, naturally aspirated or with the lumped forced-induction model. The Road and Sport definitions are experimental starting points, not calibrated replicas of production engines.
 
 ## Core equations and assumptions
 
@@ -10,9 +10,9 @@ Each cylinder has a lumped intake runner whose gas momentum is driven by the man
 
 In-cylinder gas uses a specific heat at constant volume rising linearly with temperature (cv = 660 + 0.17·T J/kg·K, so γ ≈ 1.40 at 300 K and ≈ 1.26 at 2,500 K), a single-zone approximation of air and burned-gas properties without dissociation. Valve-flow equations keep cold-air γ = 1.4. Wall heat transfer uses the Woschni correlation form (h = 3.26·B^-0.2·p^0.8·T^-0.55·w^0.8, with p in kPa) with gas velocity 2.28 × mean piston speed + 1 m/s and no separate combustion term; a calibration factor of 3 stands in for that term. Wall area is the head, the crown and the exposed liner. Walls are assumed to be 80 K above the coolant state. Combustion uses a Wiebe fraction with exponent 3 and coefficient 6.9. Effective valve areas include the discharge coefficient. Specific heats and gas constant are held fixed. Wave propagation, exhaust pipes, acoustic radiation and detailed chemical kinetics are not solved.
 
-Air humidity is relative humidity; oxygen is dry-gas mole/volume fraction. Water vapour displaces dry air. Dry gas is approximated as oxygen/nitrogen; the bulk gas constant and specific heats remain air approximations over the supported range. Fuel command is fresh charge divided by `14.7 * lambda`; heat release is limited by both available fuel and oxygen, with a 43 MJ/kg fuel heating value. Extra oxygen cannot burn fuel that is not present. Fuel enrichment is not automatically recalibrated for every environment.
+Air humidity is relative humidity; oxygen is dry-gas mole/volume fraction. Water vapour displaces dry air. Dry gas is approximated as oxygen/nitrogen; the bulk gas constant and specific heats remain air approximations over the supported range. Fuel arrives with the fresh charge as set by the fuel system (see Fuel systems), and leaves with any charge pushed back out of the cylinder. Heat release is limited by both the delivered fuel and oxygen, with a 43 MJ/kg fuel heating value. Extra oxygen cannot burn fuel that is not present. A charge whose delivered λ is above 1.6 or below 0.55 does not ignite (a misfire). Fuel enrichment is not automatically recalibrated for every environment.
 
-A simple lumped coolant state evolves separately from ambient temperature. This is illustrative thermal behaviour, not a prediction of overheating or component life. Knock, emissions, fuel evaporation, oil pressure, valve float, wear and failures are not implemented. The mechanical limit is a configurable assumed capability used for warnings and dyno validation/abort; it is not a component stress calculation.
+A simple lumped coolant state evolves separately from ambient temperature. This is illustrative thermal behaviour, not a prediction of overheating or component life. Knock, emissions, oil pressure, valve float, wear and failures are not implemented. The mechanical limit is a configurable assumed capability used for warnings and dyno validation/abort; it is not a component stress calculation.
 
 Schema ranges bound the operating envelope and are deliberately wide so that unusual builds are possible: bore and stroke 20–300 mm, rod length at least 0.75 × stroke (rod to crank-radius ratio 1.5), compression 5–20:1, effective valve areas 10–20,000/25,000 mm², intake runner length 50–1,500 mm (300 mm for builds saved before 1.2.0), inertia 0.01–20 kg·m², limiter up to 20,000 RPM and mechanical limit up to 25,000 RPM. These ranges are what the core has been stress-tested across (every combination of the extremes at 600 and 19,900 RPM, plus free starts at idle and full throttle), not a statement that such engines are buildable or that the model is accurate there. Valve timing, ignition, burn duration and mixture keep their original ranges. The model rejects invalid temperatures (below 30 K or above 6,000 K)/mass and limits a single outflow integration increment to 8% of cylinder mass. These are numerical safeguards, not physical failure models. Errors stop the run and are exposed instead of replacing data with a synthetic curve.
 
@@ -41,6 +41,37 @@ A build's `induction` is `none` (the default, and how builds saved before 1.3.0 
 - **Not modelled**: knock, boost-dependent timing, compressor maps from real hardware, pressure waves in pipes, turbo bearing or wheel failure (the maximum shaft speed only raises a warning), and fuel enrichment under boost. The Road and Sport presets remain naturally aspirated.
 
 Default turbo on the Road engine at 9:1 compression (steady full throttle) gives about 0.1 bar at 1,500 RPM, then full 0.8 bar boost from about 3,500–4,000 RPM. Torque peaks at about 340 Nm, power at about 200 kW near 6,500 RPM, and peak cylinder pressure is about 125–130 bar. Real engines at this boost need lower timing to avoid knock, so these figures are optimistic.
+
+## Fuel systems
+
+A build's `fuelSystem` is `carburettor`, `throttleBody`, `port` (the default, and how builds saved before 1.4.0 read) or `direct`. The engine's λ is the commanded mixture. Fuel reaches each cylinder in proportion to the fresh air it draws, through a lumped x–τ wall-film model after Aquino (SAE 810494):
+
+- A share X of the metered fuel deposits on the intake walls. The film evaporates with time constant τ into the manifold vapour. That vapour is drawn into the cylinders in proportion to the manifold's air (displacement volume at manifold pressure and temperature). At steady state the delivered mixture equals the metered one. When airflow rises, the film takes fuel and the mixture leans (tip-in). When airflow falls, the film releases it and the mixture runs rich (lift-off).
+- τ is quoted at warm idle airflow (2 kg/s per m³ of displacement) and falls with the square root of airflow, since faster air strips the film. Coolant below 80 °C lengthens τ by `1 + ΔT/40` and raises X by `1 + ΔT/150` (X at most 0.85). The intake walls start primed at their warm-idle film, as for an engine that has just been running.
+
+| System | X | τ at idle | Metering | Evaporative cooling |
+| --- | --- | --- | --- | --- |
+| Carburettor | 0.3 + 0.35·exp(−v/40 m/s), from venturi velocity v | 0.35 s | Venturi: by volume | 25% of latent heat taken from the charge air |
+| Throttle-body injection | 0.4 | 0.3 s | ECU: by air mass | 25%, from the charge air |
+| Port injection | 0.25 | 0.12 s | ECU: by air mass | None beyond the 1.2.0 calibration |
+| Direct injection | 0 | — | ECU: by air mass | 60%, from the cylinder charge during intake |
+
+- **Carburettor**: fuel flow through a fixed jet follows √(Δp·ρ_fuel) and air flow √(Δp·ρ_air), so the delivered fuel–air ratio scales with 1/√ρ_air. Jetting is set by λ at standard dry air (20 °C, 1,013.25 hPa): thin or hot air runs rich, cold dense air lean. The venturi, booster and throttle plate lose 0.6 throat dynamic heads (`0.6·ṁ²/(2ρA²)`, capped at 50 kPa) ahead of the throttle. With forced induction the carburettor is draw-through: the loss lowers the compressor inlet pressure, and metering uses ambient density. The accelerator pump squirts 0.185 kg per m³ of displacement over a full throttle opening, released with a 0.15 s time constant into the airstream, where it wets the walls like the jet fuel. There is no overrun fuel cut. Not modelled: idle and progression circuits, weak main-jet signal at low airflow, enrichment (power) valves, float-bowl dynamics and chokes.
+- **Electronic injection** (throttle body, port, direct): fuel follows measured air mass, so λ holds across conditions. Transient correction inverts the film model and recovers 85% of the ideal correction. Overrun cut stops fuel when the driver's throttle is closed above 1,800 RPM and resumes below 1,400 RPM or on throttle. Turning transient correction off approximates early analogue or mechanical injection.
+- **Direct injection**: no intake film. Evaporation in the cylinder during intake lowers the charge temperature, so the cylinder draws a little more air. The high-pressure pump takes `fuel volume flow × 15 MPa / 0.5` from the crank. Higher knock tolerance, stratified charge and injection timing are not modelled.
+- **Latent heat** of gasoline is taken as 350 kJ/kg. The fuel's own mass is not added to the cylinder gas.
+
+Full-load torque on the Road engine at 1,500 / 3,000 / 4,500 / 6,000 RPM:
+
+| Fuel system | Nm |
+| --- | --- |
+| Port injection (1.3.0 equivalent) | 176 / 185 / 193 / 175 |
+| Throttle-body injection | 179 / 189 / 198 / 178 |
+| Carburettor, 2 × 32 mm | 179 / 188 / 196 / 175 |
+| Carburettor, 1 × 24 mm | 177 / 180 / 175 / 145 |
+| Direct injection | 184 / 195 / 204 / 179 |
+
+The 25% charge-cooling share for manifold-fed systems is an assumption; real manifolds are often heated, which reduces it. Fuel-system results are trends for comparison, not measured equivalences.
 
 ## Integration and clocks
 
@@ -72,7 +103,7 @@ Use the AudioWorklet-hosted design for the initial inline-four. The worker/ring-
 
 Cross-host acceptance for the same prescribed inputs: RPM difference below 0.01 RPM, torque below 0.01 Nm, instantaneous pressure relative error below 0.01%, angle difference below 0.0003 rad, and two-degree Float32 pressure-trace bins below 0.1% relative error (10 kPa denominator floor). Live/quick controlled-speed samples are checked more tightly, to seven decimal places, on the tested Chromium runtime. These are numerical agreement tolerances, not estimates of real-world accuracy.
 
-1.3.0 adds about 0.03 ms per block with a turbo (about 0.016 ms with a supercharger). 1.2.0 increased Node cost per 128-frame block from about 0.045 ms to 0.066 ms at 1,000–7,500 RPM, still under 3% of the 2.67 ms real-time budget. Performance commands: `npm run benchmark` and `npm run test:browser` in `frontend/`. Node reports median/p99/max 128-frame block cost, cost per cylinder-step, substep count and quick-test speed. Browser tests exercise actual workers and AudioWorklets and render real offline PCM. The optional bench diagnostics use a coarse wall-clock timer; they are observations, not a precise real-time profiling guarantee. See `VERIFICATION.md` for measured results and remaining acceptance checks.
+1.4.0 adds about 0.01 ms per block for fuel transport. 1.3.0 adds about 0.03 ms per block with a turbo (about 0.016 ms with a supercharger). 1.2.0 increased Node cost per 128-frame block from about 0.045 ms to 0.066 ms at 1,000–7,500 RPM, still under 3% of the 2.67 ms real-time budget. Performance commands: `npm run benchmark` and `npm run test:browser` in `frontend/`. Node reports median/p99/max 128-frame block cost, cost per cylinder-step, substep count and quick-test speed. Browser tests exercise actual workers and AudioWorklets and render real offline PCM. The optional bench diagnostics use a coarse wall-clock timer; they are observations, not a precise real-time profiling guarantee. See `VERIFICATION.md` for measured results and remaining acceptance checks.
 
 ## Reference review and attribution
 

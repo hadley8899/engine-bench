@@ -8,6 +8,13 @@ import type {
 import { InductionSystem } from './induction'
 import type { InductionTelemetry } from './induction'
 import {
+  FuelDelivery,
+  LEAN_MISFIRE,
+  RICH_MISFIRE,
+  STOICHIOMETRIC,
+} from './fuel'
+import type { FuelTelemetry } from './fuel'
+import {
   atmosphere,
   clamp,
   CYCLE,
@@ -58,11 +65,14 @@ export type Telemetry = {
   maxSubsteps: number
   starterStalled: boolean
   induction: InductionTelemetry
+  fuel: FuelTelemetry
 }
 interface Cylinder {
   mass: number
   energy: number
   fresh: number
+  /** Fuel arrived with the fresh charge this cycle, kg. */
+  fuel: number
   heat: number
   burn: number
   phase: number
@@ -98,6 +108,10 @@ export class EngineCore {
   /** Latched when the starter is engaged but cannot turn the crank. */
   starterStalled = false
   readonly induction: InductionSystem
+  readonly fuel: FuelDelivery
+  /** Smoothed delivered λ of firing cylinders. */
+  lambda: number
+  private misfireTime = -Infinity
   private stallTime = 0
   private whinePhase = 0
   private noise = 0x2545f491
@@ -151,6 +165,8 @@ export class EngineCore {
       air.density,
       this.airDensityRatio,
     )
+    this.fuel = new FuelDelivery(engine, air.density)
+    this.lambda = engine.lambda
     this.phases = Array.from(
       { length: 4 },
       (_, c) => engine.firingOrder.indexOf((c + 1) as 1 | 2 | 3 | 4) * Math.PI,
@@ -163,6 +179,7 @@ export class EngineCore {
         mass,
         energy: mass * internalEnergy(conditions.temperature),
         fresh: 0,
+        fuel: 0,
         heat: 0,
         burn: 1,
         phase: wrap(-phase),
@@ -192,12 +209,19 @@ export class EngineCore {
     const throttle = Math.max(this.controls.throttle, idle)
     const induction = this.induction
     const turbo = induction.config.kind === 'turbo'
-    const targetMap = induction.supply * (0.04 + 0.95 * throttle)
-    // Charge air after any compressor and intercooler.
-    const intakeTemperature = induction.chargeTemperature
-    const intakeEnthalpy = induction.boosted
-      ? enthalpy(intakeTemperature)
-      : this.intakeEnthalpy
+    const fuel = this.fuel
+    // A carburettor's venturi loss sits ahead of the throttle or compressor.
+    induction.inletLoss = fuel.inletLoss
+    const supply = induction.boosted
+      ? induction.supply
+      : induction.supply - fuel.inletLoss
+    const targetMap = supply * (0.04 + 0.95 * throttle)
+    // Charge air after any compressor, intercooler and fuel evaporation.
+    const intakeTemperature = induction.chargeTemperature - fuel.manifoldCooling
+    const intakeEnthalpy =
+      induction.boosted || fuel.manifoldCooling > 0
+        ? enthalpy(intakeTemperature)
+        : this.intakeEnthalpy
     const intakeDensity =
       (this.airDensity * c.temperature) / (c.pressure * intakeTemperature)
     const backPressure = turbo ? induction.exhaustPressure : c.pressure
@@ -219,6 +243,7 @@ export class EngineCore {
     const dt = this.dt / n
     let audio = 0
     let intakeMass = 0
+    let freshMass = 0
     let exhaustMass = 0
     let exhaustEnergy = 0
     let torque = 0
@@ -281,7 +306,9 @@ export class EngineCore {
             const dm = flow * dt
             cyl.mass += dm
             cyl.fresh += dm
-            cyl.energy += dm * intakeEnthalpy
+            cyl.fuel += dm * fuel.fuelPerAir
+            cyl.energy += dm * (intakeEnthalpy - fuel.cylinderCooling)
+            freshMass += dm
           } else {
             flow = Math.max(
               flow,
@@ -289,7 +316,9 @@ export class EngineCore {
               (-cyl.mass * 0.08) / dt,
             )
             const dm = -flow * dt
-            cyl.fresh *= 1 - dm / cyl.mass
+            const kept = 1 - dm / cyl.mass
+            cyl.fresh *= kept
+            cyl.fuel *= kept
             cyl.mass -= dm
             cyl.energy -= dm * enthalpy(temperature)
           }
@@ -308,7 +337,9 @@ export class EngineCore {
               ) * dt,
             )
             const h = dm * enthalpy(temperature)
-            cyl.fresh *= 1 - dm / cyl.mass
+            const kept = 1 - dm / cyl.mass
+            cyl.fresh *= kept
+            cyl.fuel *= kept
             cyl.mass -= dm
             cyl.energy -= h
             exhaustMass += dm
@@ -332,13 +363,20 @@ export class EngineCore {
         }
         const ignition = CYCLE - (e.ignitionAdvance * Math.PI) / 180
         if (cyl.phase < ignition && phase >= ignition) {
-          // Fixed commanded fuel per fresh charge; extra O2 can only burn available fuel.
-          const fuel = cyl.fresh / (14.7 * e.lambda)
-          const burnable = Math.min(fuel, (cyl.fresh * this.oxygen) / 3.43)
-          cyl.heat =
-            this.controls.ignition && !this.limited ? burnable * 43e6 * 0.96 : 0
+          // Fuel delivered with the charge; extra O2 can only burn available fuel.
+          const lambda =
+            cyl.fuel > 0 ? cyl.fresh / (STOICHIOMETRIC * cyl.fuel) : Infinity
+          const burnable = Math.min(cyl.fuel, (cyl.fresh * this.oxygen) / 3.43)
+          const fires = this.controls.ignition && !this.limited
+          const ignites = lambda <= LEAN_MISFIRE && lambda >= RICH_MISFIRE
+          cyl.heat = fires && ignites ? burnable * 43e6 * 0.96 : 0
+          if (fires && cyl.fresh > 0 && !fuel.overrunCut) {
+            if (!ignites) this.misfireTime = this.time
+            this.lambda += 0.3 * (Math.min(lambda, 9.99) - this.lambda)
+          }
           cyl.burn = 0
           cyl.fresh = 0
+          cyl.fuel = 0
         }
         const elapsed = (wrap(phase - ignition) * 180) / Math.PI
         if (elapsed < e.burnDuration && cyl.burn < 1) {
@@ -386,7 +424,8 @@ export class EngineCore {
           FMEP_LINEAR * pistonSpeed +
           FMEP_QUADRATIC * pistonSpeed * pistonSpeed) *
           this.frictionPerPascal +
-        induction.crankTorque
+        induction.crankTorque +
+        fuel.crankTorque
       torque += (indicated - friction) / n
       const starter = this.controls.starter && rpm < 500 ? e.starterTorque : 0
       if (this.controls.holdRpm === null) {
@@ -416,6 +455,16 @@ export class EngineCore {
       exhaustMass,
       exhaustEnergy,
       this.manifold,
+    )
+    fuel.step(
+      this.dt,
+      rpm,
+      this.omega,
+      this.controls.throttle,
+      freshMass,
+      this.manifold,
+      intakeTemperature,
+      this.coolant,
     )
     // A turbo's manifold and turbine smooth the pulses reaching the tailpipe.
     if (turbo) audio = induction.tailpipeFlow * 5 * this.audioScale
@@ -505,6 +554,10 @@ export class EngineCore {
       maxSubsteps: this.maxSubsteps,
       starterStalled: this.starterStalled,
       induction: this.induction.telemetry(),
+      fuel: this.fuel.telemetry(
+        this.lambda,
+        this.time - this.misfireTime < 0.3,
+      ),
     }
   }
 }

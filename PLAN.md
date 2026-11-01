@@ -72,11 +72,11 @@ The shell checks above describe the extraction verification, not verification of
 
 ## Engine configuration
 
-Start with a four-stroke petrol inline-four. Expand to inline-six, V6, V8 and boxer layouts after the initial model is validated.
+Start with a four-stroke petrol inline-four. Two-stroke engines with editable ports and exhaust shapes are the next phase, requested by the user on 1 November 2026 (Stage 5; design in `docs/TWO_STROKE.md`). Expand to inline-six, V6, V8 and boxer layouts after that.
 
 - Geometry: cylinder count/layout, bore, stroke, connecting-rod length and compression ratio.
 - Timing: firing order, crank phasing, valve timing/lift and ignition timing, introduced as their simulation support becomes available.
-- Breathing and fuelling: intake/exhaust restrictions, fuel properties, mixture control and later forced induction.
+- Breathing and fuelling: intake/exhaust restrictions, fuel systems (carburettor, throttle-body, port and direct injection), mixture control and forced induction.
 - Rotating assembly: inertia, friction and component capability parameters.
 - Operating settings: idle control, throttle response, electronic rev limiter and cooling settings.
 
@@ -208,17 +208,31 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 
 - [x] Recalibrate the generic presets (model 1.2.0) to plausible naturally aspirated 2.0 L full-load trends, with intake runner inertia. These are textbook plausibility bands, not a sourced reference.
 - [ ] Source and validate a documented naturally aspirated inline-four as the first reference preset.
-- [ ] Before expanding the preset library or completing forced induction, add one contrasting engine layout and sound after the inline-four bench is proven. Choose the layout using prototype cost and audible/visual variety; verify its full editor, motion, audio and dyno workflow.
+- [ ] Before expanding the preset library, add one contrasting engine layout and sound after the inline-four bench is proven. Decision (1 November 2026, user request): this is the two-stroke engine in Stage 5.
 - [ ] Add shareable build links after downloadable recipes work; mark submitted results as unverified unless independently verified.
 - [x] Add a bounded forced-induction model (model 1.3.0): turbocharger with a parametric compressor map, turbine, shaft inertia, wastegate and blow-off valve; centrifugal and roots superchargers; intercooler. Brought forward ahead of the contrasting layout at the user's request. Knock is not modelled.
-- [ ] Add a direct-injection fuelling assumption and knock/boost-limited timing, as required by the VW AXX (EA113 2.0 TFSI, turbocharged, direct injection).
+- [x] Add fuel systems (model 1.4.0): carburettor (venturi metering by volume, restriction, accelerator pump), throttle-body, port and direct injection, with x–τ wall-film transport, transient correction, overrun cut, evaporative charge cooling and misfire limits. Requested by the user with the period variety engines have used.
+- [ ] Add knock and knock/boost-limited timing, as required by the VW AXX (EA113 2.0 TFSI, turbocharged, direct injection). Direct-injection fuelling exists from 1.4.0.
 - [ ] Source a documented VW AXX preset and identify unknown inputs explicitly.
 - [ ] Compare each preset with a sourced reference torque curve and operating range; record deviations.
 - [ ] Expand the remaining inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Prioritise meaningful variety over a large list of near-identical presets.
 
 Acceptance: each released preset has provenance and model limitations, and each released layout works through configuration, animation, audio, dyno and persistence.
 
-### 5. Fidelity and release readiness
+### 5. Two-stroke engines — next phase
+
+Requested by the user on 1 November 2026. The design proposal, open questions and verification approach are in `docs/TWO_STROKE.md`.
+
+- [ ] Generalise the core and schema for cylinder count and cycle length (new engine `schemaVersion` with migration), with identical four-stroke results.
+- [ ] Add a piston-ported, crankcase-scavenged two-stroke single: port geometry with derived timing, crankcase volume, two-zone scavenging with short-circuit losses, and a straight pipe. Include the editor, port-timing display, 3D cutaway with ports in the liner, sound, dyno and persistence.
+- [ ] Prototype and benchmark a quasi-1D pipe solver. Record whether it fits the AudioWorklet budget or needs the worker/ring-buffer fallback.
+- [ ] Add segmented expansion chambers (header, cones, belly, baffle, stinger) with an editor, a 3D shape drawn from the segments, a tuned-RPM estimate and sound from the stinger.
+- [ ] Add reed and rotary-disc intake, then twins and a power valve.
+- [ ] Add sourced two-stroke presets once their trends are reproduced.
+
+Acceptance: port timing is derived from geometry and validated; mass and energy balance across crankcase, cylinder and pipe; supported trends hold (pipe length moves the torque peak, exhaust-port height moves and narrows the band, a tuned chamber beats a straight pipe at its tuned speed); the two-stroke works through the editor, animation, audio, dyno and persistence; four-stroke results are unchanged.
+
+### 6. Fidelity and release readiness
 
 - [ ] Improve thermal behaviour, forced induction, valvetrain and mechanical-limit models in bounded increments.
 - [ ] Add browser compatibility/performance checks, accessible controls, recovery from audio suspension and worker errors.

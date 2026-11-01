@@ -65,7 +65,7 @@ The user tried the initial bench and reported fuel-cut warning flicker at unload
 
 The follow-up user report exposed a third issue: Hold starter was disabled until Start engine had already been used. Hold starter now creates/resumes audio and starts the stopped bench directly, obeys ignition, unloads the dyno and releases on pointer/key release or focus loss. The real held-pointer regression passes in Chromium and Firefox. The user has been asked to refresh and confirm startup plus the modify/compare/restore flow; that latest reply is pending. The full phase 2 first-use gate therefore remains open: an unfamiliar user must confirm starting within one minute and a clear modification/comparison/restoration experience after the fixes. Automated workflow timing and screenshots do not substitute for that feedback.
 
-Known scope limits: no calibrated production-engine predictions, knock, additional layouts, detailed wear/damage. Forced induction was added later in model 1.3.0 (see below). These are later planned phases, not missing substitutes for the current inline-four bench. There is no replay feature; quick calculation and snapshot audio auditioning are explicitly distinguished.
+Known scope limits: no calibrated production-engine predictions, knock, additional layouts, detailed wear/damage. Forced induction was added later in model 1.3.0 and fuel systems in 1.4.0 (see below). These are later planned phases, not missing substitutes for the current inline-four bench. There is no replay feature; quick calculation and snapshot audio auditioning are explicitly distinguished.
 
 ## Phase 3 persistence verification
 
@@ -118,3 +118,19 @@ The measurements above were taken on `eb-0d-1.0.0`. Model 1.1.0 scales friction 
 - Benchmark (Node 128-frame block, median, 5,000 RPM held): none 0.063 ms, turbo 0.090 ms, centrifugal and roots 0.079 ms, against a 2.67 ms budget.
 - Frontend: build and lint (one existing warning) pass. Playwright: 26 passed, 2 storage cases skipped in that run; `scripts/test-storage-browser.sh`: 2 passed. Backend: 33 tests pass, including a new check that turbo builds are accepted and invalid induction settings rejected by the exported schema.
 
+## Model 1.4.0: fuel systems
+
+- Steady full-load torque with port injection, the default, matches 1.3.0 to the printed precision (Road 176 / 185 / 193 / 175 Nm at 1,500 / 3,000 / 4,500 / 6,000 RPM). The existing calibration and forced-induction tests pass unchanged.
+- Vitest (8 new tests, 46 total):
+  - legacy builds read as port injected; steady λ equals the command and fuel flow equals air / 14.7;
+  - a carburettor runs richer than λ 0.92 at 80 kPa while port injection holds λ 1;
+  - a 1 × 24 mm venturi loses over 10% of 6,000 RPM torque but under 3% at 1,500 RPM;
+  - direct injection makes 2–8% more 4,500 RPM torque than port injection;
+  - port injection without transient correction leans at least 0.08 λ more on a tip-in; direct injection stays within 1.02;
+  - a carburettor without an accelerator pump misfires lean on a tip-in under load, and with one it does not;
+  - injection cuts fuel on a closed throttle at 3,000 RPM and resumes at 1,200 RPM; a carburettor keeps fuelling;
+  - a draw-through carburettor feeds a turbo to its boost target at λ about 1.
+- Headless probes (warm and 10 °C coolant, tip-in from idle against 0, 40 and 80 Nm): all four systems start and idle. Port injection with correction stays within λ 1.00–1.03. Without correction, throttle body reaches about λ 1.3 and port about 1.15. A carburettor with an accelerator pump runs λ 0.8–1.1 on a tip-in. Without the pump it reaches about 1.5 and misfires. On lift-off from 6,700 RPM the carburettor runs rich (λ about 0.5) with brief misfires, the overrun popping of real carburetted engines; injection cuts fuel instead.
+- Chromium: each fuel system was selected, rebuilt, started and taken to full throttle through the real UI. Mixture, air–fuel ratio and fuel flow (about 40 L/h at 6,600 RPM, about 270 g/kWh) updated, and lift-off showed OVERRUN CUT for injection and MISFIRE/rich for the carburettor, with no page errors. The 3D plenum, carburettor barrels and filter, throttle body, runner injectors and direct injectors were checked in software-WebGL screenshots. A new Playwright test covers the carburettor editor's range validation, rebuild, start and mixture display in Chromium and Firefox.
+- Benchmark (Node 128-frame block, median): about 0.072 ms at 1,000–7,500 RPM, against a 2.67 ms budget.
+- Frontend: build and lint (one existing warning) pass. Playwright: 28 passed, with 2 storage cases skipped in that run; `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 tests pass, including a new check that fuel-system builds are accepted and invalid fuel settings rejected by the exported schema.

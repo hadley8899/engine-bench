@@ -45,6 +45,8 @@ import { Chart } from './Chart'
 import { EngineView } from './EngineView'
 import { NumberField } from './NumberField'
 import { InductionEditor } from './InductionEditor'
+import { FuelSystemEditor } from './FuelSystemEditor'
+import { describeFuel, fuelErrors, fuelShortLabels } from './fuelFields'
 import {
   describeInduction,
   inductionErrors,
@@ -192,7 +194,7 @@ const numericFields: {
     min: 0.8,
     max: 1.15,
     step: 0.01,
-    help: '1 = stoichiometric fuel command in normal air.',
+    help: '1 = stoichiometric fuel command. A carburettor is jetted to this in standard air (20 °C, 1,013 hPa).',
   },
   {
     key: 'inertia',
@@ -328,6 +330,14 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     )
   changes.push(
     ...describeInduction(a.engine.induction ?? { kind: 'none' }, e.induction),
+    ...describeFuel(
+      a.engine.fuelSystem ?? {
+        kind: 'port',
+        transientCorrection: true,
+        overrunCut: true,
+      },
+      e.fuelSystem,
+    ),
   )
   for (const f of conditionFields)
     if (a.conditions[f.key] !== c[f.key])
@@ -424,6 +434,7 @@ export function BenchPage() {
     ...(draftErrors.name ? ['Build name'] : []),
     ...numericFields.filter((f) => draftErrors[f.key]).map((f) => f.label),
     ...Object.keys(inductionErrors(draft.induction)),
+    ...Object.keys(fuelErrors(draft.fuelSystem)),
     ...conditionFields.filter((f) => envErrors[f.key]).map((f) => f.label),
   ]
   const invalid = invalidLabels.length > 0
@@ -1002,6 +1013,57 @@ export function BenchPage() {
                     </strong>
                   </div>
                 </div>
+                <div className="stats-strip boost-strip" data-testid="fuel">
+                  <div>
+                    <small>MIXTURE</small>
+                    <strong>
+                      λ{' '}
+                      {telemetry.fuel.overrunCut
+                        ? '—'
+                        : telemetry.fuel.lambda.toFixed(2)}
+                    </strong>
+                  </div>
+                  <div>
+                    <small>AIR–FUEL</small>
+                    <strong>
+                      {telemetry.fuel.overrunCut ? (
+                        '—'
+                      ) : (
+                        <>
+                          {(telemetry.fuel.lambda * 14.7).toFixed(1)}
+                          <span>:1</span>
+                        </>
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <small>FUEL FLOW</small>
+                    <strong>
+                      {((telemetry.fuel.fuelFlow * 3600) / 0.74).toFixed(1)}
+                      <span> L/h</span>
+                    </strong>
+                  </div>
+                  <div>
+                    <small>FUEL STATUS</small>
+                    <strong className="boost-status">
+                      {telemetry.fuel.overrunCut && (
+                        <em className="boost-flag">OVERRUN CUT</em>
+                      )}
+                      {telemetry.fuel.misfire && (
+                        <em className="boost-flag warn">MISFIRE</em>
+                      )}
+                      {!telemetry.fuel.overrunCut &&
+                        !telemetry.fuel.misfire &&
+                        (telemetry.fuel.lambda > 1.1 ? (
+                          <em className="boost-flag warn">LEAN</em>
+                        ) : telemetry.fuel.lambda < 0.8 ? (
+                          <em className="boost-flag warn">RICH</em>
+                        ) : (
+                          <span>Normal</span>
+                        ))}
+                    </strong>
+                  </div>
+                </div>
                 {telemetry.induction.kind !== 'none' && (
                   <div className="stats-strip boost-strip" data-testid="boost">
                     <div>
@@ -1265,9 +1327,10 @@ export function BenchPage() {
                   <Chip
                     size="small"
                     label={
-                      draft.induction.kind === 'none'
-                        ? 'CUSTOM I4'
-                        : `CUSTOM I4 · ${inductionLabels[draft.induction.kind].toUpperCase()}`
+                      `CUSTOM I4 · ${fuelShortLabels[draft.fuelSystem.kind]}` +
+                      (draft.induction.kind === 'none'
+                        ? ''
+                        : ` · ${inductionLabels[draft.induction.kind].toUpperCase()}`)
                     }
                   />
                 </div>
@@ -1350,6 +1413,17 @@ export function BenchPage() {
                     ? 'Hide advanced parameters'
                     : `Show ${numericFields.length - 5} advanced parameters (valves, runners, timing, mixture, inertia, limits)`}
                 </Button>
+                <h3 className="workshop-subheading">Fuel system</h3>
+                <FuelSystemEditor
+                  value={draft.fuelSystem}
+                  disabled={activeTest}
+                  onChange={(update) =>
+                    setDraft((d) => ({
+                      ...d,
+                      fuelSystem: update(d.fuelSystem),
+                    }))
+                  }
+                />
                 <h3 className="workshop-subheading">Forced induction</h3>
                 <InductionEditor
                   value={draft.induction}

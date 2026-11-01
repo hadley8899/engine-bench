@@ -527,3 +527,37 @@ test('a turbo build rebuilds, spools under throttle and shows boost', async ({
   await page.keyboard.up('Space')
   expect(errors).toEqual([])
 })
+
+test('a carburettor build validates its venturi and runs with mixture shown', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByRole('combobox', { name: 'Fuel system' }).click()
+  await page.getByRole('option', { name: 'Carburettor' }).click()
+  await expect(page.getByLabel(/Venturi \(choke\)/)).toHaveValue('32')
+  await page.getByLabel(/Venturi \(choke\)/).fill('5')
+  await expect(page.getByText('Supported range 12–70 mm')).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Stop & rebuild engine' }),
+  ).toBeDisabled()
+  await page.getByLabel(/Venturi \(choke\)/).fill('30')
+  await expect(page.getByText('CUSTOM I4 · CARB')).toBeVisible()
+  await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
+  await page.getByRole('button', { name: 'Start engine', exact: true }).click()
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
+    )
+    .toBeGreaterThan(500)
+  const fuel = page.getByTestId('fuel')
+  await expect
+    .poll(async () => {
+      const text = await fuel.innerText()
+      return Number(/λ\s*([\d.]+)/.exec(text)?.[1] ?? 0)
+    })
+    .toBeGreaterThan(0.9)
+  await expect(fuel).toContainText('L/h')
+  expect(errors).toEqual([])
+})

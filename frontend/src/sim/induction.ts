@@ -58,6 +58,8 @@ export class InductionSystem {
   tailpipeFlow = 0
   /** Compressor (or blower) shaft revolutions per second, for sound. */
   shaftHz = 0
+  /** Pressure lost ahead of the compressor (a draw-through carburettor), Pa. */
+  inletLoss = 0
   private ambient: number
   private ambientTemperature: number
   private density: number
@@ -136,8 +138,11 @@ export class InductionSystem {
   ) {
     const c = this.config
     if (c.kind === 'none') return
-    const pa = this.ambient
+    // Compressor inlet, after any carburettor; vents still dump to ambient.
+    const pa = this.ambient - this.inletLoss
+    const ambient = this.ambient
     const ta = this.ambientTemperature
+    const inletDensity = (this.density * pa) / ambient
     // Smooth the strongly pulsed cylinder demand over a few milliseconds.
     this.engineFlow += ((intakeFlow - this.engineFlow) * dt) / 0.004
     const ratio = this.outlet / pa
@@ -159,16 +164,16 @@ export class InductionSystem {
               leakArea,
             )
           : -massFlow(pa as Pascals, this.outlet as Pascals, ta, leakArea)
-      flow = this.density * swept - leak * this.densityRatio
+      flow = inletDensity * swept - leak * this.densityRatio
       // No internal compression: the blower pushes its volume against outlet pressure.
       const power = Math.max(0, (swept * (this.outlet - pa)) / c.efficiency)
       // Heating is shared by all the air swept, including what leaks back.
-      work = swept > 1e-9 ? power / (this.density * swept) : 0
+      work = swept > 1e-9 ? power / (inletDensity * swept) : 0
       this.crankTorque = power / Math.max(crankOmega, 5)
     } else {
       if (c.kind === 'centrifugal') this.shaftOmega = crankOmega * c.driveRatio
       const tip = (this.shaftOmega * c.compressorDiameter) / 2
-      const choke = this.density * CHOKE_FLOW * tip * c.compressorDiameter ** 2
+      const choke = inletDensity * CHOKE_FLOW * tip * c.compressorDiameter ** 2
       const shutoff =
         (1 + (c.compressorEfficiency * SLIP * tip * tip) / (CP * ta)) ** 3.5
       // Elliptical speed line: flat near shut-off, steep towards choke.
@@ -207,18 +212,23 @@ export class InductionSystem {
     let vent = 0
     if (vents) {
       vent =
-        this.outlet > pa
+        this.outlet > ambient
           ? massFlow(
               this.outlet as Pascals,
-              pa as Pascals,
+              ambient as Pascals,
               this.chargeTemperature,
               this.ventArea,
             )
-          : -massFlow(pa as Pascals, this.outlet as Pascals, ta, this.ventArea)
+          : -massFlow(
+              ambient as Pascals,
+              this.outlet as Pascals,
+              ta,
+              this.ventArea,
+            )
       vent *= this.densityRatio
       if (c.kind !== 'roots') this.surge = false
     }
-    this.venting = vents && this.outlet > pa + 5000
+    this.venting = vents && this.outlet > ambient + 5000
     this.outlet +=
       ((R * this.chargeTemperature) / this.chargeVolume) *
       (flow - this.engineFlow - vent) *
