@@ -5,6 +5,8 @@ import type {
   Pascals,
   RadiansPerSecond,
 } from './schema'
+import { InductionSystem } from './induction'
+import type { InductionTelemetry } from './induction'
 import {
   atmosphere,
   clamp,
@@ -55,6 +57,7 @@ export type Telemetry = {
   sample: number
   maxSubsteps: number
   starterStalled: boolean
+  induction: InductionTelemetry
 }
 interface Cylinder {
   mass: number
@@ -94,7 +97,11 @@ export class EngineCore {
   warning = ''
   /** Latched when the starter is engaged but cannot turn the crank. */
   starterStalled = false
+  readonly induction: InductionSystem
   private stallTime = 0
+  private whinePhase = 0
+  private noise = 0x2545f491
+  private ventSound = 0
   private filter = 0
   private previousAudio = 0
   private audioHighpass = 0
@@ -138,6 +145,12 @@ export class EngineCore {
     this.runnerGain = runnerArea / engine.intakeRunnerLength
     this.airDensityRatio =
       air.density / (conditions.pressure / R / conditions.temperature)
+    this.induction = new InductionSystem(
+      engine,
+      conditions,
+      air.density,
+      this.airDensityRatio,
+    )
     this.phases = Array.from(
       { length: 4 },
       (_, c) => engine.firingOrder.indexOf((c + 1) as 1 | 2 | 3 | 4) * Math.PI,
@@ -177,7 +190,24 @@ export class EngineCore {
       ? clamp(0.09 + (950 - rpm) * 0.0004, 0, 0.38)
       : 0
     const throttle = Math.max(this.controls.throttle, idle)
-    const targetMap = c.pressure * (0.04 + 0.95 * throttle)
+    const induction = this.induction
+    const turbo = induction.config.kind === 'turbo'
+    const targetMap = induction.supply * (0.04 + 0.95 * throttle)
+    // Charge air after any compressor and intercooler.
+    const intakeTemperature = induction.chargeTemperature
+    const intakeEnthalpy = induction.boosted
+      ? enthalpy(intakeTemperature)
+      : this.intakeEnthalpy
+    const intakeDensity =
+      (this.airDensity * c.temperature) / (c.pressure * intakeTemperature)
+    const backPressure = turbo ? induction.exhaustPressure : c.pressure
+    const backTemperature = turbo
+      ? induction.exhaustTemperature
+      : EXHAUST_BACKFLOW_TEMPERATURE
+    const backEnthalpy = turbo
+      ? enthalpy(backTemperature)
+      : this.exhaustEnthalpy
+    if (induction.overspeed()) this.warning = 'Estimated compressor overspeed'
     this.manifold += ((targetMap - this.manifold) * this.dt) / 0.045
     const pistonSpeed = (2 * e.stroke * rpm) / 60
     // Woschni-form gas velocity without its combustion term (calibrated by WALL_HEAT).
@@ -188,6 +218,9 @@ export class EngineCore {
       throw new Error('Engine exceeded the supported integration speed.')
     const dt = this.dt / n
     let audio = 0
+    let intakeMass = 0
+    let exhaustMass = 0
+    let exhaustEnergy = 0
     let torque = 0
     let absorbed = 0
     for (let sub = 0; sub < n; sub++) {
@@ -229,7 +262,7 @@ export class EngineCore {
             cyl.runner + this.runnerGain * dt * (this.manifold - pressure)
           const density =
             drive >= 0
-              ? this.airDensity * (this.manifold / c.pressure)
+              ? intakeDensity * this.manifold
               : cyl.mass / previousVolume
           const loss = (this.runnerGain * dt) / (2 * density * inlet * inlet)
           const size = Math.abs(drive)
@@ -241,14 +274,14 @@ export class EngineCore {
               massFlow(
                 this.manifold as Pascals,
                 0 as Pascals,
-                c.temperature,
+                intakeTemperature,
                 inlet,
               ) * this.airDensityRatio,
             )
             const dm = flow * dt
             cyl.mass += dm
             cyl.fresh += dm
-            cyl.energy += dm * this.intakeEnthalpy
+            cyl.energy += dm * intakeEnthalpy
           } else {
             flow = Math.max(
               flow,
@@ -261,32 +294,40 @@ export class EngineCore {
             cyl.energy -= dm * enthalpy(temperature)
           }
           cyl.runner = flow
+          intakeMass += flow * dt
         } else cyl.runner = 0
         if (exhaust > 0) {
-          if (pressure > c.pressure) {
+          if (pressure > backPressure) {
             const dm = Math.min(
               cyl.mass * 0.08,
               massFlow(
                 pressure as Pascals,
-                c.pressure as Pascals,
+                backPressure as Pascals,
                 temperature,
                 exhaust,
               ) * dt,
             )
+            const h = dm * enthalpy(temperature)
             cyl.fresh *= 1 - dm / cyl.mass
             cyl.mass -= dm
-            cyl.energy -= dm * enthalpy(temperature)
+            cyl.energy -= h
+            exhaustMass += dm
+            exhaustEnergy += h
             audio += (dm / this.dt) * 5 * this.audioScale
           } else {
-            const dm =
+            const dm = Math.min(
               massFlow(
-                c.pressure as Pascals,
+                backPressure as Pascals,
                 pressure as Pascals,
-                EXHAUST_BACKFLOW_TEMPERATURE,
+                backTemperature,
                 exhaust,
-              ) * dt
+              ) * dt,
+              Infinity,
+            )
             cyl.mass += dm
-            cyl.energy += dm * this.exhaustEnthalpy
+            cyl.energy += dm * backEnthalpy
+            exhaustMass -= dm
+            exhaustEnergy -= dm * backEnthalpy
           }
         }
         const ignition = CYCLE - (e.ignitionAdvance * Math.PI) / 180
@@ -344,7 +385,8 @@ export class EngineCore {
         (FMEP_STATIC +
           FMEP_LINEAR * pistonSpeed +
           FMEP_QUADRATIC * pistonSpeed * pistonSpeed) *
-        this.frictionPerPascal
+          this.frictionPerPascal +
+        induction.crankTorque
       torque += (indicated - friction) / n
       const starter = this.controls.starter && rpm < 500 ? e.starterTorque : 0
       if (this.controls.holdRpm === null) {
@@ -367,6 +409,16 @@ export class EngineCore {
       this.angle = wrap(this.angle + da)
     }
     this.absorbedTorque = absorbed
+    induction.step(
+      this.dt,
+      this.omega,
+      intakeMass / this.dt,
+      exhaustMass,
+      exhaustEnergy,
+      this.manifold,
+    )
+    // A turbo's manifold and turbine smooth the pulses reaching the tailpipe.
+    if (turbo) audio = induction.tailpipeFlow * 5 * this.audioScale
     // Only blame the starter when nothing else resists it: a loaded dyno
     // stalling a cranking engine is reported as an ordinary stall.
     if (
@@ -395,7 +447,37 @@ export class EngineCore {
     const high = this.filter - this.previousAudio + 0.995 * this.audioHighpass
     this.previousAudio = this.filter
     this.audioHighpass = high
-    return Math.tanh(high * 2) * 0.65
+    return Math.tanh((high + this.inductionSound()) * 2) * 0.65
+  }
+  /** Compressor whistle or blower whine, plus blow-off noise; bounded. */
+  private inductionSound() {
+    const induction = this.induction
+    if (!induction.boosted) return 0
+    const kind = induction.config.kind
+    // Roots: three-lobe rotor pair; centrifugal wheels: shaft rate.
+    const hz = kind === 'roots' ? induction.shaftHz * 6 : induction.shaftHz
+    this.whinePhase = (this.whinePhase + ((hz * this.dt) % 1)) % 1
+    const loud = Math.min(
+      1,
+      Math.abs(induction.supply - this.conditions.pressure) / 100000,
+    )
+    const whine =
+      hz < 18000 ? Math.sin(2 * Math.PI * this.whinePhase) * 0.05 * loud : 0
+    // Deterministic noise so results do not depend on host or batching.
+    this.noise ^= this.noise << 13
+    this.noise ^= this.noise >>> 17
+    this.noise ^= this.noise << 5
+    const white = (this.noise >>> 0) / 4294967296 - 0.5
+    // Blow-off hiss follows the pressure being dumped, so it fades as it empties.
+    const dumped = (induction.outlet - this.conditions.pressure) / 40000
+    const target = induction.venting
+      ? 0.5 * Math.min(1, dumped)
+      : induction.surge
+        ? 0.15
+        : 0
+    this.ventSound +=
+      (target - this.ventSound) * (target > this.ventSound ? 0.01 : 0.0003)
+    return whine + white * this.ventSound
   }
   advance(seconds: number) {
     if (seconds < 0 || seconds > 0.1)
@@ -422,6 +504,7 @@ export class EngineCore {
       sample: this.sample,
       maxSubsteps: this.maxSubsteps,
       starterStalled: this.starterStalled,
+      induction: this.induction.telemetry(),
     }
   }
 }

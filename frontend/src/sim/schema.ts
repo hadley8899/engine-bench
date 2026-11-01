@@ -3,14 +3,97 @@ import { z } from 'zod'
 /**
  * 1.2.0: temperature-dependent gas properties, Woschni-form wall heat,
  * piston-speed friction and intake runner inertia; recalibrated presets.
+ * 1.3.0: turbochargers, superchargers and intercoolers.
  */
-export const MODEL_VERSION = 'eb-0d-1.2.0'
+export const MODEL_VERSION = 'eb-0d-1.3.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
   'eb-0d-1.1.0',
+  'eb-0d-1.2.0',
   MODEL_VERSION,
 ] as const
+const intercoolerSchema = z.strictObject({
+  /** Fraction of the compressor's temperature rise removed. 0 = no intercooler. */
+  effectiveness: z.number().min(0).max(0.95),
+  /** Charge pressure lost at 0.1 kg/s; scales with flow squared. */
+  pressureDrop: z.number().min(0).max(30000),
+})
+const blowOff = z.boolean()
+/** Forced induction. Boost pressures are gauge (above ambient). */
+export const inductionSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('none') }),
+  z.strictObject({
+    kind: z.literal('turbo'),
+    compressorDiameter: z.number().min(0.02).max(0.2),
+    compressorEfficiency: z.number().min(0.5).max(0.85),
+    /** Effective turbine nozzle area; smaller spools sooner with more back pressure. */
+    turbineArea: z.number().min(0.00002).max(0.01),
+    turbineEfficiency: z.number().min(0.5).max(0.85),
+    shaftInertia: z.number().min(0.000001).max(0.01),
+    boostTarget: z.number().min(0).max(400000),
+    maxShaftRpm: z.number().int().min(20000).max(400000),
+    blowOff,
+    intercooler: intercoolerSchema,
+  }),
+  z.strictObject({
+    kind: z.literal('centrifugal'),
+    compressorDiameter: z.number().min(0.02).max(0.2),
+    compressorEfficiency: z.number().min(0.5).max(0.85),
+    /** Compressor shaft speed per crank speed, including any internal step-up. */
+    driveRatio: z.number().min(1).max(30),
+    maxShaftRpm: z.number().int().min(20000).max(400000),
+    blowOff,
+    intercooler: intercoolerSchema,
+  }),
+  z.strictObject({
+    kind: z.literal('roots'),
+    /** Air displaced per rotor revolution. */
+    rotorDisplacement: z.number().min(0.0001).max(0.02),
+    driveRatio: z.number().min(0.5).max(6),
+    efficiency: z.number().min(0.3).max(0.85),
+    /** Bypass valve that unloads the blower at part throttle. */
+    bypass: z.boolean(),
+    intercooler: intercoolerSchema,
+  }),
+])
+export type Induction = z.infer<typeof inductionSchema>
+export type InductionKind = Induction['kind']
+const defaultIntercooler = { effectiveness: 0.7, pressureDrop: 6000 }
+/** Starting points when switching induction type; sized for about 2 L. */
+export const inductionDefaults = {
+  none: { kind: 'none' },
+  turbo: {
+    kind: 'turbo',
+    compressorDiameter: 0.05,
+    compressorEfficiency: 0.76,
+    turbineArea: 0.0006,
+    turbineEfficiency: 0.72,
+    shaftInertia: 0.000025,
+    boostTarget: 80000,
+    maxShaftRpm: 210000,
+    blowOff: true,
+    intercooler: defaultIntercooler,
+  },
+  centrifugal: {
+    kind: 'centrifugal',
+    compressorDiameter: 0.085,
+    compressorEfficiency: 0.76,
+    driveRatio: 12,
+    maxShaftRpm: 90000,
+    blowOff: true,
+    intercooler: defaultIntercooler,
+  },
+  roots: {
+    kind: 'roots',
+    rotorDisplacement: 0.001,
+    driveRatio: 2,
+    efficiency: 0.55,
+    bypass: true,
+    intercooler: { effectiveness: 0.6, pressureDrop: 4000 },
+  },
+} satisfies { [K in InductionKind]: Extract<Induction, { kind: K }> }
+
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
@@ -35,6 +118,8 @@ export const engineSchema = z.strictObject({
   mechanicalLimit: z.number().int().min(1000).max(25000),
   // Defaulted so builds saved before this field existed keep their 70 Nm starter.
   starterTorque: z.number().min(1).max(20000).default(70),
+  // Builds saved before forced induction existed are naturally aspirated.
+  induction: inductionSchema.default({ kind: 'none' }),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -128,6 +213,7 @@ export const roadEngine: EngineDefinition = {
   revLimit: 6800,
   mechanicalLimit: 7400,
   starterTorque: 150,
+  induction: { kind: 'none' },
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {

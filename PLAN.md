@@ -210,7 +210,8 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 - [ ] Source and validate a documented naturally aspirated inline-four as the first reference preset.
 - [ ] Before expanding the preset library or completing forced induction, add one contrasting engine layout and sound after the inline-four bench is proven. Choose the layout using prototype cost and audible/visual variety; verify its full editor, motion, audio and dyno workflow.
 - [ ] Add shareable build links after downloadable recipes work; mark submitted results as unverified unless independently verified.
-- [ ] Add a bounded forced-induction model (compressor map, wastegate/boost control, intercooler) and a direct-injection fuelling assumption, as required by the VW AXX (EA113 2.0 TFSI, turbocharged, direct injection).
+- [x] Add a bounded forced-induction model (model 1.3.0): turbocharger with a parametric compressor map, turbine, shaft inertia, wastegate and blow-off valve; centrifugal and roots superchargers; intercooler. Brought forward ahead of the contrasting layout at the user's request. Knock is not modelled.
+- [ ] Add a direct-injection fuelling assumption and knock/boost-limited timing, as required by the VW AXX (EA113 2.0 TFSI, turbocharged, direct injection).
 - [ ] Source a documented VW AXX preset and identify unknown inputs explicitly.
 - [ ] Compare each preset with a sourced reference torque curve and operating range; record deviations.
 - [ ] Expand the remaining inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Prioritise meaningful variety over a large list of near-identical presets.

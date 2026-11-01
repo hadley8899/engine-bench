@@ -65,6 +65,29 @@ it('validates stored documents using the exported schemas', function () {
     expect(EngineBuild::query()->count())->toBe(0);
 });
 
+it('accepts forced-induction builds and rejects invalid induction settings', function () {
+    [, , $token] = createAuthenticatedCompanyUser();
+    $turbo = benchRecipe();
+    $turbo['engine']['induction'] = [
+        'kind' => 'turbo', 'compressorDiameter' => 0.05, 'compressorEfficiency' => 0.76,
+        'turbineArea' => 0.0006, 'turbineEfficiency' => 0.72, 'shaftInertia' => 0.000025,
+        'boostTarget' => 80000, 'maxShaftRpm' => 210000, 'blowOff' => true,
+        'intercooler' => ['effectiveness' => 0.7, 'pressureDrop' => 6000],
+    ];
+    $this->withToken($token)->postJson('/api/auth/builds', $turbo)->assertCreated()
+        ->assertJsonPath('revision.engine.induction.kind', 'turbo');
+    $bad = $turbo;
+    $bad['engine']['induction']['boostTarget'] = 900000;
+    $this->withToken($token)->postJson('/api/auth/builds', $bad)->assertUnprocessable();
+    $bad = $turbo;
+    $bad['engine']['induction']['kind'] = 'roots';
+    $this->withToken($token)->postJson('/api/auth/builds', $bad)->assertUnprocessable();
+    $bad = $turbo;
+    $bad['engine']['induction'] = ['kind' => 'electric'];
+    $this->withToken($token)->postJson('/api/auth/builds', $bad)->assertUnprocessable();
+    expect(EngineBuild::query()->count())->toBe(1);
+});
+
 it('preserves old build revisions and rejects stale concurrent saves', function () {
     [, , $token] = createAuthenticatedCompanyUser();
     $original = benchRecipe();

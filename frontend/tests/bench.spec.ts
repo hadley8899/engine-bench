@@ -125,7 +125,9 @@ test('invalid input is rejected and a live emergency stop retains incomplete dat
   ).toBeDisabled()
   await expect(page.getByText('Supported range 20–300 mm')).toBeVisible()
   await expect(
-    page.getByText("Can't rebuild until these fields are in range: Bore.").first(),
+    page
+      .getByText("Can't rebuild until these fields are in range: Bore.")
+      .first(),
   ).toBeVisible()
   await page.getByRole('button', { name: 'Road 2.0', exact: true }).click()
   await page.getByRole('button', { name: 'Live pull', exact: true }).click()
@@ -446,28 +448,82 @@ test('ignition and a held starter can start a stopped bench directly', async ({
     .click()
 })
 
-test('restoring a previous build leaves new edits rebuildable and testable', async ({ page }) => {
+test('restoring a previous build leaves new edits rebuildable and testable', async ({
+  page,
+}) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
   await page.goto('/')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('88')
-  await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Start engine', exact: true }).click()
-  await expect.poll(async () => Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))).toBeGreaterThan(600)
-  await page.getByRole('button', { name: 'Restore previous build', exact: true }).click()
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
+    )
+    .toBeGreaterThan(600)
+  await page
+    .getByRole('button', { name: 'Restore previous build', exact: true })
+    .click()
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('86')
   await expect(page.getByTestId('rpm')).toContainText('0 RPM')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('90')
   await page.getByLabel('Room temperature (°C)', { exact: true }).fill('30')
-  await expect(page.getByRole('button', { name: 'Stop & rebuild engine', exact: true })).toBeEnabled()
-  await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
+  await expect(
+    page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }),
+  ).toBeEnabled()
+  await page
+    .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
+    .click()
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('90')
   await page.getByLabel('End RPM', { exact: true }).fill('2500')
   await page.getByRole('button', { name: 'Quick test', exact: true }).click()
   await expect(page.getByTestId('run-summary')).toContainText('COMPLETE')
-  const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('engine-bench:guest-experiment:1')!))
-  expect(saved.baseline.engine.bore).toBe(.09)
+  const saved = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem('engine-bench:guest-experiment:1')!),
+  )
+  expect(saved.baseline.engine.bore).toBe(0.09)
   expect(saved.baseline.conditions.temperature).toBe(303.15)
+  expect(errors).toEqual([])
+})
+
+test('a turbo build rebuilds, spools under throttle and shows boost', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByRole('combobox', { name: 'Induction' }).click()
+  await page.getByRole('option', { name: 'Turbocharger' }).click()
+  await expect(page.getByLabel(/Boost target/)).toHaveValue('0.8')
+  await page.getByLabel(/Boost target/).fill('9')
+  await expect(page.getByText('Supported range 0–4 bar')).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Stop & rebuild engine' }),
+  ).toBeDisabled()
+  await page.getByLabel(/Boost target/).fill('0.6')
+  await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
+  await page.getByRole('button', { name: 'Start engine', exact: true }).click()
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
+    )
+    .toBeGreaterThan(500)
+  const boost = page.getByTestId('boost')
+  await expect(boost).toContainText('TURBO SPEED')
+  await page.getByRole('heading', { level: 1 }).click()
+  await page.keyboard.down('Space')
+  await expect
+    .poll(async () => {
+      const text = await boost.innerText()
+      return Number(/BOOST\s+(-?[\d.]+)/.exec(text)?.[1] ?? 0)
+    })
+    .toBeGreaterThan(0.15)
+  await page.keyboard.up('Space')
   expect(errors).toEqual([])
 })

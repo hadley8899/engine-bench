@@ -65,7 +65,7 @@ The user tried the initial bench and reported fuel-cut warning flicker at unload
 
 The follow-up user report exposed a third issue: Hold starter was disabled until Start engine had already been used. Hold starter now creates/resumes audio and starts the stopped bench directly, obeys ignition, unloads the dyno and releases on pointer/key release or focus loss. The real held-pointer regression passes in Chromium and Firefox. The user has been asked to refresh and confirm startup plus the modify/compare/restore flow; that latest reply is pending. The full phase 2 first-use gate therefore remains open: an unfamiliar user must confirm starting within one minute and a clear modification/comparison/restoration experience after the fixes. Automated workflow timing and screenshots do not substitute for that feedback.
 
-Known scope limits: no calibrated production-engine predictions, forced induction, additional layouts, detailed wear/damage. These are later planned phases, not missing substitutes for the current inline-four bench. There is no replay feature; quick calculation and snapshot audio auditioning are explicitly distinguished.
+Known scope limits: no calibrated production-engine predictions, knock, additional layouts, detailed wear/damage. Forced induction was added later in model 1.3.0 (see below). These are later planned phases, not missing substitutes for the current inline-four bench. There is no replay feature; quick calculation and snapshot audio auditioning are explicitly distinguished.
 
 ## Phase 3 persistence verification
 
@@ -97,4 +97,24 @@ The measurements above were taken on `eb-0d-1.0.0`. Model 1.1.0 scales friction 
 - Headless stress test: the 512-case 1.1.0 envelope, crossed with runner lengths of 50 and 1,500 mm (1,024 cases). All stayed finite with bounded audio. The Vitest corner set now includes both runner extremes.
 - Benchmark (Node 128-frame block, median): about 0.065 ms at 1,000, 4,000 and 7,500 RPM, up from 0.045 ms; quick sweep 0.20 s wall time for 46 samples.
 - Frontend: 28 Vitest tests, build and lint (one existing hook-cleanup warning) pass. Playwright: 24 passed in Chromium and Firefox. `scripts/test-storage-browser.sh`: 2 passed. Backend: 32 tests / 178 assertions pass with the re-exported schemas.
+
+## Model 1.3.0: forced induction
+
+- Naturally aspirated full-load holds are identical to 1.2.0 (same Road table to the printed precision).
+- Vitest (10 new tests, 38 total):
+  - legacy builds read as naturally aspirated;
+  - turbo boost settles within −10/+15 kPa of the wastegate target and raises 5,000 RPM torque by more than 40%;
+  - a higher target raises boost and torque;
+  - boost lags a throttle step while the shaft spools, and a lighter rotor spools sooner;
+  - centrifugal boost more than doubles from 3,000 to 6,000 RPM;
+  - roots boost at 2,000 RPM is over 40% of its 6,000 RPM value, and it draws crank power;
+  - a 90% intercooler gives a cooler charge and more torque than none;
+  - lift-off vents with a blow-off valve and flags surge without one;
+  - low maximum shaft speed raises the overspeed warning;
+  - induction extremes stay finite with bounded audio and are batching-independent;
+  - a 20 mm² turbine with the wastegate held shut stops with the "turbine too small" error.
+- Headless stress test: geometry corners (bore and stroke 20/300 mm, compression 5/20, valves and inertia scaled to size) × 16 turbo extremes (wheel 20/200 mm, turbine 20/10,000 mm², rotor inertia 1/100,000 g·cm², boost target 0/4 bar), 4 centrifugal and 8 roots extremes. Each was held at 600 and 12,000 RPM and started freely with a throttle lift: 672 cases. 656 stayed finite with bounded audio. The other 16 all pair a 20 mm² turbine with a 300 mm bore (1.4–21 L), and stop with the "turbine too small" error.
+- Chromium: the bench was driven through the real UI (Induction selector, rebuild, start, full throttle, lift) for each type; boost, shaft speed, charge air and blow-off status updated with no page errors. Each type's 3D part (turbo with glowing housing and visible wheel, belt-driven centrifugal unit, belt-driven roots blower on the head) was checked in software-WebGL screenshots. A new Playwright test covers the turbo editor's range validation, rebuild and spool in Chromium and Firefox.
+- Benchmark (Node 128-frame block, median, 5,000 RPM held): none 0.063 ms, turbo 0.090 ms, centrifugal and roots 0.079 ms, against a 2.67 ms budget.
+- Frontend: build and lint (one existing warning) pass. Playwright: 26 passed, 2 storage cases skipped in that run; `scripts/test-storage-browser.sh`: 2 passed. Backend: 33 tests pass, including a new check that turbo builds are accepted and invalid induction settings rejected by the exported schema.
 

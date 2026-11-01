@@ -620,3 +620,41 @@
     flex-direction: column;
   }
 }
+
+.boost-strip strong {
+  font-size: 24px;
+}
+.boost-status {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.boost-flag {
+  font-style: normal;
+  font-family: 'Saira', sans-serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1fc8ff33;
+  color: #7fe0ff;
+}
+.boost-flag.warn {
+  background: #ff3b6b33;
+  color: #ff8fa8;
+}
+.workshop-subheading {
+  margin: 18px 0 10px;
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #93a6b0;
+}
+.induction-editor {
+  display: grid;
+  gap: 12px;
+}
+.induction-editor .cranking-note {
+  margin: 0;
+}

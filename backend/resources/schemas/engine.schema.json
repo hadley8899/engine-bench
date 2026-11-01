@@ -96,6 +96,224 @@
       "minimum": 1,
       "maximum": 20000
     },
+    "induction": {
+      "default": {
+        "kind": "none"
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "turbo"
+            },
+            "compressorDiameter": {
+              "type": "number",
+              "minimum": 0.02,
+              "maximum": 0.2
+            },
+            "compressorEfficiency": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 0.85
+            },
+            "turbineArea": {
+              "type": "number",
+              "minimum": 0.00002,
+              "maximum": 0.01
+            },
+            "turbineEfficiency": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 0.85
+            },
+            "shaftInertia": {
+              "type": "number",
+              "minimum": 0.000001,
+              "maximum": 0.01
+            },
+            "boostTarget": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 400000
+            },
+            "maxShaftRpm": {
+              "type": "integer",
+              "minimum": 20000,
+              "maximum": 400000
+            },
+            "blowOff": {
+              "type": "boolean"
+            },
+            "intercooler": {
+              "type": "object",
+              "properties": {
+                "effectiveness": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.95
+                },
+                "pressureDrop": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 30000
+                }
+              },
+              "required": [
+                "effectiveness",
+                "pressureDrop"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "compressorDiameter",
+            "compressorEfficiency",
+            "turbineArea",
+            "turbineEfficiency",
+            "shaftInertia",
+            "boostTarget",
+            "maxShaftRpm",
+            "blowOff",
+            "intercooler"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "centrifugal"
+            },
+            "compressorDiameter": {
+              "type": "number",
+              "minimum": 0.02,
+              "maximum": 0.2
+            },
+            "compressorEfficiency": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 0.85
+            },
+            "driveRatio": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 30
+            },
+            "maxShaftRpm": {
+              "type": "integer",
+              "minimum": 20000,
+              "maximum": 400000
+            },
+            "blowOff": {
+              "type": "boolean"
+            },
+            "intercooler": {
+              "type": "object",
+              "properties": {
+                "effectiveness": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.95
+                },
+                "pressureDrop": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 30000
+                }
+              },
+              "required": [
+                "effectiveness",
+                "pressureDrop"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "compressorDiameter",
+            "compressorEfficiency",
+            "driveRatio",
+            "maxShaftRpm",
+            "blowOff",
+            "intercooler"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "roots"
+            },
+            "rotorDisplacement": {
+              "type": "number",
+              "minimum": 0.0001,
+              "maximum": 0.02
+            },
+            "driveRatio": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 6
+            },
+            "efficiency": {
+              "type": "number",
+              "minimum": 0.3,
+              "maximum": 0.85
+            },
+            "bypass": {
+              "type": "boolean"
+            },
+            "intercooler": {
+              "type": "object",
+              "properties": {
+                "effectiveness": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.95
+                },
+                "pressureDrop": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 30000
+                }
+              },
+              "required": [
+                "effectiveness",
+                "pressureDrop"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "rotorDisplacement",
+            "driveRatio",
+            "efficiency",
+            "bypass",
+            "intercooler"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "firingOrder": {
       "type": "array",
       "prefixItems": [

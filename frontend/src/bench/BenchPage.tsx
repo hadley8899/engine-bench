@@ -44,6 +44,12 @@ import { BenchAudio } from './audio'
 import { Chart } from './Chart'
 import { EngineView } from './EngineView'
 import { NumberField } from './NumberField'
+import { InductionEditor } from './InductionEditor'
+import {
+  describeInduction,
+  inductionErrors,
+  inductionLabels,
+} from './inductionFields'
 import { SavedLibrary } from './SavedLibrary'
 import {
   loadDraft,
@@ -320,6 +326,9 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
       (f) =>
         `${f.label}: ${(Number(a.engine[f.key]) * f.scale).toFixed(2)} → ${(Number(e[f.key]) * f.scale).toFixed(2)} ${f.unit}`,
     )
+  changes.push(
+    ...describeInduction(a.engine.induction ?? { kind: 'none' }, e.induction),
+  )
   for (const f of conditionFields)
     if (a.conditions[f.key] !== c[f.key])
       changes.push(
@@ -414,6 +423,7 @@ export function BenchPage() {
   const invalidLabels = [
     ...(draftErrors.name ? ['Build name'] : []),
     ...numericFields.filter((f) => draftErrors[f.key]).map((f) => f.label),
+    ...Object.keys(inductionErrors(draft.induction)),
     ...conditionFields.filter((f) => envErrors[f.key]).map((f) => f.label),
   ]
   const invalid = invalidLabels.length > 0
@@ -992,6 +1002,71 @@ export function BenchPage() {
                     </strong>
                   </div>
                 </div>
+                {telemetry.induction.kind !== 'none' && (
+                  <div className="stats-strip boost-strip" data-testid="boost">
+                    <div>
+                      <small>BOOST</small>
+                      <strong>
+                        {(telemetry.induction.boost / 1e5).toFixed(2)}
+                        <span> bar</span>
+                      </strong>
+                    </div>
+                    <div>
+                      <small>
+                        {telemetry.induction.kind === 'turbo'
+                          ? 'TURBO SPEED'
+                          : 'BLOWER SPEED'}
+                      </small>
+                      <strong>
+                        {Math.round(
+                          telemetry.induction.shaftRpm / 1000,
+                        ).toLocaleString()}
+                        <span>k RPM</span>
+                      </strong>
+                    </div>
+                    <div>
+                      <small>CHARGE AIR</small>
+                      <strong>
+                        {(
+                          telemetry.induction.chargeTemperature - 273.15
+                        ).toFixed(0)}
+                        <span> °C</span>
+                      </strong>
+                    </div>
+                    <div>
+                      <small>
+                        {telemetry.induction.kind === 'turbo'
+                          ? 'WASTEGATE · BACK PRESSURE'
+                          : 'STATUS'}
+                      </small>
+                      <strong className="boost-status">
+                        {telemetry.induction.kind === 'turbo' && (
+                          <>
+                            {Math.round(telemetry.induction.wastegate * 100)}
+                            <span>% · </span>
+                            {(
+                              telemetry.induction.exhaustBackPressure / 1e5
+                            ).toFixed(2)}
+                            <span> bar </span>
+                          </>
+                        )}
+                        {telemetry.induction.venting && (
+                          <em className="boost-flag">
+                            {telemetry.induction.kind === 'roots'
+                              ? 'BYPASS'
+                              : 'BLOW-OFF'}
+                          </em>
+                        )}
+                        {telemetry.induction.surge && (
+                          <em className="boost-flag warn">SURGE</em>
+                        )}
+                        {telemetry.induction.kind !== 'turbo' &&
+                          !telemetry.induction.venting &&
+                          !telemetry.induction.surge && <span>Normal</span>}
+                      </strong>
+                    </div>
+                  </div>
+                )}
               </Paper>
               <Paper className="control-panel" variant="outlined">
                 <div className="panel-heading">
@@ -1187,7 +1262,14 @@ export function BenchPage() {
               <Paper className="editor-panel" variant="outlined">
                 <div className="panel-heading">
                   <h2>Engine workshop</h2>
-                  <Chip size="small" label="CUSTOM I4" />
+                  <Chip
+                    size="small"
+                    label={
+                      draft.induction.kind === 'none'
+                        ? 'CUSTOM I4'
+                        : `CUSTOM I4 · ${inductionLabels[draft.induction.kind].toUpperCase()}`
+                    }
+                  />
                 </div>
                 <div className="preset-buttons">
                   <Button
@@ -1268,6 +1350,14 @@ export function BenchPage() {
                     ? 'Hide advanced parameters'
                     : `Show ${numericFields.length - 5} advanced parameters (valves, runners, timing, mixture, inertia, limits)`}
                 </Button>
+                <h3 className="workshop-subheading">Forced induction</h3>
+                <InductionEditor
+                  value={draft.induction}
+                  disabled={activeTest}
+                  onChange={(update) =>
+                    setDraft((d) => ({ ...d, induction: update(d.induction) }))
+                  }
+                />
                 <p className="derived-capacity">
                   Derived capacity{' '}
                   <strong>

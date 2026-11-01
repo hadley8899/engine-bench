@@ -426,6 +426,185 @@ export function EngineView({
       0,
       flywheel,
     )
+    // Forced induction: drawn at the front (-x) of the block, sized from the bore.
+    const induction = engine.induction
+    const spinner = new THREE.Group()
+    let hotHousing: THREE.MeshStandardMaterial | null = null
+    const frontX = -width / 2
+    const beltPulley = (x: number, y: number, z: number, radius: number) => {
+      mesh(
+        new THREE.CylinderGeometry(radius, radius, 0.12 * u, 32),
+        steel,
+        x,
+        y,
+        z,
+      ).rotation.z = Math.PI / 2
+    }
+    const belt = (y1: number, z1: number, y2: number, z2: number) => {
+      const dy = y2 - y1,
+        dz = z2 - z1
+      const strap = mesh(
+        new THREE.BoxGeometry(0.06 * u, Math.hypot(dy, dz), 0.04 * u),
+        new THREE.MeshStandardMaterial({ color: 0x15191c, roughness: 0.9 }),
+        frontX - 0.25 * u,
+        (y1 + y2) / 2,
+        (z1 + z2) / 2,
+      )
+      strap.rotation.x = -Math.atan2(dz, dy)
+    }
+    if (induction.kind === 'turbo') {
+      hotHousing = new THREE.MeshStandardMaterial({
+        color: 0x5a5049,
+        metalness: 0.6,
+        roughness: 0.45,
+        emissive: 0xff4a12,
+        emissiveIntensity: 0,
+      })
+      const turbo = new THREE.Group()
+      turbo.position.set(frontX - 0.75 * u, head * 0.75, -0.25 * u)
+      scene.add(turbo)
+      const scale = Math.max(
+        0.6 * u,
+        (induction.compressorDiameter / 0.05) * 0.6 * u,
+      )
+      mesh(
+        new THREE.TorusGeometry(0.55 * scale, 0.32 * scale, 16, 40),
+        hotHousing,
+        0,
+        0,
+        -0.5 * scale,
+        turbo,
+      )
+      mesh(
+        new THREE.TorusGeometry(0.62 * scale, 0.3 * scale, 16, 40),
+        aluminium,
+        0,
+        0,
+        0.55 * scale,
+        turbo,
+      )
+      mesh(
+        new THREE.CylinderGeometry(0.22 * scale, 0.22 * scale, 0.9 * scale, 24),
+        brass,
+        0,
+        0,
+        0,
+        turbo,
+      ).rotation.x = Math.PI / 2
+      // Compressor inlet with a visible wheel.
+      mesh(
+        new THREE.CylinderGeometry(
+          0.42 * scale,
+          0.42 * scale,
+          0.5 * scale,
+          32,
+          1,
+          true,
+        ),
+        aluminium,
+        0,
+        0,
+        1.05 * scale,
+        turbo,
+      ).rotation.x = Math.PI / 2
+      spinner.position.set(0, 0, 1.0 * scale)
+      turbo.add(spinner)
+      for (let b = 0; b < 7; b++)
+        mesh(
+          new THREE.BoxGeometry(0.06 * scale, 0.7 * scale, 0.25 * scale),
+          steel,
+          0,
+          0,
+          0,
+          spinner,
+        ).rotation.z = (b * Math.PI) / 7
+      // Downpipe to the floor side.
+      mesh(
+        new THREE.CylinderGeometry(0.2 * scale, 0.2 * scale, head * 0.6, 20),
+        hotHousing,
+        0,
+        -head * 0.35,
+        -0.5 * scale,
+        turbo,
+      )
+    } else if (induction.kind === 'centrifugal') {
+      const y = 0.6 * head
+      const z = 0.9 * u
+      const housing = new THREE.Group()
+      housing.position.set(frontX - 0.45 * u, y, z)
+      scene.add(housing)
+      const scale = (induction.compressorDiameter / 0.085) * 0.75 * u
+      mesh(
+        new THREE.TorusGeometry(0.55 * scale, 0.3 * scale, 16, 40),
+        aluminium,
+        0,
+        0,
+        0,
+        housing,
+      ).rotation.y = Math.PI / 2
+      mesh(
+        new THREE.CylinderGeometry(0.4 * scale, 0.4 * scale, 0.6 * scale, 32),
+        paint,
+        0.3 * scale,
+        0,
+        0,
+        housing,
+      ).rotation.z = Math.PI / 2
+      spinner.position.set(-0.32 * scale, 0, 0)
+      housing.add(spinner)
+      for (let b = 0; b < 7; b++)
+        mesh(
+          new THREE.BoxGeometry(0.05 * scale, 0.7 * scale, 0.05 * scale),
+          steel,
+          0,
+          0,
+          0,
+          spinner,
+        ).rotation.x = (b * Math.PI) / 7
+      beltPulley(frontX - 0.25 * u, 0, 0, 0.45 * u)
+      beltPulley(frontX - 0.25 * u, y, z, 0.18 * u)
+      belt(0, 0, y, z)
+    } else if (induction.kind === 'roots') {
+      const top = head + 0.24 * u + 0.42 * u + 0.3 * u
+      const blower = mesh(
+        new THREE.BoxGeometry(width * 0.7, 0.55 * u, 0.7 * u),
+        paint,
+        -0.1 * width,
+        top + 0.28 * u,
+        -0.36 * u,
+      )
+      blower.castShadow = true
+      for (let f = 0; f < 7; f++)
+        mesh(
+          new THREE.BoxGeometry(0.04 * u, 0.6 * u, 0.74 * u),
+          aluminium,
+          -0.1 * width - width * 0.3 + (f * width * 0.6) / 6,
+          top + 0.28 * u,
+          -0.36 * u,
+        )
+      const pulleyY = top + 0.28 * u
+      const pulleyX = -0.1 * width - width * 0.35 - 0.1 * u
+      spinner.position.set(pulleyX, pulleyY, -0.36 * u)
+      scene.add(spinner)
+      mesh(
+        new THREE.CylinderGeometry(0.3 * u, 0.3 * u, 0.12 * u, 32),
+        steel,
+        0,
+        0,
+        0,
+        spinner,
+      ).rotation.z = Math.PI / 2
+      mesh(
+        new THREE.BoxGeometry(0.13 * u, 0.5 * u, 0.06 * u),
+        brass,
+        0,
+        0,
+        0,
+        spinner,
+      )
+      beltPulley(frontX - 0.25 * u, 0, 0, 0.45 * u)
+      belt(0, 0, pulleyY, -0.36 * u)
+    }
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(1.2 * Math.max(size, 1), 64),
       new THREE.ShadowMaterial({ opacity: 0.35 }),
@@ -548,6 +727,22 @@ export function EngineView({
             : 0)
       }
       flywheel.rotation.x = angle
+      if (t && t.induction.kind !== 'none') {
+        // Shown far slower than the real shaft so the rotation stays readable.
+        const rate =
+          (t.induction.shaftRpm * Math.PI) /
+          30 /
+          (t.induction.kind === 'roots' ? 20 : 400)
+        const slowRate = options.current.slow ? 0 : rate
+        if (t.induction.kind === 'centrifugal' || t.induction.kind === 'roots')
+          spinner.rotation.x += slowRate * dt
+        else spinner.rotation.z += slowRate * dt
+        if (hotHousing)
+          hotHousing.emissiveIntensity = Math.min(
+            1.5,
+            Math.max(0, t.induction.boost / 1e5) * 1.2,
+          )
+      }
       controls.update()
       renderer.render(scene, camera)
     }

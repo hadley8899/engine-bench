@@ -4,7 +4,7 @@
 
 Engine Bench is a browser-based engine builder and test bench with configurable engine geometry, environmental controls, simulated audio, animated 3D and dyno results. Read `PLAN.md` and `README.md` before changing product behaviour. Keep the plan's progress and decisions consistent with the implementation.
 
-The repository now includes the phase 1–3 inline-four simulation, guest bench and saved library. Read `docs/SIMULATION.md` for model assumptions and host decisions, and `docs/VERIFICATION.md` for actual evidence and remaining acceptance gates. Personal/team workspace storage and immutable run history are implemented. Real-engine presets, other layouts and forced induction remain later work. Do not describe those as implemented.
+The repository now includes the phase 1–3 inline-four simulation, guest bench and saved library. Read `docs/SIMULATION.md` for model assumptions and host decisions, and `docs/VERIFICATION.md` for actual evidence and remaining acceptance gates. Personal/team workspace storage and immutable run history are implemented. Forced induction (turbocharger, centrifugal and roots superchargers, intercooler) is implemented as a lumped model; see `docs/SIMULATION.md`. Real-engine presets, other layouts, knock and direct-injection fuelling remain later work. Do not describe those as implemented.
 
 ## Architecture constraints
 

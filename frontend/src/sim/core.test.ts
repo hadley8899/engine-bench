@@ -12,11 +12,12 @@ import {
   temperatureFromEnergy,
   wiebe,
 } from './physics'
-import type { Metres, Pascals } from './schema'
+import type { EngineDefinition, Metres, Pascals } from './schema'
 import {
   conditionsSchema,
   defaultProcedure,
   displacement,
+  inductionDefaults,
   normalConditions,
   recipeSchema,
   roadEngine,
@@ -444,5 +445,180 @@ describe('calibrated full-load trends', () => {
     const short = { ...roadEngine, intakeRunnerLength: 0.15 }
     expect(heldTorque(long, 3500)).toBeGreaterThan(heldTorque(short, 3500) + 10)
     expect(heldTorque(long, 6000)).toBeLessThan(heldTorque(short, 6000))
+  })
+})
+
+/** Full-throttle hold long enough for a turbo to spool and settle. */
+function boosted(engine: EngineDefinition, rpm: number, seconds = 3) {
+  const core = new EngineCore(engine, normalConditions)
+  core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+  advance(core, seconds)
+  let sum = 0
+  const steps = Math.round((6 * 120 * 48000) / rpm)
+  for (let i = 0; i < steps; i++) {
+    core.step()
+    sum += core.absorbedTorque
+  }
+  return { torque: sum / steps, ...core.telemetry().induction, core }
+}
+const withInduction = (
+  induction: EngineDefinition['induction'],
+): EngineDefinition => ({ ...roadEngine, compression: 9, induction })
+const turbo = inductionDefaults.turbo
+
+describe('forced induction', () => {
+  it('reads builds saved before forced induction as naturally aspirated', () => {
+    const legacy: Record<string, unknown> = { ...roadEngine }
+    delete legacy.induction
+    expect(validateEngine(legacy).induction).toEqual({ kind: 'none' })
+    const na = boosted(roadEngine, 3000, 0.5)
+    expect(na.boost).toBe(0)
+    expect(na.shaftRpm).toBe(0)
+  })
+  it('turbo boost is held near the wastegate target and raises torque', () => {
+    const na = boosted(withInduction({ kind: 'none' }), 5000)
+    const t = boosted(withInduction(turbo), 5000)
+    expect(t.boost).toBeGreaterThan(turbo.boostTarget - 10000)
+    expect(t.boost).toBeLessThan(turbo.boostTarget + 15000)
+    expect(t.wastegate).toBeGreaterThan(0)
+    expect(t.torque).toBeGreaterThan(na.torque * 1.4)
+    expect(t.exhaustBackPressure).toBeGreaterThan(0)
+    const higher = boosted(
+      withInduction({ ...turbo, boostTarget: 120000 }),
+      5000,
+    )
+    expect(higher.boost).toBeGreaterThan(t.boost + 20000)
+    expect(higher.torque).toBeGreaterThan(t.torque)
+  })
+  it('turbo boost lags a throttle step while the shaft spools', () => {
+    const core = new EngineCore(withInduction(turbo), normalConditions)
+    core.setControls({ ignition: true, throttle: 0.1, holdRpm: 4500 })
+    advance(core, 2)
+    core.setControls({ throttle: 1 })
+    advance(core, 0.2)
+    const early = core.telemetry().induction
+    advance(core, 2.8)
+    const late = core.telemetry().induction
+    expect(late.shaftRpm).toBeGreaterThan(early.shaftRpm * 1.2)
+    expect(early.boost).toBeLessThan(late.boost * 0.6)
+  })
+  it('a lighter rotor spools sooner', () => {
+    const at = (shaftInertia: number) =>
+      boosted(withInduction({ ...turbo, shaftInertia }), 3500, 0.6).boost
+    expect(at(0.00001)).toBeGreaterThan(at(0.0001))
+  })
+  it('centrifugal superchargers build boost with engine speed', () => {
+    const sc = withInduction(inductionDefaults.centrifugal)
+    const low = boosted(sc, 3000, 1.5)
+    const high = boosted(sc, 6000, 1.5)
+    expect(high.boost).toBeGreaterThan(low.boost * 2)
+    expect(high.shaftRpm).toBeCloseTo(
+      6000 * inductionDefaults.centrifugal.driveRatio,
+      -2,
+    )
+  })
+  it('roots blowers give early boost but cost crank power to drive', () => {
+    const roots = inductionDefaults.roots
+    const low = boosted(withInduction(roots), 2000, 1.5)
+    const high = boosted(withInduction(roots), 6000, 1.5)
+    expect(low.boost).toBeGreaterThan(high.boost * 0.4)
+    expect(low.core.induction.crankTorque).toBeGreaterThan(0)
+    const na = boosted(withInduction({ kind: 'none' }), 2000, 1.5)
+    expect(low.torque).toBeGreaterThan(na.torque)
+  })
+  it('an intercooler cools the charge and makes more torque', () => {
+    const at = (effectiveness: number) =>
+      boosted(
+        withInduction({
+          ...turbo,
+          intercooler: { effectiveness, pressureDrop: 0 },
+        }),
+        5000,
+      )
+    const hot = at(0)
+    const cool = at(0.9)
+    expect(cool.chargeTemperature).toBeLessThan(hot.chargeTemperature - 30)
+    expect(cool.torque).toBeGreaterThan(hot.torque)
+  })
+  it('vents on lift-off with a blow-off valve and surges without one', () => {
+    const lift = (blowOff: boolean) => {
+      const core = new EngineCore(
+        withInduction({ ...turbo, blowOff }),
+        normalConditions,
+      )
+      core.setControls({ ignition: true, throttle: 1, holdRpm: 5000 })
+      advance(core, 2.5)
+      core.setControls({ throttle: 0 })
+      let venting = false,
+        surge = false
+      for (let i = 0; i < 4800; i++) {
+        core.step()
+        venting ||= core.induction.venting
+        surge ||= core.induction.surge
+      }
+      return { venting, surge }
+    }
+    expect(lift(true)).toEqual({ venting: true, surge: false })
+    expect(lift(false).surge).toBe(true)
+  })
+  it('warns about compressor overspeed without changing the limit', () => {
+    const t = boosted(withInduction({ ...turbo, maxShaftRpm: 60000 }), 5000)
+    expect(t.core.telemetry().warning).toBe('Estimated compressor overspeed')
+  })
+  it('stays finite and bounded at induction extremes and is batching-independent', () => {
+    const extremes: EngineDefinition['induction'][] = [
+      {
+        ...turbo,
+        compressorDiameter: 0.2,
+        turbineArea: 0.0002,
+        shaftInertia: 0.000001,
+        boostTarget: 400000,
+      },
+      { ...turbo, compressorDiameter: 0.02, turbineArea: 0.01 },
+      {
+        ...inductionDefaults.centrifugal,
+        compressorDiameter: 0.2,
+        driveRatio: 30,
+      },
+      { ...inductionDefaults.roots, rotorDisplacement: 0.02, driveRatio: 6 },
+      {
+        ...inductionDefaults.roots,
+        rotorDisplacement: 0.0001,
+        driveRatio: 0.5,
+      },
+    ]
+    for (const induction of extremes)
+      for (const holdRpm of [800, 7000]) {
+        const core = new EngineCore(
+          {
+            ...withInduction(induction),
+            revLimit: 8000,
+            mechanicalLimit: 9000,
+          },
+          normalConditions,
+        )
+        core.setControls({ ignition: true, throttle: 1, holdRpm })
+        for (let i = 0; i < 0.5 * 48000; i++) {
+          const audio = core.step()
+          expect(Math.abs(audio)).toBeLessThanOrEqual(0.65)
+        }
+        const t = core.telemetry()
+        expect(Number.isFinite(t.torque)).toBe(true)
+        expect(Number.isFinite(t.induction.boost)).toBe(true)
+      }
+    // A turbine far too small traps the exhaust and stops with a clear reason.
+    const choked = new EngineCore(
+      withInduction({ ...turbo, turbineArea: 0.00002, boostTarget: 400000 }),
+      normalConditions,
+    )
+    choked.setControls({ ignition: true, throttle: 1, holdRpm: 7000 })
+    expect(() => advance(choked, 1)).toThrow(/Turbine too small/)
+    const a = new EngineCore(withInduction(turbo), normalConditions)
+    const b = new EngineCore(withInduction(turbo), normalConditions)
+    for (const core of [a, b])
+      core.setControls({ ignition: true, throttle: 1, starter: true })
+    a.advance(0.1)
+    for (let i = 0; i < 10; i++) b.advance(0.01)
+    expect(a.telemetry()).toEqual(b.telemetry())
   })
 })
