@@ -19,7 +19,7 @@ The repository now includes the phase 1–3 inline-four simulation, guest bench 
 
 - The guest bench at `/` must start without authentication. Preserve applied builds, valid pending edits and comparison slots across sign-in/navigation; server saving must be explicit and must never overwrite the local bench on sign-in.
 - Keep live pulls and quick tests on the same `DynoTest` procedure. Disable conflicting manual controls during an automatic test and retain aborted samples/reasons. Do not label quick calculation as replay.
-- Structural changes explicitly stop/rebuild/reset; throttle, ignition and load are live controls. Restart after a loaded stall must unload the dyno and clear RPM hold. Keep recent fuel-cut status stable rather than flashing with each limiter crossing.
+- Structural changes explicitly stop/rebuild/reset unless the user turns on Live updates. Live updates apply valid edits through `EngineCore.continueFrom`, keeping crank speed, controls and gas state, and wait while an automatic test or audition owns the engine. Throttle, ignition and load are always live controls. Restart after a loaded stall must unload the dyno and clear RPM hold. Keep recent fuel-cut status stable rather than flashing with each limiter crossing.
 - Physics, sound and the cutaway must use the same active definition, including snapshot audio auditioning. Slow inspection is a separate, labelled, muted display mode.
 - Keep numerical diagnostics optional. Do not add scores, grind or unlock requirements to the sandbox.
 

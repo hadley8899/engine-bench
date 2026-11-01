@@ -67,3 +67,20 @@ export function persistDraft(engine: EngineDefinition, conditions: Conditions) {
     /* Keep editing when browser storage is unavailable. */
   }
 }
+
+const liveKey = 'engine-bench:live-updates:1'
+/** Per-viewer preference; falls back to off when storage is unavailable. */
+export function loadLiveUpdates() {
+  try {
+    return localStorage.getItem(liveKey) === 'on'
+  } catch {
+    return false
+  }
+}
+export function persistLiveUpdates(on: boolean) {
+  try {
+    localStorage.setItem(liveKey, on ? 'on' : 'off')
+  } catch {
+    // Preference only; the bench works without it.
+  }
+}

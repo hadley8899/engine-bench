@@ -305,6 +305,34 @@ export class InductionSystem {
     this.wastegate += ((target - this.wastegate) * dt) / WASTEGATE_LAG
   }
 
+  /**
+   * Carry shaft speed, charge pressure and temperature, and the turbo's
+   * exhaust manifold pressure and temperature over from a running system of
+   * the same kind, so a live edit does not drop boost.
+   */
+  adopt(previous: InductionSystem) {
+    if (previous.config.kind !== this.config.kind || !this.boosted) return
+    this.shaftOmega = previous.shaftOmega
+    this.outlet = previous.outlet
+    this.supply = previous.supply
+    this.chargeTemperature = previous.chargeTemperature
+    this.wastegate = previous.wastegate
+    this.engineFlow = previous.engineFlow
+    this.exhaustPressure = previous.exhaustPressure
+    this.exhaustTemperature = previous.exhaustTemperature
+    this.crankTorque = previous.crankTorque
+    this.tailpipeFlow = previous.tailpipeFlow
+    this.shaftHz = previous.shaftHz
+    this.surge = previous.surge
+    this.venting = previous.venting
+    // Same pressure and temperature in this engine's manifold volume.
+    this.exhaustMass =
+      (previous.exhaustPressure * this.exhaustVolume) /
+      (R * previous.exhaustTemperature)
+    this.exhaustEnergy =
+      this.exhaustMass * internalEnergy(previous.exhaustTemperature)
+  }
+
   overspeed() {
     const c = this.config
     return (

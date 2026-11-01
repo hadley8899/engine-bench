@@ -191,6 +191,26 @@ export class FuelDelivery {
         Math.max(omega, 5)
   }
 
+  /**
+   * Carry the intake film and vapour over from a running engine's fuel system
+   * of the same kind, so a live edit does not reset the mixture.
+   */
+  adopt(previous: FuelDelivery) {
+    if (previous.config.kind !== this.config.kind) return
+    this.film = previous.film
+    this.vapour = previous.vapour
+    this.airFlow = previous.airFlow
+    this.overrunCut = previous.overrunCut
+    this.pumping = previous.pumping
+    this.previousThrottle = previous.previousThrottle
+    this.inletLoss = previous.inletLoss
+    this.fuelPerAir = previous.fuelPerAir
+    this.injected = previous.injected
+    this.manifoldCooling = previous.manifoldCooling
+    this.cylinderCooling = previous.cylinderCooling
+    this.crankTorque = previous.crankTorque
+  }
+
   telemetry(lambda: number, misfire: boolean): FuelTelemetry {
     return {
       kind: this.config.kind,

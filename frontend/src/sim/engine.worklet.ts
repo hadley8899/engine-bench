@@ -47,6 +47,19 @@ export class EngineProcessor extends AudioWorkletProcessor {
       this.running = initial.autostart
     }
     this.port.onmessage = ({ data }: MessageEvent<HostMessage>) => {
+      if (data.type === 'reconfigure') {
+        // An invalid edit is reported and the running engine is left as it was.
+        try {
+          if (this.dyno)
+            throw new Error('Live updates are paused during an automatic test.')
+          this.core = this.running
+            ? EngineCore.continueFrom(this.core, data.engine, data.conditions)
+            : new EngineCore(data.engine, data.conditions)
+        } catch (error) {
+          this.send({ type: 'error', message: String(error) })
+        }
+        return
+      }
       try {
         if (data.type === 'configure') {
           this.core = new EngineCore(data.engine, data.conditions)

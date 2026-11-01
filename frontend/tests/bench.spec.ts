@@ -561,3 +561,36 @@ test('a carburettor build validates its venturi and runs with mixture shown', as
   await expect(fuel).toContainText('L/h')
   expect(errors).toEqual([])
 })
+
+test('live updates apply edits to the running engine without stopping it', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByLabel('Live updates').check()
+  await page.getByRole('button', { name: 'Start engine', exact: true }).click()
+  const rpm = async () =>
+    Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
+  await expect.poll(rpm).toBeGreaterThan(500)
+  await page.getByLabel('Bore (mm)', { exact: true }).fill('92')
+  // Applied without a rebuild: the stand shows the new capacity while running.
+  await expect(page.getByText('2.29 L')).toBeVisible()
+  expect(await rpm()).toBeGreaterThan(500)
+  await expect(page.getByText('Engine rebuilt and stopped')).toHaveCount(0)
+  // An invalid edit is held back and the engine keeps running unchanged.
+  await page.getByLabel('Bore (mm)', { exact: true }).fill('900')
+  await expect(page.getByText(/Can't rebuild until/).first()).toBeVisible()
+  await expect(page.getByText('2.29 L')).toBeVisible()
+  expect(await rpm()).toBeGreaterThan(500)
+  // Restore returns to the build before the live edits, still running.
+  await page.getByLabel('Bore (mm)', { exact: true }).fill('92')
+  await page.getByRole('button', { name: 'Restore previous build' }).click()
+  await expect(page.getByText('2.00 L')).toBeVisible()
+  await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('86')
+  expect(await rpm()).toBeGreaterThan(500)
+  // The preference persists across a reload.
+  await page.reload()
+  await expect(page.getByLabel('Live updates')).toBeChecked()
+  expect(errors).toEqual([])
+})

@@ -26,6 +26,12 @@ export function EngineView({
   const container = useRef<HTMLDivElement>(null)
   const options = useRef({ slow, overlays, selected, onSelect })
   const [failed, setFailed] = useState(false)
+  /** Camera kept across rebuilds (live edits), relative to block size. */
+  const view = useRef<{
+    position: THREE.Vector3
+    target: THREE.Vector3
+    size: number
+  } | null>(null)
   useEffect(() => {
     options.current = { slow, overlays, selected, onSelect }
   }, [slow, overlays, selected, onSelect])
@@ -66,6 +72,11 @@ export function EngineView({
     camera.position.set(0.56 * size, 0.48 * size, 0.61 * size)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.target.set(0, 0.09 * size, 0)
+    const kept = view.current
+    if (kept) {
+      camera.position.copy(kept.position).multiplyScalar(size / kept.size)
+      controls.target.copy(kept.target).multiplyScalar(size / kept.size)
+    }
     controls.enableDamping = true
     controls.minDistance = 0.35 * size
     controls.maxDistance = 1.6 * size
@@ -818,6 +829,11 @@ export function EngineView({
     }
     animate()
     return () => {
+      view.current = {
+        position: camera.position.clone(),
+        target: controls.target.clone(),
+        size,
+      }
       cancelAnimationFrame(frame)
       resize.disconnect()
       controls.dispose()

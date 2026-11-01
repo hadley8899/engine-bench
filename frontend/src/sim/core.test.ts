@@ -735,3 +735,60 @@ describe('fuel systems', () => {
     expect(t.core.telemetry().fuel.lambda).toBeCloseTo(1, 1)
   })
 })
+
+describe('live updates', () => {
+  /** Road engine running unloaded at part throttle. */
+  function running(engine = roadEngine) {
+    const core = new EngineCore(engine, normalConditions)
+    core.setControls({ ignition: true, starter: true })
+    advance(core, 0.5)
+    core.setControls({ starter: false, throttle: 0.25 })
+    advance(core, 1.5)
+    return core
+  }
+  it('continuing an unchanged build is identical to never stopping', () => {
+    const a = running()
+    const b = EngineCore.continueFrom(a, roadEngine, normalConditions)
+    for (let i = 0; i < 4800; i++) expect(b.step()).toBe(a.step())
+    expect(b.telemetry()).toEqual(a.telemetry())
+  })
+  it('an edited build keeps the crank turning and its controls', () => {
+    const a = running()
+    const before = a.telemetry()
+    const edited = {
+      ...roadEngine,
+      bore: 0.09,
+      compression: 11,
+      ignitionAdvance: 26,
+      fuelSystem: fuelSystemDefaults.carburettor,
+    }
+    const b = EngineCore.continueFrom(a, edited, {
+      ...normalConditions,
+      temperature: 303.15,
+    })
+    expect(b.telemetry().rpm).toBe(before.rpm)
+    expect(b.telemetry().angle).toBe(before.angle)
+    expect(b.controls.throttle).toBe(0.25)
+    // Cylinder pressure is continuous across the edit.
+    b.telemetry().pressures.forEach((p, i) =>
+      expect(p).toBeCloseTo(before.pressures[i], -2),
+    )
+    advance(b, 1)
+    expect(b.telemetry().rpm).toBeGreaterThan(1000)
+    expect(b.engine.bore).toBe(0.09)
+  })
+  it('keeps turbo boost across a live edit of the same induction', () => {
+    const a = new EngineCore(withInduction(turbo), normalConditions)
+    a.setControls({ ignition: true, throttle: 1, holdRpm: 5000 })
+    advance(a, 3)
+    const boost = a.telemetry().induction.boost
+    const b = EngineCore.continueFrom(
+      a,
+      withInduction({ ...turbo, boostTarget: 100000 }),
+      normalConditions,
+    )
+    expect(b.telemetry().induction.boost).toBeCloseTo(boost, 6)
+    advance(b, 2)
+    expect(b.telemetry().induction.boost).toBeGreaterThan(boost + 10000)
+  })
+})

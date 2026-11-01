@@ -56,8 +56,10 @@ import { SavedLibrary } from './SavedLibrary'
 import {
   loadDraft,
   loadExperiment,
+  loadLiveUpdates,
   persistDraft,
   persistExperiment,
+  persistLiveUpdates,
 } from './storage'
 import './bench.css'
 
@@ -402,6 +404,9 @@ export function BenchPage() {
   const [slow, setSlow] = useState(false)
   const [overlays, setOverlays] = useState(true)
   const [advanced, setAdvanced] = useState(false)
+  const [liveUpdates, setLiveUpdates] = useState(loadLiveUpdates)
+  /** The build before the current run of live edits, for Restore previous build. */
+  const liveOrigin = useRef<EngineDefinition | null>(null)
   const [procedure, setProcedure] = useState<Procedure>(defaultProcedure)
   const [run, setRun] = useState<Run | null>(null)
   const [slot, setSlot] = useState<'baseline' | 'modified'>('baseline')
@@ -468,6 +473,50 @@ export function BenchPage() {
   useEffect(() => {
     persistDraft(draft, conditions)
   }, [draft, conditions])
+  // Live updates: shortly after a valid edit, apply it to the bench without
+  // stopping. A running engine keeps its speed, controls and gas state.
+  // Automatic tests and snapshot auditioning own the engine, so wait.
+  const liveBlocked = running && mode !== 'manual'
+  const experimentEngine = experiment.engine
+  useEffect(() => {
+    if (!liveUpdates || !dirty || invalid || liveBlocked) return
+    const timer = setTimeout(() => {
+      let engine: EngineDefinition
+      let env: Conditions
+      try {
+        engine = validateEngine(draft)
+        env = conditionsSchema.parse(conditions)
+      } catch (err) {
+        setError(String(err))
+        return
+      }
+      const origin = liveOrigin.current ?? experimentEngine
+      liveOrigin.current = origin
+      setExperiment((prev) => ({
+        ...prev,
+        previous: origin,
+        engine,
+        conditions: env,
+      }))
+      if (activeRef.current)
+        audio.current?.send({ type: 'reconfigure', engine, conditions: env })
+      else {
+        const t = new EngineCore(engine, env).telemetry()
+        setTelemetry(t)
+        telemetryRef.current = t
+      }
+      setError('')
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [
+    liveUpdates,
+    dirty,
+    invalid,
+    liveBlocked,
+    draft,
+    conditions,
+    experimentEngine,
+  ])
   useEffect(() => {
     const engineAudio = new BenchAudio()
     audio.current = engineAudio
@@ -658,6 +707,7 @@ export function BenchPage() {
     engine = validateEngine(engine)
     conditionsSchema.parse(env)
     stop('Engine rebuilt')
+    liveOrigin.current = null
     setExperiment((prev) => ({
       ...prev,
       previous: prev.engine,
@@ -866,6 +916,13 @@ export function BenchPage() {
       ? 'Rebuild the engine first. The dyno tests the engine on the stand, and the workshop has unapplied edits.'
       : procedureError
   const dynoBlocked = activeTest || busy || !!dynoReason
+  /** Presets and restore: live when live updates can apply, otherwise a rebuild. */
+  const loadBuild = (engine: EngineDefinition, env: Conditions) => {
+    if (!liveUpdates || liveBlocked) return configure(engine, env)
+    liveOrigin.current = experiment.engine
+    setDraft(engine)
+    setConditions(env)
+  }
   const apply = () => {
     try {
       configure(draft, conditions)
@@ -1338,7 +1395,7 @@ export function BenchPage() {
                   <Button
                     variant="outlined"
                     disabled={activeTest}
-                    onClick={() => configure(roadEngine, experiment.conditions)}
+                    onClick={() => loadBuild(roadEngine, experiment.conditions)}
                   >
                     Road 2.0
                   </Button>
@@ -1346,7 +1403,7 @@ export function BenchPage() {
                     variant="outlined"
                     disabled={activeTest}
                     onClick={() =>
-                      configure(sportEngine, experiment.conditions)
+                      loadBuild(sportEngine, experiment.conditions)
                     }
                   >
                     Sport 2.0
@@ -1454,10 +1511,29 @@ export function BenchPage() {
                       ' The starter is weaker than that, so starting relies on flywheel momentum and may stall.'}
                   </p>
                 )}
+                <FormControlLabel
+                  className="live-toggle"
+                  control={
+                    <Switch
+                      checked={liveUpdates}
+                      onChange={(e) => {
+                        liveOrigin.current = null
+                        setLiveUpdates(e.target.checked)
+                        persistLiveUpdates(e.target.checked)
+                      }}
+                    />
+                  }
+                  label="Live updates"
+                />
+                <p className="cranking-note">
+                  {liveUpdates
+                    ? 'Valid edits apply to the engine as you make them, without stopping it: speed, throttle and load carry over. Stop & rebuild still resets everything.'
+                    : 'Off: edits wait for Stop & rebuild, which stops and resets the engine.'}
+                </p>
                 <Button
                   variant="contained"
                   fullWidth
-                  disabled={!dirty || invalid || activeTest}
+                  disabled={(!dirty && !liveUpdates) || invalid || activeTest}
                   onClick={apply}
                 >
                   Stop & rebuild engine
@@ -1465,8 +1541,11 @@ export function BenchPage() {
                 {invalidNote}
                 {dirty && !invalid && (
                   <p className="pending-note">
-                    Unapplied changes. Rebuild to update physics, sound and
-                    geometry together.
+                    {!liveUpdates
+                      ? 'Unapplied changes. Rebuild to update physics, sound and geometry together.'
+                      : liveBlocked
+                        ? 'Live updates wait until the automatic test or audition ends.'
+                        : 'Applying to the engine…'}
                   </p>
                 )}
                 <Button
@@ -1474,7 +1553,7 @@ export function BenchPage() {
                   disabled={!experiment.previous || activeTest}
                   onClick={() =>
                     experiment.previous &&
-                    configure(experiment.previous, experiment.conditions)
+                    loadBuild(experiment.previous, experiment.conditions)
                   }
                 >
                   Restore previous build

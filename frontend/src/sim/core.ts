@@ -189,6 +189,71 @@ export class EngineCore {
       })
     }
   }
+  /**
+   * A new core for an edited definition or conditions that carries on from a
+   * running one: crank angle and speed, controls, clock, coolant, manifold,
+   * induction and fuel state, and filters are kept. Each cylinder keeps its
+   * pressure, temperature, fresh-charge share and combustion progress; its
+   * gas mass is rescaled to the new geometry's volume at the same angle.
+   */
+  static continueFrom(
+    previous: EngineCore,
+    engine: EngineDefinition,
+    conditions: Conditions,
+  ) {
+    const core = new EngineCore(engine, conditions)
+    core.controls = { ...previous.controls }
+    core.time = previous.time
+    core.sample = previous.sample
+    core.angle = previous.angle
+    core.omega = previous.omega
+    core.torque = previous.torque
+    core.absorbedTorque = previous.absorbedTorque
+    core.manifold = previous.manifold
+    core.coolant = previous.coolant
+    core.limited = previous.limited
+    core.starterStalled = previous.starterStalled
+    core.stallTime = previous.stallTime
+    core.lambda = previous.lambda
+    core.misfireTime = previous.misfireTime
+    core.maxSubsteps = previous.maxSubsteps
+    core.whinePhase = previous.whinePhase
+    core.noise = previous.noise
+    core.ventSound = previous.ventSound
+    core.filter = previous.filter
+    core.previousAudio = previous.previousAudio
+    core.audioHighpass = previous.audioHighpass
+    core.traces = previous.traces.map((t) => t.slice())
+    core.induction.adopt(previous.induction)
+    core.fuel.adopt(previous.fuel)
+    const p = previous.engine
+    const sameGeometry =
+      p.bore === engine.bore &&
+      p.stroke === engine.stroke &&
+      p.rodLength === engine.rodLength &&
+      p.compression === engine.compression
+    for (let i = 0; i < core.cylinders.length; i++) {
+      const old = previous.cylinders[i]
+      const cyl = core.cylinders[i]
+      // Stored volume belongs to the stored phase, one substep behind the crank.
+      const volume = sameGeometry
+        ? old.volume
+        : geometry(engine, old.phase).volume
+      const temperature = temperatureFromEnergy(old.energy / old.mass)
+      const scale = volume / old.volume
+      cyl.mass = old.mass * scale
+      cyl.energy = old.energy * scale
+      cyl.fresh = old.fresh * scale
+      cyl.fuel = old.fuel * scale
+      cyl.heat = old.heat * scale
+      cyl.burn = old.burn
+      cyl.phase = old.phase
+      cyl.volume = volume
+      cyl.pressure = (cyl.mass * R * temperature) / volume
+      cyl.runner = old.runner
+    }
+    return core
+  }
   setControls(update: Partial<Controls>) {
     Object.assign(this.controls, update)
     this.controls.throttle = clamp(this.controls.throttle, 0, 1)

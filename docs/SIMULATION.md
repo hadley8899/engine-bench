@@ -73,6 +73,17 @@ Full-load torque on the Road engine at 1,500 / 3,000 / 4,500 / 6,000 RPM:
 
 The 25% charge-cooling share for manifold-fed systems is an assumption; real manifolds are often heated, which reduces it. Fuel-system results are trends for comparison, not measured equivalences.
 
+## Live updates
+
+With Live updates on, the bench applies a valid edit about 0.35 s after it is made, without stopping. The AudioWorklet receives a `reconfigure` message and replaces its core with `EngineCore.continueFrom(previous, engine, conditions)`, a new core for the edited definition that carries the running state over:
+
+- the clock, crank angle and speed, controls, coolant, manifold pressure, limiter and starter state, filtered torque, audio filters and pressure traces;
+- each cylinder's pressure, temperature, fresh-charge and fuel share, pending heat release and combustion progress, with its gas mass rescaled to the new geometry's volume at the same crank angle;
+- induction shaft speed, charge pressure and temperature, wastegate and turbo exhaust-manifold pressure and temperature, when the induction type is unchanged (otherwise the new system starts from rest);
+- intake wall film, vapour and accelerator-pump state, when the fuel-system type is unchanged.
+
+Continuing an unchanged build is bit-identical to never stopping (tested). Gas state is carried, not re-solved, so an edit is a step change. For example, a new bore keeps the instantaneous pressure and the engine settles to the new build over the next cycles. An edit that fails validation in the worklet is reported, and the running engine is left as it was. Live edits wait while a live pull, quick test or snapshot audition owns the engine. Stop & rebuild still constructs a fresh, stopped core. Dyno runs always start from a fresh core, so live editing does not change test procedures or results.
+
 ## Integration and clocks
 
 The pure core has a fixed 48,000-step/second time contract. Each step is subdivided when necessary to keep crank-angle travel within approximately one degree. Four substeps per time step is a hard computational bound; exceeding it raises an error. Commanded speeds up to the 20,000 RPM limiter need at most three substeps; the four-substep bound corresponds to about 32,000 RPM, above the 25,000 RPM maximum mechanical limit.

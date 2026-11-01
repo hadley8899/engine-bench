@@ -2,6 +2,8 @@ import type { Conditions, EngineDefinition, Procedure, Run } from './schema'
 import type { Controls, Telemetry } from './core'
 export type HostMessage =
   | { type: 'configure'; engine: EngineDefinition; conditions: Conditions }
+  /** Live update: apply a definition without stopping a running engine. */
+  | { type: 'reconfigure'; engine: EngineDefinition; conditions: Conditions }
   | { type: 'controls'; value: Partial<Controls> }
   | { type: 'start'; ignition?: boolean; automaticStarter?: boolean }
   | { type: 'stop'; reason: string }

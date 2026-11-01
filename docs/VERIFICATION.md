@@ -134,3 +134,18 @@ The measurements above were taken on `eb-0d-1.0.0`. Model 1.1.0 scales friction 
 - Chromium: each fuel system was selected, rebuilt, started and taken to full throttle through the real UI. Mixture, air–fuel ratio and fuel flow (about 40 L/h at 6,600 RPM, about 270 g/kWh) updated, and lift-off showed OVERRUN CUT for injection and MISFIRE/rich for the carburettor, with no page errors. The 3D plenum, carburettor barrels and filter, throttle body, runner injectors and direct injectors were checked in software-WebGL screenshots. A new Playwright test covers the carburettor editor's range validation, rebuild, start and mixture display in Chromium and Firefox.
 - Benchmark (Node 128-frame block, median): about 0.072 ms at 1,000–7,500 RPM, against a 2.67 ms budget.
 - Frontend: build and lint (one existing warning) pass. Playwright: 28 passed, with 2 storage cases skipped in that run; `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 tests pass, including a new check that fuel-system builds are accepted and invalid fuel settings rejected by the exported schema.
+
+## Live updates
+
+- Vitest (3 new tests, 49 total):
+  - continuing an unchanged running build is bit-identical in audio and telemetry to never stopping, over 4,800 steps;
+  - a live edit of bore, compression, ignition, fuel system and ambient temperature keeps crank speed, angle, controls and cylinder pressure, and the engine keeps running;
+  - a live turbo edit keeps the current boost and then settles to the new target.
+- Headless stress at full throttle (about 6,600 RPM): live switches to turbo, roots, carburettor and direct injection, and live changes of bore (40 and 150 mm), stroke, compression (6 and 18:1), inertia, limiter and a 300 mm-bore build, all continued finitely without errors.
+- Playwright (Chromium and Firefox), new test:
+  - with Live updates on, a bore edit reaches the running engine (the stand shows 2.29 L) with no stop;
+  - an out-of-range edit is held back while the engine keeps running;
+  - Restore previous build returns live to the original 2.00 L build;
+  - the preference survives a reload.
+- The 3D view keeps the user's camera orbit across rebuilds, scaled to block size.
+- Full Playwright: 30 passed, with 2 storage cases skipped in that run; `scripts/test-storage-browser.sh`: 2 passed. Build and lint (one existing warning) pass. Not checked: how the sound of a live edit is perceived on real speakers.
