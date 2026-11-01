@@ -1,0 +1,42 @@
+services:
+  backend-e2e:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    environment:
+      APP_NAME: Engine Bench Browser Tests
+      APP_ENV: testing
+      APP_KEY: base64:8j4YE4x4Rj2n3f8b8h7qA0w8l2Wj8sJ4f9nN9mQx7kQ=
+      APP_URL: http://127.0.0.1:8003
+      FRONTEND_URL: http://127.0.0.1:5180
+      APP_STORAGE_PATH: /tmp/bench-browser-storage
+      DB_CONNECTION: mysql_testing
+      DB_DATABASE: engine_bench_browser_test
+      DB_TEST_DATABASE: engine_bench_browser_test
+      DB_TEST_HOST: mysql
+      DB_TEST_PORT: 3306
+      DB_TEST_USERNAME: root
+      DB_TEST_PASSWORD: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      LOG_CHANNEL: stderr
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:8003:8000'
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /tmp/bench-browser-storage/framework/cache/data /tmp/bench-browser-storage/framework/views /tmp/bench-browser-storage/framework/sessions /tmp/bench-browser-storage/logs
+        php -r 'require "tests/bootstrap.php";'
+        php artisan migrate --no-interaction
+        php artisan db:seed --no-interaction
+        php artisan serve --host=0.0.0.0 --port=8000

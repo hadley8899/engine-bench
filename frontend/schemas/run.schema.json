@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "modelVersion": {
+      "type": "string",
+      "enum": [
+        "eb-0d-1.0.0",
+        "eb-0d-1.1.0"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "runtime": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "engine": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "layout": {
+          "type": "string",
+          "const": "inline-4"
+        },
+        "cylinders": {
+          "type": "number",
+          "const": 4
+        },
+        "bore": {
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 0.3
+        },
+        "stroke": {
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 0.3
+        },
+        "rodLength": {
+          "type": "number",
+          "minimum": 0.03,
+          "maximum": 0.6
+        },
+        "compression": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 20
+        },
+        "intakeArea": {
+          "type": "number",
+          "minimum": 0.00001,
+          "maximum": 0.02
+        },
+        "exhaustArea": {
+          "type": "number",
+          "minimum": 0.00001,
+          "maximum": 0.025
+        },
+        "intakeClose": {
+          "type": "number",
+          "minimum": 550,
+          "maximum": 610
+        },
+        "ignitionAdvance": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 38
+        },
+        "burnDuration": {
+          "type": "number",
+          "minimum": 35,
+          "maximum": 75
+        },
+        "lambda": {
+          "type": "number",
+          "minimum": 0.8,
+          "maximum": 1.15
+        },
+        "inertia": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 20
+        },
+        "revLimit": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 20000
+        },
+        "mechanicalLimit": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 25000
+        },
+        "starterTorque": {
+          "default": 70,
+          "type": "number",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "firingOrder": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "const": 1
+            },
+            {
+              "type": "number",
+              "const": 3
+            },
+            {
+              "type": "number",
+              "const": 4
+            },
+            {
+              "type": "number",
+              "const": 2
+            }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "name",
+        "layout",
+        "cylinders",
+        "bore",
+        "stroke",
+        "rodLength",
+        "compression",
+        "intakeArea",
+        "exhaustArea",
+        "intakeClose",
+        "ignitionAdvance",
+        "burnDuration",
+        "lambda",
+        "inertia",
+        "revLimit",
+        "mechanicalLimit",
+        "firingOrder"
+      ],
+      "additionalProperties": false
+    },
+    "conditions": {
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "minimum": 263.15,
+          "maximum": 313.15
+        },
+        "pressure": {
+          "type": "number",
+          "minimum": 75000,
+          "maximum": 110000
+        },
+        "humidity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "oxygen": {
+          "type": "number",
+          "minimum": 0.18,
+          "maximum": 0.23
+        },
+        "coolant": {
+          "type": "number",
+          "minimum": 283.15,
+          "maximum": 373.15
+        }
+      },
+      "required": [
+        "temperature",
+        "pressure",
+        "humidity",
+        "oxygen",
+        "coolant"
+      ],
+      "additionalProperties": false
+    },
+    "procedure": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "sweep",
+            "steps"
+          ]
+        },
+        "startRpm": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 24000
+        },
+        "endRpm": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 24900
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 150,
+          "maximum": 1500
+        },
+        "stepRpm": {
+          "type": "integer",
+          "minimum": 250,
+          "maximum": 1000
+        },
+        "holdSeconds": {
+          "type": "number",
+          "minimum": 0.4,
+          "maximum": 3
+        }
+      },
+      "required": [
+        "kind",
+        "startRpm",
+        "endRpm",
+        "rate",
+        "stepRpm",
+        "holdSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "complete",
+        "aborted"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "warnings": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    },
+    "samples": {
+      "maxItems": 5000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rpm": {
+            "type": "number",
+            "minimum": 0
+          },
+          "torque": {
+            "type": "number"
+          },
+          "power": {
+            "type": "number"
+          },
+          "absorbedTorque": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "rpm",
+          "torque",
+          "power",
+          "absorbedTorque"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "modelVersion",
+    "id",
+    "runtime",
+    "engine",
+    "conditions",
+    "procedure",
+    "status",
+    "reason",
+    "warnings",
+    "samples"
+  ],
+  "additionalProperties": false
+}

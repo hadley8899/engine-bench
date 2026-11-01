@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "modelVersion": "eb-0d-1.0.0",
+  "id": "storage-fixture",
+  "runtime": "Node fixture",
+  "engine": {
+    "schemaVersion": 1,
+    "name": "Workshop 2.0 • Road",
+    "layout": "inline-4",
+    "cylinders": 4,
+    "bore": 0.086,
+    "stroke": 0.086,
+    "rodLength": 0.143,
+    "compression": 10.2,
+    "intakeArea": 0.00032,
+    "exhaustArea": 0.0004,
+    "intakeClose": 570,
+    "ignitionAdvance": 24,
+    "burnDuration": 52,
+    "lambda": 1,
+    "inertia": 0.22,
+    "revLimit": 6800,
+    "mechanicalLimit": 7400,
+    "firingOrder": [
+      1,
+      3,
+      4,
+      2
+    ]
+  },
+  "conditions": {
+    "temperature": 293.15,
+    "pressure": 101325,
+    "humidity": 0.5,
+    "oxygen": 0.2095,
+    "coolant": 353.15
+  },
+  "procedure": {
+    "kind": "sweep",
+    "startRpm": 1500,
+    "endRpm": 2500,
+    "rate": 700,
+    "stepRpm": 500,
+    "holdSeconds": 0.65
+  },
+  "status": "complete",
+  "reason": "",
+  "warnings": [],
+  "samples": [
+    {
+      "time": 0.9500416666674988,
+      "rpm": 1500.0000020249004,
+      "torque": 280.82705479427494,
+      "power": 44.11221067309618,
+      "absorbedTorque": 301.6275210522694
+    },
+    {
+      "time": 1.1000625000010154,
+      "rpm": 1552.529166666667,
+      "torque": 280.2421163584358,
+      "power": 45.561896154203424,
+      "absorbedTorque": 259.8588500401788
+    },
+    {
+      "time": 1.2500625000011987,
+      "rpm": 1657.5364583333333,
+      "torque": 280.203344343333,
+      "power": 48.6368032280587,
+      "absorbedTorque": 265.74055928678604
+    },
+    {
+      "time": 1.4000833333347154,
+      "rpm": 1762.54375,
+      "torque": 278.14909963778854,
+      "power": 51.338855458570684,
+      "absorbedTorque": 261.3111524631512
+    },
+    {
+      "time": 1.550104166668232,
+      "rpm": 1867.5583333333334,
+      "torque": 277.18352610136156,
+      "power": 54.20885186649244,
+      "absorbedTorque": 255.84196866854188
+    },
+    {
+      "time": 1.7001041666684154,
+      "rpm": 1972.565625,
+      "torque": 274.8696296555554,
+      "power": 56.778881874665394,
+      "absorbedTorque": 260.6585239039756
+    },
+    {
+      "time": 1.850125000001932,
+      "rpm": 2077.572916666667,
+      "torque": 272.840171017091,
+      "power": 59.359906230550436,
+      "absorbedTorque": 243.2172096596204
+    },
+    {
+      "time": 2.000145833335447,
+      "rpm": 2182.5875,
+      "torque": 270.5220209344387,
+      "power": 61.830520822019324,
+      "absorbedTorque": 256.7359035176204
+    },
+    {
+      "time": 2.150166666667365,
+      "rpm": 2287.602083333333,
+      "torque": 267.446232803789,
+      "power": 64.06865195387435,
+      "absorbedTorque": 257.1506367830216
+    },
+    {
+      "time": 2.3001874999992826,
+      "rpm": 2392.6166666666663,
+      "torque": 264.59158953435843,
+      "power": 66.29454235823953,
+      "absorbedTorque": 245.6295097159761
+    },
+    {
+      "time": 2.3786041666652094,
+      "rpm": 2472.569791666666,
+      "torque": 262.4856747038807,
+      "power": 67.96460285908522,
+      "absorbedTorque": 240.6213178962396
+    }
+  ]
+}

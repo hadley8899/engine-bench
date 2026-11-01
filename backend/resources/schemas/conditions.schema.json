@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "temperature": {
+      "type": "number",
+      "minimum": 263.15,
+      "maximum": 313.15
+    },
+    "pressure": {
+      "type": "number",
+      "minimum": 75000,
+      "maximum": 110000
+    },
+    "humidity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "oxygen": {
+      "type": "number",
+      "minimum": 0.18,
+      "maximum": 0.23
+    },
+    "coolant": {
+      "type": "number",
+      "minimum": 283.15,
+      "maximum": 373.15
+    }
+  },
+  "required": [
+    "temperature",
+    "pressure",
+    "humidity",
+    "oxygen",
+    "coolant"
+  ],
+  "additionalProperties": false
+}

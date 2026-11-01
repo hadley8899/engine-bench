@@ -1,0 +1,85 @@
+x-backend-environment: &backend-environment
+  APP_NAME: ${APP_NAME:-Engine Bench}
+  APP_ENV: local
+  APP_DEBUG: 'true'
+  APP_URL: http://localhost:${BACKEND_PORT:-8002}
+  FRONTEND_URL: http://localhost:${FRONTEND_PORT:-5175}
+  DB_CONNECTION: mysql
+  DB_HOST: mysql
+  DB_DATABASE: ${DB_DATABASE:-engine_bench}
+  DB_USERNAME: root
+  DB_PASSWORD: ''
+  DB_TEST_HOST: mysql
+  DB_TEST_DATABASE: ${DB_TEST_DATABASE:-engine_bench_test}
+  DB_TEST_USERNAME: root
+  DB_TEST_PASSWORD: ''
+  MAIL_MAILER: smtp
+  MAIL_HOST: mailpit
+  MAIL_PORT: 1025
+  MAIL_FROM_ADDRESS: hello@example.test
+  MAIL_FROM_NAME: ${APP_NAME:-Engine Bench}
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-engine_bench}
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  backend-setup:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - composer_cache:/tmp/composer-cache
+    environment:
+      <<: *backend-environment
+      COMPOSER_ALLOW_SUPERUSER: '1'
+      COMPOSER_CACHE_DIR: /tmp/composer-cache
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        [ -f .env ] || cp .env.example .env
+        composer install --no-interaction --prefer-dist
+        php artisan config:clear --no-interaction
+        if ! grep -q '^APP_KEY=base64:' .env; then
+          php artisan key:generate --force --no-interaction
+        fi
+        php artisan migrate --force --no-interaction
+    restart: 'no'
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    environment: *backend-environment
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-8002}:8000'
+    depends_on:
+      backend-setup:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    command: php artisan serve --host=0.0.0.0 --port=8000
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    ports:
+      - '127.0.0.1:${MAIL_UI_PORT:-8027}:8025'
+volumes:
+  mysql_data:
+  composer_cache:
+

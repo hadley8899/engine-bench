@@ -1,0 +1,100 @@
+:root {
+  color-scheme: light dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #1b232b;
+  --muted: #55616d;
+  --sunrise: #f2b36b;
+  --seafoam: #b3cee2;
+  --panel: #ffffff;
+  --grid: rgba(27, 35, 43, 0.08);
+  --bg: #f0f2f5;
+}
+
+:root[data-theme='dark'] {
+  --ink: #e6edf3;
+  --muted: #9aa4af;
+  --sunrise: rgba(255, 168, 90, 0.18);
+  --seafoam: rgba(73, 120, 156, 0.22);
+  --panel: #151b23;
+  --grid: rgba(255, 255, 255, 0.04);
+  --bg: #0d1117;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body::before {
+  content: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding: 48px 16px;
+}
+
+.auth-card {
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+}
+
+.fade-in {
+  animation: fadeIn 700ms ease-out both;
+}
+
+.stagger > * {
+  animation: riseIn 600ms ease-out both;
+}
+
+.stagger > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.stagger > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.stagger > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+.stagger > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
