@@ -484,7 +484,13 @@ function boosted(engine: EngineDefinition, rpm: number, seconds = 3) {
 }
 const withInduction = (
   induction: EngineDefinition['induction'],
-): EngineDefinition => ({ ...roadEngine, compression: 9, induction })
+): EngineDefinition => ({
+  ...roadEngine,
+  compression: 9,
+  induction,
+  // Road-sized injectors would run out of fuel on boost.
+  fuelSupply: null,
+})
 const turbo = inductionDefaults.turbo
 
 describe('forced induction', () => {

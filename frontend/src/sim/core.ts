@@ -1,4 +1,9 @@
-import { conditionsSchema, displacement, validateEngine } from './schema'
+import {
+  conditionsSchema,
+  displacement,
+  lookup,
+  validateEngine,
+} from './schema'
 import type {
   Conditions,
   EngineDefinition,
@@ -53,6 +58,10 @@ const KNOCK_SENSED = 0.03
 const RETARD_STEP = 2
 const RETARD_LIMIT = 12
 const RETARD_RECOVERY = 1.5
+/** Latest spark a map may ask for, degrees before top dead centre. */
+const MIN_ADVANCE = -10
+/** Steps between ECU map lookups. */
+const MAP_INTERVAL = 16
 /** C in S_T/S_L = 1 + C·(Ū_p/S_L)^0.7, with turbulence intensity taken as ∝ Ū_p. */
 const TURBULENCE = 2.5
 /** Idle-air integral gain, throttle per RPM-second. */
@@ -94,6 +103,20 @@ export type Telemetry = {
   /** Road speed (km/h) and gear while road load is on. */
   road: { speed: number; gear: number } | null
   knock: KnockTelemetry
+  ecu: EcuTelemetry
+}
+export type EcuTelemetry = {
+  /** Maps in use; otherwise the single values apply. */
+  maps: boolean
+  /** Spark advance before knock retard, degrees BTDC. */
+  advance: number
+  /** Commanded λ. */
+  lambda: number
+  /** Turbo boost target (gauge), Pa, or null without a turbo. */
+  boostTarget: number | null
+  /** Map load: manifold pressure, Pa, and driver throttle. */
+  load: number
+  throttle: number
 }
 interface Cylinder {
   mass: number
@@ -218,6 +241,10 @@ export class EngineCore {
   private runnerResidual: boolean
   private idleTrim = 0
   private runnerVolume: number
+  /** Spark advance and λ the ECU commands this step. */
+  private sparkAdvance: number
+  private targetLambda: number
+  private mapsRead = false
   private octaneDelay: number
   private referenceFlame: number
   private pistonSpeedPerRpm: number
@@ -238,6 +265,8 @@ export class EngineCore {
     this.chargeFuel =
       (displacement(engine) / 4) * (1.2 / this.grade.stoichiometric)
     this.runnerResidual = engine.combustion.burnRate === 'predictive'
+    this.sparkAdvance = engine.ignitionAdvance
+    this.targetLambda = engine.lambda
     this.octaneDelay = KNOCK_DELAY * (this.grade.octane / 100) ** 3.402
     this.pistonSpeedPerRpm = (2 * engine.stroke) / 60
     // burnDuration is quoted for gasoline at 3,000 RPM and full load.
@@ -428,6 +457,34 @@ export class EngineCore {
       : 0
     const throttle = Math.max(this.controls.throttle, idle)
     const induction = this.induction
+    const maps = e.management
+    // The ECU updates its tables at 3 kHz, and on a new core's first step.
+    if (maps && (this.sample % MAP_INTERVAL === 0 || !this.mapsRead)) {
+      this.mapsRead = true
+      this.sparkAdvance = lookup(
+        maps.load,
+        maps.rpm,
+        maps.ignition,
+        this.manifold,
+        rpm,
+      )
+      this.targetLambda = lookup(
+        maps.load,
+        maps.rpm,
+        maps.lambda,
+        this.manifold,
+        rpm,
+      )
+      this.fuel.setLambda(this.targetLambda)
+      if (induction.config.kind === 'turbo')
+        induction.boostTarget = lookup(
+          maps.throttle,
+          maps.rpm,
+          maps.boost,
+          this.controls.throttle,
+          rpm,
+        )
+    }
     const turbo = induction.config.kind === 'turbo'
     const fuel = this.fuel
     fuel.limiterCut = this.limited && !this.sparkCut
@@ -622,9 +679,15 @@ export class EngineCore {
             exhaustEnergy -= dm * backEnthalpy
           }
         }
-        const advance = Math.max(1, e.ignitionAdvance - cyl.retard)
-        const ignition = CYCLE - (advance * Math.PI) / 180
-        if (cyl.phase < ignition && phase >= ignition) {
+        // Without maps the spark stays before top dead centre, as in 1.6.0.
+        const advance = Math.max(
+          maps ? MIN_ADVANCE : 1,
+          this.sparkAdvance - cyl.retard,
+        )
+        const spark = CYCLE - (advance * Math.PI) / 180
+        const ignition = spark >= CYCLE ? spark - CYCLE : spark
+        // Crossed when the angle since the spark point wrapped round.
+        if (wrap(phase - ignition) < wrap(cyl.phase - ignition)) {
           // Fuel delivered with the charge; extra O2 can only burn available fuel.
           const lambda =
             cyl.fuel > 0
@@ -958,6 +1021,17 @@ export class EngineCore {
         retard: this.cylinders.map((c) => c.retard),
         burn: this.cylinders.map((c) => c.duration),
         knocking: this.time - this.knockTime < 0.3,
+      },
+      ecu: {
+        maps: !!this.engine.management,
+        advance: this.sparkAdvance,
+        lambda: this.targetLambda,
+        boostTarget:
+          this.induction.config.kind === 'turbo'
+            ? this.induction.boostTarget
+            : null,
+        load: this.manifold,
+        throttle: this.controls.throttle,
       },
       road: this.controls.road
         ? { speed: this.vehicle.speed * 3.6, gear: this.controls.road.gear }

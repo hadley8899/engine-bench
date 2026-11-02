@@ -60,6 +60,8 @@ export class InductionSystem {
   shaftHz = 0
   /** Pressure lost ahead of the compressor (a draw-through carburettor), Pa. */
   inletLoss = 0
+  /** Turbo boost target (gauge), Pa; an ECU boost map may change it. */
+  boostTarget = 0
   private ambient: number
   private ambientTemperature: number
   private density: number
@@ -81,6 +83,8 @@ export class InductionSystem {
     densityRatio: number,
   ) {
     this.config = engine.induction
+    if (engine.induction.kind === 'turbo')
+      this.boostTarget = engine.induction.boostTarget
     this.ambient = conditions.pressure
     this.ambientTemperature = conditions.temperature
     this.density = density
@@ -304,7 +308,8 @@ export class InductionSystem {
     )
     // Spring-and-diaphragm style: opens progressively above the target.
     const target = clamp(
-      (this.supply - pa - c.boostTarget) / Math.max(15000, 0.2 * c.boostTarget),
+      (this.supply - pa - this.boostTarget) /
+        Math.max(15000, 0.2 * this.boostTarget),
       0,
       1,
     )

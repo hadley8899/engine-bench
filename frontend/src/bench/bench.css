@@ -853,3 +853,71 @@
   color: #ff8fa8;
   font-weight: 500;
 }
+.map-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.map-table {
+  border-collapse: collapse;
+  font-family: 'Saira Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.map-table th,
+.map-table td {
+  padding: 0;
+  border: 1px solid #2a3943;
+}
+.map-table th {
+  background: #16222a;
+  color: #93a6b0;
+  font-weight: 500;
+}
+.map-corner {
+  font-size: 10px;
+  padding: 2px 6px !important;
+  white-space: nowrap;
+}
+.map-cell {
+  width: 46px;
+  box-sizing: border-box;
+  padding: 4px 3px;
+  border: 0;
+  background: transparent;
+  color: #f1f5f7;
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+.map-cell.axis {
+  color: #e3aa63;
+}
+.map-cell:focus {
+  outline: 2px solid #1fc8ff;
+  outline-offset: -2px;
+}
+.map-cell.invalid {
+  outline: 2px solid #ff3b6b;
+  outline-offset: -2px;
+}
+.map-table td.selected {
+  box-shadow: inset 0 0 0 2px #7fe0ff;
+}
+.map-table td.live {
+  box-shadow: inset 0 0 0 2px #e3aa63;
+}
+.map-table td.live.selected {
+  box-shadow: inset 0 0 0 2px #e3aa63, inset 0 0 0 4px #7fe0ff;
+}
+.map-live {
+  margin: 0;
+  font-size: 13px;
+  color: #93a6b0;
+}
+.map-live b {
+  color: #e3aa63;
+  font-weight: 500;
+}
+.map-scope {
+  font-size: 12px;
+  color: #93a6b0;
+}

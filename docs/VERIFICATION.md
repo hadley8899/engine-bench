@@ -194,3 +194,21 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Seen in passing, not changed: at steady full boost the hot hatch shows AFTERFIRE continuously, in 1.5.0 as well as 1.6.0. At λ 1 about 2% of the fuel finds no oxygen (humid air holds slightly less than the stoichiometric ratio assumes), and the 1,150 K header lights it.
 - Open: the user's own check of how knock feels to tune against, and its ping sound.
 
+## Model 1.7.0: engine management and fuel supply
+
+- Builds without maps or a fuel supply (as saved before 1.7.0) gave dyno sweeps (torque, knock and retard per sample) bit-identical to the committed 1.6.0 core for all five starting builds, both with their 1.6.0 combustion block and without it. Flat maps reproduce the single values exactly (Vitest, Turbo hot hatch sweep).
+- Vitest (`src/sim/management.test.ts`, 11 tests; `src/bench/mapFields.test.ts`, 3):
+  - bilinear lookup and edge hold;
+  - timing follows the ignition map, including halfway between breakpoints, and less advance reduces lugging knock;
+  - a spark after top dead centre runs with less torque;
+  - the λ map enriches at high load and lowers knock, and a carburettor ignores it;
+  - the boost map's 0.4 bar target holds boost below 0.55 bar where the single 0.9 bar target exceeds 0.8;
+  - tables that do not match their axes and decreasing breakpoints are rejected, and builds saved before 1.7.0 read with neither block;
+  - small injectors hit their duty limit, lean the mixture past λ 1.2 and raise knock; a weak pump limits E85 but not petrol; a carburettor is limited by its pump alone;
+  - map change descriptions.
+- Changed existing tests: the forced-induction tests build a turbo on the Road preset, whose new Road-sized injectors run out of fuel on boost. Those physics tests now use unlimited supply (`fuelSupply: null`).
+- Playwright (`tests/stage6.spec.ts`, Chromium and Firefox): on the Road build, maps switch on; the single timing and λ fields are disabled; a +1° whole-table change and a typed cell carry through a rebuild to the ECU readout (21.0° BTDC, from the map) with the live cell readout showing; 60 cc/min injectors show FUEL LIMITED at full throttle.
+- Chromium (built-in browser pane): the Engine maps panel shows the 14 × 9 hot hatch ignition table in full beside the bench, with the live cell outlined. With Live updates on at 4,500 RPM and 190 kPa, +1° on the whole table moved the ECU timing from 14.0° to 15.0° without stopping and raised knock from 94% to 99% of onset.
+- Full runs: Vitest 102 passed. Playwright 42 passed, 2 storage cases skipped. In that run the new map test failed once in Firefox, because the typed 800 RPM cell interpolated into the idle timing (a test design error, fixed by editing a 6,000 RPM cell), and the existing bench sign-in test failed once in Chromium and passed on retry. Both then passed twice in each browser. `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 passed with the re-exported schemas. Build and lint (one existing warning) pass.
+- Cost (Node, 128-frame block, turbo at 4,000 RPM): 0.171 ms median with maps against 0.145 ms without, after moving map lookups to 3 kHz (0.273 ms when read every step). Standard benchmark: 0.117 ms median at 4,000 RPM, 0.211 ms at 8,400 RPM, against 2.67 ms.
+

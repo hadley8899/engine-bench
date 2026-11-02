@@ -11,8 +11,11 @@ import { z } from 'zod'
  * 1.6.0: fuel grades, an end-gas knock estimate, optional ECU knock control
  * and an optional predictive burn rate. Builds without a combustion block
  * keep 1.5.0 behaviour.
+ * 1.7.0: engine-management maps (ignition, target λ, boost) and fuel
+ * supply limits (injectors, pump). Builds without them keep 1.6.0
+ * behaviour.
  */
-export const MODEL_VERSION = 'eb-0d-1.6.0'
+export const MODEL_VERSION = 'eb-0d-1.7.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -21,6 +24,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.3.0',
   'eb-0d-1.4.0',
   'eb-0d-1.5.0',
+  'eb-0d-1.6.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -190,6 +194,63 @@ export const combustionDefaults: Combustion = {
   knockControl: true,
 }
 
+/** Map breakpoints: strictly increasing, 2–16 of them. */
+const axis = (min: number, max: number) =>
+  z
+    .array(z.number().min(min).max(max))
+    .min(2)
+    .max(16)
+    .refine((a) => a.every((v, i) => i === 0 || v > a[i - 1]), {
+      message: 'Breakpoints must increase',
+    })
+const table = (min: number, max: number) =>
+  z.array(z.array(z.number().min(min).max(max)).min(2).max(16)).min(2).max(16)
+/**
+ * ECU tables. Rows follow the load axis, columns the RPM axis; values
+ * between breakpoints are interpolated and held flat beyond the ends.
+ */
+export const managementSchema = z
+  .strictObject({
+    rpm: axis(0, 25000),
+    /** Load for ignition and λ: absolute manifold pressure, Pa. */
+    load: axis(10000, 500000),
+    /** Spark advance, degrees before top dead centre (negative = after). */
+    ignition: table(-10, 50),
+    /** Target λ for electronic injection. */
+    lambda: table(0.7, 1.3),
+    /** Load for the boost map: driver throttle, 0–1. */
+    throttle: axis(0, 1),
+    /** Turbo boost target (gauge), Pa, by throttle row and RPM column. */
+    boost: table(0, 400000),
+  })
+  .superRefine((m, ctx) => {
+    const check = (name: 'ignition' | 'lambda' | 'boost', rows: number) => {
+      const t = m[name]
+      if (t.length !== rows || t.some((r) => r.length !== m.rpm.length))
+        ctx.addIssue({
+          code: 'custom',
+          path: [name],
+          message: `The ${name} table must be ${rows} × ${m.rpm.length}`,
+        })
+    }
+    check('ignition', m.load.length)
+    check('lambda', m.load.length)
+    check('boost', m.throttle.length)
+  })
+export type Management = z.infer<typeof managementSchema>
+/**
+ * Fuel delivery capacity. Injector flow is per injector at its rated
+ * pressure (4 injectors); a carburettor has none and is limited by the
+ * pump alone. For direct injection the pump is the high-pressure pump.
+ */
+export const fuelSupplySchema = z.strictObject({
+  injectorFlow: z.number().min(50).max(3000),
+  /** Largest share of each cycle an injector may stay open. */
+  maxDuty: z.number().min(0.5).max(1),
+  pumpFlow: z.number().min(10).max(1000),
+})
+export type FuelSupply = z.infer<typeof fuelSupplySchema>
+
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
@@ -227,6 +288,10 @@ export const engineSchema = z.strictObject({
   exhaust: exhaustSchema.default(exhaustDefaults),
   // Builds saved before 1.6.0 keep a fixed burn and no knock control.
   combustion: combustionSchema.default(legacyCombustion),
+  // Builds saved before 1.7.0 use the single timing, λ and boost values
+  // and have unlimited fuel supply.
+  management: managementSchema.nullable().default(null),
+  fuelSupply: fuelSupplySchema.nullable().default(null),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -325,6 +390,8 @@ export const roadEngine: EngineDefinition = {
   fuelSystem: fuelSystemDefaults.port,
   exhaust: exhaustDefaults,
   combustion: combustionDefaults,
+  management: null,
+  fuelSupply: { injectorFlow: 240, maxDuty: 0.85, pumpFlow: 110 },
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {
@@ -340,6 +407,7 @@ export const sportEngine: EngineDefinition = {
   inertia: 0.16,
   revLimit: 7600,
   mechanicalLimit: 8000,
+  fuelSupply: { injectorFlow: 290, maxDuty: 0.85, pumpFlow: 120 },
 }
 export const normalConditions: Conditions = {
   temperature: 293.15,
@@ -387,3 +455,53 @@ export const runSchema = z.strictObject({
 })
 export type Run = z.infer<typeof runSchema>
 export type Sample = z.infer<typeof sampleSchema>
+
+/**
+ * Maps that reproduce a build's single timing, λ and boost values, on axes
+ * suited to its rev limit and induction: switching maps on changes nothing
+ * until a cell is edited.
+ */
+export function flatMaps(e: EngineDefinition): Management {
+  const top = Math.max(2000, Math.ceil(e.revLimit / 1000) * 1000)
+  const rpm = [800]
+  for (let r = 1000; r <= top; r += top > 9000 ? 1000 : 500) rpm.push(r)
+  const boosted = e.induction.kind !== 'none'
+  const load = [20, 40, 60, 80, 100, ...(boosted ? [130, 160, 200, 250] : [])]
+    .map((k) => k * 1000)
+  const throttle = [0, 0.25, 0.5, 0.75, 1]
+  const fill = (rows: number, v: number) =>
+    Array.from({ length: rows }, () => rpm.map(() => v))
+  return {
+    rpm: rpm.slice(0, 16),
+    load,
+    ignition: fill(load.length, e.ignitionAdvance).map((r) => r.slice(0, 16)),
+    lambda: fill(load.length, e.lambda).map((r) => r.slice(0, 16)),
+    throttle,
+    boost: fill(
+      throttle.length,
+      e.induction.kind === 'turbo' ? e.induction.boostTarget : 0,
+    ).map((r) => r.slice(0, 16)),
+  }
+}
+/** Bilinear lookup, held flat beyond the axes. */
+export function lookup(
+  rows: number[],
+  columns: number[],
+  table: number[][],
+  row: number,
+  column: number,
+) {
+  const locate = (a: number[], v: number) => {
+    if (v <= a[0]) return [0, 0, 0] as const
+    const last = a.length - 1
+    if (v >= a[last]) return [last, last, 0] as const
+    let i = 1
+    while (a[i] < v) i++
+    return [i - 1, i, (v - a[i - 1]) / (a[i] - a[i - 1])] as const
+  }
+  const [r0, r1, rf] = locate(rows, row)
+  const [c0, c1, cf] = locate(columns, column)
+  const top = table[r0][c0] + (table[r0][c1] - table[r0][c0]) * cf
+  const bottom = table[r1][c0] + (table[r1][c1] - table[r1][c0]) * cf
+  return top + (bottom - top) * rf
+}

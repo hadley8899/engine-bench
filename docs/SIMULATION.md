@@ -1,6 +1,6 @@
 # Engine model and browser-host decision
 
-Model version: `eb-0d-1.6.0`. 1.6.0 adds fuel grades, an end-gas knock estimate, optional ECU knock control and an optional predictive burn rate (see Combustion and knock). Builds saved before 1.6.0 read as fixed burn, RON 95 and no knock control, and their dyno results are bit-identical to 1.5.0. 1.5.0 makes the rev limiter's cut explicit (see Rev limiter) and adds exhaust systems, sound synthesis and optional road load, none of which change the physics of a run below the limiter: dyno results match 1.4.0. 1.4.0 adds fuel systems with wall-film fuel transport and misfire limits (see Fuel systems); steady full-load results for port injection, the default, match 1.3.0. 1.3.0 adds forced induction (see Forced induction); naturally aspirated results are unchanged from 1.2.0. 1.1.0 scaled friction with displacement and made starter torque configurable. 1.2.0 adds temperature-dependent gas properties, Woschni-form wall heat transfer, piston-speed friction and intake runner inertia, and recalibrates the presets (see Calibration). Runs recorded by earlier model versions remain readable as history. Written in TypeScript. Scope: four-stroke, fictional inline-four petrol engines, naturally aspirated or with the lumped forced-induction model. The Road and Sport definitions are experimental starting points, not calibrated replicas of production engines.
+Model version: `eb-0d-1.7.0`. 1.7.0 adds optional engine-management maps and fuel-supply limits (see Engine management and fuel supply); builds without them give dyno results bit-identical to 1.6.0. 1.6.0 adds fuel grades, an end-gas knock estimate, optional ECU knock control and an optional predictive burn rate (see Combustion and knock). Builds saved before 1.6.0 read as fixed burn, RON 95 and no knock control, and their dyno results are bit-identical to 1.5.0. 1.5.0 makes the rev limiter's cut explicit (see Rev limiter) and adds exhaust systems, sound synthesis and optional road load, none of which change the physics of a run below the limiter: dyno results match 1.4.0. 1.4.0 adds fuel systems with wall-film fuel transport and misfire limits (see Fuel systems); steady full-load results for port injection, the default, match 1.3.0. 1.3.0 adds forced induction (see Forced induction); naturally aspirated results are unchanged from 1.2.0. 1.1.0 scaled friction with displacement and made starter torque configurable. 1.2.0 adds temperature-dependent gas properties, Woschni-form wall heat transfer, piston-speed friction and intake runner inertia, and recalibrates the presets (see Calibration). Runs recorded by earlier model versions remain readable as history. Written in TypeScript. Scope: four-stroke, fictional inline-four petrol engines, naturally aspirated or with the lumped forced-induction model. The Road and Sport definitions are experimental starting points, not calibrated replicas of production engines.
 
 ## Core equations and assumptions
 
@@ -27,7 +27,7 @@ The 1.2.0 constants (Woschni factor, wall temperature, friction coefficients) an
 
 These are the fixed-burn figures. With 1.6.0's predictive burn and knock control (how the presets now ship) the Road preset gives 192 Nm at 4,500 RPM, 108 kW at 6,000 RPM, 175 Nm at 1,500 RPM and 81 bar; the Sport preset 185 Nm at 5,500 RPM, 134 kW at 7,500 RPM, 164 Nm at 1,500 RPM and 88 bar.
 
-Before 1.2.0 the Road preset made 281 Nm at 1,500 RPM (BMEP 1.77 MPa, about 55% brake efficiency) and fell steadily with speed because its valve areas choked flow from about 2,500 RPM. Neither preset replicates a production engine. Validation against a sourced reference torque curve is Stage 7 work. Ignition timing is a single value. With the fixed burn rate, burn duration does not change with speed; with the predictive burn rate (1.6.0) it does, so the best timing (MBT) moves with speed and load. Engine-management maps are planned Stage 6 work.
+Before 1.2.0 the Road preset made 281 Nm at 1,500 RPM (BMEP 1.77 MPa, about 55% brake efficiency) and fell steadily with speed because its valve areas choked flow from about 2,500 RPM. Neither preset replicates a production engine. Validation against a sourced reference torque curve is Stage 7 work. Ignition timing is a single value. With the fixed burn rate, burn duration does not change with speed; with the predictive burn rate (1.6.0) it does, so the best timing (MBT) moves with speed and load. From 1.7.0 timing can come from a map instead (see Engine management and fuel supply).
 
 ## Forced induction
 
@@ -121,6 +121,21 @@ Knock does not change the cycle's heat release, pressure or torque in this versi
 **Sound.** A knocking cycle rings the cylinder's first circumferential gas mode, `f = 1.84·c/(π·B)` with c ≈ 950 m/s (about 6.5 kHz for an 86 mm bore), with its second mode at 1.66× and a 3 ms decay. It is heard through the block, so loudest from the engine bay.
 
 These are estimates for comparing builds and seeing trends, not knock-limited spark advance predictions for a real engine.
+
+## Engine management and fuel supply
+
+A build's `management` is null (the single ignition advance, λ and boost target apply everywhere; how builds saved before 1.7.0 read) or a set of maps:
+
+- **Ignition** (degrees before top dead centre, −10 to 50) and **target λ** (0.7–1.3), each by RPM and load, where load is absolute manifold pressure. Knock retard is taken off the mapped timing. With maps, the spark may be after top dead centre (to −10°); without maps it stays at 1° or more, as in 1.6.0.
+- **Boost target** (gauge, 0–4 bar) by RPM and driver throttle. Boost itself sets manifold pressure, so it cannot also be indexed by it. It replaces the turbo's single wastegate target; superchargers have no target to map.
+- Breakpoints must increase (2–16 per axis). Values between them are interpolated bilinearly and held flat beyond the ends. Every table must match its axes.
+- The ECU reads the tables every 16 steps (3 kHz) and on a new core's first step.
+- Switching maps on starts from flat tables at the build's single values on axes suited to it (800 RPM to the limiter in 500 RPM steps, 20–100 kPa, up to 250 kPa when boosted), so nothing changes until a cell is edited. A test checks that flat maps reproduce the single values exactly.
+- A carburettor cannot follow the λ map; its jets set the mixture. Ignition and boost maps still apply.
+
+A build's `fuelSupply` is null (unlimited, as before 1.7.0) or four injectors' flow each (cc/min with the fuel in use), their duty limit and the fuel pump's flow (L/h; for direct injection, the high-pressure pump). The most fuel that can be delivered is the lesser of `4 × injector flow × duty limit` and the pump flow, at the fuel's density (740 kg/m³ petrol, 781 kg/m³ E85). When the commanded fuel exceeds it, injection is capped at that flow. The mixture goes lean, which also raises knock, and the bench shows FUEL LIMITED for 0.3 s after the last capped step. A carburettor has no injectors and is limited only by its pump. Injector flow does not change with manifold or rail pressure, and there is no injector dead time or minimum pulse width.
+
+The starting builds carry fuel supplies with modest headroom. Peak injector duty at full load is 60–71%; the hot hatch's direct injectors (450 cc/min) reach 71% and its high-pressure pump 59% at 6,000 RPM. Turning the boost up, or switching to E85, runs out of fuel soon after.
 
 ## Live updates
 

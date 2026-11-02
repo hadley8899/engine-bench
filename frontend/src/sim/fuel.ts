@@ -24,6 +24,8 @@ export const FUELS: Record<
     /** Oxygen needed to burn 1 kg of fuel, kg. */
     oxygen: number
     latent: number
+    /** Liquid density, kg/m³. */
+    density: number
     /** Laminar flame speed fit S_L0 = base + curve·(φ − peak)², m/s. */
     flame: { base: number; curve: number; peak: number }
   }
@@ -38,6 +40,7 @@ export const FUELS: Record<
     heating: 29.2e6,
     oxygen: (3.43 * 9.8) / STOICHIOMETRIC,
     latent: 850000,
+    density: 781,
     flame: { base: 0.36, curve: -1.0, peak: 1.11 },
   },
 }
@@ -49,6 +52,7 @@ function gasoline(label: string, octane: number) {
     heating: 43e6,
     oxygen: 3.43,
     latent: LATENT_HEAT,
+    density: 740,
     // Metghalchi and Keck's fit for gasoline (indolene).
     flame: { base: 0.305, curve: -0.549, peak: 1.21 },
   }
@@ -62,7 +66,6 @@ const ECU_CORRECTION = 0.85
 /** Accelerator-pump fuel per full throttle opening, kg per m³ of displacement. */
 const PUMP_SHOT = 0.185
 const DIRECT_RAIL_PRESSURE = 15e6
-const FUEL_DENSITY = 740
 const AIRFLOW_LAG = 0.02
 /** Time constant of the accelerator-pump squirt, s. */
 const PUMP_SQUIRT = 0.15
@@ -92,6 +95,12 @@ export type FuelTelemetry = {
   limiterCut: boolean
   /** Fuel held as liquid film on the intake walls, kg. */
   film: number
+  /** Injector open share of each cycle, or null without supply limits. */
+  injectorDuty: number | null
+  /** Share of the fuel pump's capacity in use, or null without limits. */
+  pumpUse: number | null
+  /** Injectors or pump could not deliver the commanded fuel recently. */
+  fuelLimited: boolean
 }
 
 /**
@@ -129,13 +138,33 @@ export class FuelDelivery {
   /** Accelerator-pump fuel still to squirt, kg. */
   private pumping = 0
   private latent: number
+  private stoichiometric: number
+  private fuelDensity: number
+  /** Most fuel the injectors (at their duty limit) and pump deliver, kg/s. */
+  private maxFuel = Infinity
+  /** All four injectors held open, kg/s. */
+  private injectorCapacity = Infinity
+  private pumpCapacity = Infinity
+  private limitedFor = 0
 
   constructor(engine: EngineDefinition, density: number) {
     const c = engine.fuelSystem
     const grade = FUELS[engine.combustion.fuel]
     this.config = c
     this.density = density
+    this.stoichiometric = grade.stoichiometric
+    this.fuelDensity = grade.density
     this.metered = 1 / (grade.stoichiometric * engine.lambda)
+    const supply = engine.fuelSupply
+    if (supply) {
+      this.pumpCapacity = (supply.pumpFlow / 3.6e6) * grade.density
+      if (c.kind !== 'carburettor')
+        this.injectorCapacity = ((4 * supply.injectorFlow) / 6e7) * grade.density
+      this.maxFuel = Math.min(
+        this.pumpCapacity,
+        this.injectorCapacity * supply.maxDuty,
+      )
+    }
     // Port injection's gasoline evaporation is inside the calibration, so
     // only the extra of a fuel with more latent heat cools a port charge.
     this.latent =
@@ -229,6 +258,15 @@ export class FuelDelivery {
           ? command + ECU_CORRECTION * (ideal - command)
           : command
     }
+    // Injectors at their duty limit, or the pump, cap what can be delivered;
+    // the mixture then goes lean rather than being clamped silently.
+    if (this.maxFuel < Infinity) {
+      const cap = this.maxFuel / Math.max(flow, 1e-6)
+      if (this.injected > cap) {
+        this.injected = cap
+        this.limitedFor = 0.3
+      } else this.limitedFor = Math.max(0, this.limitedFor - dt)
+    }
     this.previousThrottle = throttle
     // The pump squirts into the airstream, which wets the walls like the jets.
     const squirt = (this.pumping * dt) / PUMP_SQUIRT
@@ -246,9 +284,15 @@ export class FuelDelivery {
     if (c.kind === 'direct')
       this.crankTorque =
         (this.injected * flow * DIRECT_RAIL_PRESSURE) /
-        FUEL_DENSITY /
+        this.fuelDensity /
         0.5 /
         Math.max(omega, 5)
+  }
+
+  /** ECU target λ from a map; a carburettor's jets cannot follow one. */
+  setLambda(lambda: number) {
+    if (this.config.kind !== 'carburettor')
+      this.metered = 1 / (this.stoichiometric * lambda)
   }
 
   /**
@@ -270,6 +314,7 @@ export class FuelDelivery {
     this.manifoldCooling = previous.manifoldCooling
     this.cylinderCooling = previous.cylinderCooling
     this.crankTorque = previous.crankTorque
+    this.limitedFor = previous.limitedFor
   }
 
   telemetry(lambda: number, misfire: boolean): FuelTelemetry {
@@ -281,6 +326,15 @@ export class FuelDelivery {
       overrunCut: this.overrunCut,
       limiterCut: this.limiterCut,
       film: this.film,
+      injectorDuty:
+        this.injectorCapacity < Infinity
+          ? (this.injected * Math.max(0, this.airFlow)) / this.injectorCapacity
+          : null,
+      pumpUse:
+        this.pumpCapacity < Infinity
+          ? (this.injected * Math.max(0, this.airFlow)) / this.pumpCapacity
+          : null,
+      fuelLimited: this.limitedFor > 0,
     }
   }
 }

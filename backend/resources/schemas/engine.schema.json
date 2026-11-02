@@ -506,6 +506,137 @@
       ],
       "additionalProperties": false
     },
+    "management": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "rpm": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 25000
+              }
+            },
+            "load": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 10000,
+                "maximum": 500000
+              }
+            },
+            "ignition": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "minItems": 2,
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -10,
+                  "maximum": 50
+                }
+              }
+            },
+            "lambda": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "minItems": 2,
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0.7,
+                  "maximum": 1.3
+                }
+              }
+            },
+            "throttle": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "boost": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "minItems": 2,
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 400000
+                }
+              }
+            }
+          },
+          "required": [
+            "rpm",
+            "load",
+            "ignition",
+            "lambda",
+            "throttle",
+            "boost"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fuelSupply": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "injectorFlow": {
+              "type": "number",
+              "minimum": 50,
+              "maximum": 3000
+            },
+            "maxDuty": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 1
+            },
+            "pumpFlow": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 1000
+            }
+          },
+          "required": [
+            "injectorFlow",
+            "maxDuty",
+            "pumpFlow"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "firingOrder": {
       "type": "array",
       "prefixItems": [

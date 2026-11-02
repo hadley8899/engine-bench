@@ -51,6 +51,8 @@ export const starterBuilds: StarterBuild[] = [
       induction: { ...inductionDefaults.turbo, boostTarget: 90000 },
       fuelSystem: fuelSystemDefaults.direct,
       combustion: { ...combustionDefaults, fuel: 'ron98' },
+      // Direct-injection injectors and high-pressure pump with modest headroom.
+      fuelSupply: { injectorFlow: 450, maxDuty: 0.85, pumpFlow: 130 },
       exhaust: {
         ...exhaustDefaults,
         headerLength: 0.35,
@@ -106,6 +108,7 @@ export const starterBuilds: StarterBuild[] = [
       revLimit: 9000,
       mechanicalLimit: 9600,
       limiterCut: 'spark',
+      fuelSupply: { injectorFlow: 320, maxDuty: 0.85, pumpFlow: 130 },
       exhaust: {
         headerLength: 0.32,
         collector: '4-2-1',

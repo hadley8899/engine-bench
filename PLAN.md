@@ -4,12 +4,12 @@ Updated: 2 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: its combustion and knock slice is implemented (model 1.6.0). Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0) and engine management (model 1.7.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
-2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock are implemented (model 1.6.0); ignition/fuel/boost maps, per-cylinder temperatures, upgradeable parts and failures are next.
+2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0) are implemented; per-cylinder temperatures, upgradeable parts and failures are next.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
@@ -275,9 +275,9 @@ Combustion and knock:
 
 Engine management:
 
-- [ ] Add an ignition timing map, a target λ map and a boost target map by RPM and load. Use a table editor that highlights the live operating cell, with interpolation and range validation.
-- [ ] Add injector size, duty-cycle limits and fuel-pump capacity (including the high-pressure pump for direct injection). Running out of fuel leans the mixture rather than being clamped silently.
-- [ ] Store the maps in the versioned engine definition, with a schema migration and JSON Schema export.
+- [x] Add an ignition timing map, a target λ map and a boost target map by RPM and load. Use a table editor that highlights the live operating cell, with interpolation and range validation. Model 1.7.0. Decision (2 November 2026): ignition and λ use manifold pressure as load; the boost map uses driver throttle, since boost itself sets manifold pressure. Maps start flat at the build's single values, so switching them on changes nothing. Breakpoint values are editable; the number of breakpoints is fixed by the starting grid.
+- [x] Add injector size, duty-cycle limits and fuel-pump capacity (including the high-pressure pump for direct injection). Running out of fuel leans the mixture rather than being clamped silently.
+- [x] Store the maps in the versioned engine definition, with a schema migration and JSON Schema export. Builds saved before 1.7.0 read with no maps and unlimited fuel, and match 1.6.0 exactly.
 
 Temperatures:
 

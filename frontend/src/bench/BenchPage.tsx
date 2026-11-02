@@ -52,6 +52,9 @@ import { ExhaustEditor } from './ExhaustEditor'
 import { CombustionEditor } from './CombustionEditor'
 import { describeCombustion } from './combustionFields'
 import { KnockStrip } from './KnockStrip'
+import { MapEditor, MapToggle } from './MapEditor'
+import { describeMaps } from './mapFields'
+import { FuelSupplyEditor } from './FuelSupplyEditor'
 import { FUELS } from '../sim/fuel'
 import { describeExhaust, exhaustErrors } from './exhaustFields'
 import { Gauges } from './Gauges'
@@ -373,7 +376,13 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     ),
     ...describeExhaust(a.engine.exhaust, e.exhaust),
     ...describeCombustion(a.engine.combustion, e.combustion),
+    ...describeMaps(a.engine.management ?? null, e.management),
   )
+  if (
+    JSON.stringify(a.engine.fuelSupply ?? null) !==
+    JSON.stringify(e.fuelSupply)
+  )
+    changes.push('Fuel supply (injectors and pump) changed')
   if ((a.engine.limiterCut ?? 'fuel') !== e.limiterCut)
     changes.push(
       `Limiter cuts: ${a.engine.limiterCut ?? 'fuel'} → ${e.limiterCut}`,
@@ -498,6 +507,8 @@ export function BenchPage() {
     ...Object.keys(inductionErrors(draft.induction)),
     ...Object.keys(fuelErrors(draft.fuelSystem)),
     ...Object.keys(exhaustErrors(draft.exhaust)),
+    ...(draftErrors.management ? ['Engine maps'] : []),
+    ...(draftErrors.fuelSupply ? ['Fuel supply'] : []),
     ...conditionFields.filter((f) => envErrors[f.key]).map((f) => f.label),
   ]
   const invalid = invalidLabels.length > 0
@@ -1273,6 +1284,11 @@ export function BenchPage() {
                             : 'LIMITER CUT'}
                         </em>
                       )}
+                      {telemetry.fuel.fuelLimited && (
+                        <em className="boost-flag warn" data-testid="fuel-limited">
+                          FUEL LIMITED
+                        </em>
+                      )}
                       {telemetry.fuel.misfire && (
                         <em className="boost-flag warn">MISFIRE</em>
                       )}
@@ -1283,6 +1299,7 @@ export function BenchPage() {
                       )}
                       {!fuelCut &&
                         !limiterVisible &&
+                        !telemetry.fuel.fuelLimited &&
                         !telemetry.fuel.misfire &&
                         !telemetry.afterfire &&
                         (telemetry.fuel.lambda > 1.1 ? (
@@ -1292,6 +1309,53 @@ export function BenchPage() {
                         ) : (
                           <span>Normal</span>
                         ))}
+                    </strong>
+                  </div>
+                </div>
+                <div className="stats-strip boost-strip" data-testid="ecu">
+                  <div>
+                    <small>
+                      TIMING{telemetry.ecu.maps ? ' · MAP' : ''}
+                    </small>
+                    <strong>
+                      {formatFixed(
+                        telemetry.ecu.advance -
+                          telemetry.knock.retard.reduce((a, b) => a + b, 0) / 4,
+                        1,
+                      )}
+                      <span>° BTDC</span>
+                    </strong>
+                  </div>
+                  <div>
+                    <small>
+                      TARGET λ{telemetry.ecu.maps ? ' · MAP' : ''}
+                    </small>
+                    <strong>{telemetry.ecu.lambda.toFixed(2)}</strong>
+                  </div>
+                  <div>
+                    <small>INJECTOR DUTY</small>
+                    <strong>
+                      {telemetry.fuel.injectorDuty === null ? (
+                        '—'
+                      ) : (
+                        <>
+                          {Math.round(telemetry.fuel.injectorDuty * 100)}
+                          <span> %</span>
+                        </>
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <small>FUEL PUMP</small>
+                    <strong>
+                      {telemetry.fuel.pumpUse === null ? (
+                        '—'
+                      ) : (
+                        <>
+                          {Math.round(telemetry.fuel.pumpUse * 100)}
+                          <span> %</span>
+                        </>
+                      )}
                     </strong>
                   </div>
                 </div>
@@ -1363,6 +1427,34 @@ export function BenchPage() {
                   </div>
                 )}
               </Paper>
+              {draft.management && (
+                <Paper className="editor-panel map-panel" variant="outlined">
+                  <div className="panel-heading">
+                    <h2>Engine maps</h2>
+                  </div>
+                  <MapEditor
+                    engine={draft}
+                    disabled={activeTest}
+                    live={
+                      running && experiment.engine.management
+                        ? { ...telemetry.ecu, rpm: telemetry.rpm }
+                        : null
+                    }
+                    onChange={(update) =>
+                      setDraft((d) => ({
+                        ...d,
+                        management: update(d.management),
+                      }))
+                    }
+                  />
+                  {dirty && !liveUpdates && (
+                    <p className="cranking-note warn">
+                      Edits reach the engine when you rebuild it, or straight
+                      away with Live updates on.
+                    </p>
+                  )}
+                </Paper>
+              )}
               <Paper className="chart-panel" variant="outlined">
                 <Chart
                   title="Live engine speed"
@@ -1672,13 +1764,22 @@ export function BenchPage() {
                 <div className="field-grid">
                   {numericFields
                     .filter((f, i) => advanced || i < 5 || draftErrors[f.key])
-                    .map((f) => (
+                    .map((f) => {
+                      // With maps on, timing and mixture come from the tables.
+                      const mapped =
+                        !!draft.management &&
+                        (f.key === 'ignitionAdvance' || f.key === 'lambda')
+                      return (
                       <NumberField
                         key={f.key}
                         size="small"
                         label={`${f.label} (${f.unit})`}
+                        disabled={mapped}
                         error={!!draftErrors[f.key]}
-                        helperText={draftErrors[f.key] ?? rangeText(f)}
+                        helperText={
+                          draftErrors[f.key] ??
+                          (mapped ? 'Set by the engine maps' : rangeText(f))
+                        }
                         value={Number(draft[f.key]) * f.scale}
                         title={f.help}
                         slotProps={{
@@ -1688,7 +1789,8 @@ export function BenchPage() {
                           setDraft((d) => ({ ...d, [f.key]: v / f.scale }))
                         }
                       />
-                    ))}
+                      )
+                    })}
                 </div>
                 {draftUndersized.length > 0 && (
                   <div className="cranking-note warn">
@@ -1727,6 +1829,14 @@ export function BenchPage() {
                     }))
                   }
                 />
+                <FuelSupplyEditor
+                  value={draft.fuelSupply}
+                  fuelSystem={draft.fuelSystem.kind}
+                  disabled={activeTest}
+                  onChange={(update) =>
+                    setDraft((d) => ({ ...d, fuelSupply: update(d.fuelSupply) }))
+                  }
+                />
                 <h3 className="workshop-subheading">Combustion & knock</h3>
                 <CombustionEditor
                   value={draft.combustion}
@@ -1736,6 +1846,14 @@ export function BenchPage() {
                       ...d,
                       combustion: update(d.combustion),
                     }))
+                  }
+                />
+                <h3 className="workshop-subheading">Engine management</h3>
+                <MapToggle
+                  engine={draft}
+                  disabled={activeTest}
+                  onChange={(management) =>
+                    setDraft((d) => ({ ...d, management }))
                   }
                 />
                 <h3 className="workshop-subheading">Forced induction</h3>
