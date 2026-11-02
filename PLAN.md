@@ -282,6 +282,7 @@ Engine management:
 Temperatures:
 
 - [x] Add lumped per-cylinder thermal states: exhaust gas temperature at the port, piston crown, exhaust valve and head. Make per-cylinder differences come only from modelled causes such as charge, mixture, timing and knock. Do not add cosmetic variation. Model 1.8.0. Decision (2 November 2026): the temperatures observe the gas and do not feed back, so results are unchanged. Known gap: the model lacks excess-fuel cooling, so enrichment barely lowers EGT.
+- [ ] Model enrichment cooling: add the excess fuel's mass, heat capacity and rich-combustion chemistry to the charge, so running rich lowers EGT and crown temperature as in real engines (roughly 30–60 K of EGT from λ 1.0 to 0.85). It changes cycle physics, so it needs a model version bump and must leave existing builds unchanged unless they opt in. Do this before failures, so that adding fuel protects an engine.
 - [x] Show per-cylinder temperatures and knock in a strip and on the cutaway (heat colours, glowing manifold). The strip shows EGT, crown and valve. On the cutaway, pistons glow with crown temperature, knocking chambers flash and the spark follows the ECU's timing. The exhaust already glowed (Stage 5).
 
 Parts and limits:
