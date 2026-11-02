@@ -1,4 +1,4 @@
-import type { EngineDefinition, FuelSystem } from './schema'
+import type { EngineDefinition, FuelGrade, FuelSystem } from './schema'
 import { displacement } from './schema'
 import { CP, R } from './physics'
 
@@ -6,6 +6,53 @@ import { CP, R } from './physics'
 const STOICHIOMETRIC = 14.7
 /** Latent heat of gasoline evaporation, J/kg. */
 const LATENT_HEAT = 350000
+
+/**
+ * Fuel properties. Octane is the research octane number used in the knock
+ * correlation; E85's is a commonly quoted figure, and its stronger charge
+ * cooling comes from its latent heat, not from the octane number.
+ */
+export const FUELS: Record<
+  FuelGrade,
+  {
+    label: string
+    octane: number
+    /** Stoichiometric air–fuel ratio by mass. */
+    stoichiometric: number
+    /** Lower heating value, J/kg. */
+    heating: number
+    /** Oxygen needed to burn 1 kg of fuel, kg. */
+    oxygen: number
+    latent: number
+    /** Laminar flame speed fit S_L0 = base + curve·(φ − peak)², m/s. */
+    flame: { base: number; curve: number; peak: number }
+  }
+> = {
+  ron91: gasoline('RON 91 regular', 91),
+  ron95: gasoline('RON 95 premium', 95),
+  ron98: gasoline('RON 98 super', 98),
+  e85: {
+    label: 'E85 ethanol blend',
+    octane: 105,
+    stoichiometric: 9.8,
+    heating: 29.2e6,
+    oxygen: (3.43 * 9.8) / STOICHIOMETRIC,
+    latent: 850000,
+    flame: { base: 0.36, curve: -1.0, peak: 1.11 },
+  },
+}
+function gasoline(label: string, octane: number) {
+  return {
+    label,
+    octane,
+    stoichiometric: STOICHIOMETRIC,
+    heating: 43e6,
+    oxygen: 3.43,
+    latent: LATENT_HEAT,
+    // Metghalchi and Keck's fit for gasoline (indolene).
+    flame: { base: 0.305, curve: -0.549, peak: 1.21 },
+  }
+}
 /** Carburettors are jetted for standard dry air at 20 °C and 1,013.25 hPa. */
 const JETTING_DENSITY = 101325 / (R * 293.15)
 /** Venturi, booster and throttle-plate loss in throat dynamic heads, including pulsation. */
@@ -81,12 +128,20 @@ export class FuelDelivery {
   private previousThrottle = 0
   /** Accelerator-pump fuel still to squirt, kg. */
   private pumping = 0
+  private latent: number
 
   constructor(engine: EngineDefinition, density: number) {
     const c = engine.fuelSystem
+    const grade = FUELS[engine.combustion.fuel]
     this.config = c
     this.density = density
-    this.metered = 1 / (STOICHIOMETRIC * engine.lambda)
+    this.metered = 1 / (grade.stoichiometric * engine.lambda)
+    // Port injection's gasoline evaporation is inside the calibration, so
+    // only the extra of a fuel with more latent heat cools a port charge.
+    this.latent =
+      c.kind === 'port'
+        ? 0.5 * (grade.latent - LATENT_HEAT)
+        : transport[c.kind].cooling * grade.latent
     // A fixed jet meters by volume: denser air runs leaner, thinner air richer.
     if (c.kind === 'carburettor')
       this.metered /= Math.sqrt(density / JETTING_DENSITY)
@@ -183,8 +238,8 @@ export class FuelDelivery {
     const drawn = Math.min(this.vapour, vapourPerAir * airIn)
     this.vapour += evaporated + (1 - film) * squirt - drawn
     this.fuelPerAir = (1 - film) * this.injected + this.vapour / air
-    if (t.cooling > 0) {
-      const heat = t.cooling * LATENT_HEAT * this.injected
+    if (this.latent > 0) {
+      const heat = this.latent * this.injected
       if (c.kind === 'direct') this.cylinderCooling = heat
       else this.manifoldCooling = heat / CP
     }

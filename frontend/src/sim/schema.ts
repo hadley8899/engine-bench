@@ -8,8 +8,11 @@ import { z } from 'zod'
  * injection) with wall-film fuel transport and mixture limits.
  * 1.5.0: the rev limiter cuts fuel (injection stops) or spark (fuel still
  * flows and leaves unburned); exhaust systems and sound (no physics change).
+ * 1.6.0: fuel grades, an end-gas knock estimate, optional ECU knock control
+ * and an optional predictive burn rate. Builds without a combustion block
+ * keep 1.5.0 behaviour.
  */
-export const MODEL_VERSION = 'eb-0d-1.5.0'
+export const MODEL_VERSION = 'eb-0d-1.6.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -17,6 +20,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.2.0',
   'eb-0d-1.3.0',
   'eb-0d-1.4.0',
+  'eb-0d-1.5.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -159,6 +163,33 @@ export const exhaustDefaults: Exhaust = {
   tailpipeLength: 2.5,
 }
 
+/**
+ * Fuel, burn rate and knock protection. Knock is always estimated and
+ * reported; only knock control acts on it.
+ */
+export const combustionSchema = z.strictObject({
+  /** Fixed: the burn always takes burnDuration. Predictive: burnDuration is
+   * the 3,000 RPM full-load reference and the burn speeds up or slows with
+   * speed, charge density, mixture and residual gas. */
+  burnRate: z.enum(['fixed', 'predictive']),
+  fuel: z.enum(['ron91', 'ron95', 'ron98', 'e85']),
+  /** ECU knock sensing: retards the knocking cylinder, then creeps back. */
+  knockControl: z.boolean(),
+})
+export type Combustion = z.infer<typeof combustionSchema>
+export type FuelGrade = Combustion['fuel']
+/** What builds saved before 1.6.0 receive: unchanged 1.5.0 behaviour. */
+export const legacyCombustion: Combustion = {
+  burnRate: 'fixed',
+  fuel: 'ron95',
+  knockControl: false,
+}
+export const combustionDefaults: Combustion = {
+  burnRate: 'predictive',
+  fuel: 'ron95',
+  knockControl: true,
+}
+
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
@@ -194,6 +225,8 @@ export const engineSchema = z.strictObject({
   fuelSystem: fuelSystemSchema.default(fuelSystemDefaults.port),
   // Builds saved before exhaust systems existed get the road exhaust.
   exhaust: exhaustSchema.default(exhaustDefaults),
+  // Builds saved before 1.6.0 keep a fixed burn and no knock control.
+  combustion: combustionSchema.default(legacyCombustion),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -291,6 +324,7 @@ export const roadEngine: EngineDefinition = {
   induction: { kind: 'none' },
   fuelSystem: fuelSystemDefaults.port,
   exhaust: exhaustDefaults,
+  combustion: combustionDefaults,
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {
@@ -333,6 +367,10 @@ export const sampleSchema = z.strictObject({
   torque: z.number().finite(),
   power: z.number().finite(),
   absorbedTorque: z.number().finite(),
+  /** Highest knock index of any cylinder over the sample (1 = onset); 1.6.0+. */
+  knock: z.number().min(0).max(100).optional(),
+  /** Mean ECU knock retard over the sample, degrees; 1.6.0+. */
+  retard: z.number().min(0).max(90).optional(),
 })
 export const runSchema = z.strictObject({
   schemaVersion: z.literal(1),

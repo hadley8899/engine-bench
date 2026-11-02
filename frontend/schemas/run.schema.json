@@ -14,7 +14,8 @@
         "eb-0d-1.2.0",
         "eb-0d-1.3.0",
         "eb-0d-1.4.0",
-        "eb-0d-1.5.0"
+        "eb-0d-1.5.0",
+        "eb-0d-1.6.0"
       ]
     },
     "id": {
@@ -499,6 +500,41 @@
           ],
           "additionalProperties": false
         },
+        "combustion": {
+          "default": {
+            "burnRate": "fixed",
+            "fuel": "ron95",
+            "knockControl": false
+          },
+          "type": "object",
+          "properties": {
+            "burnRate": {
+              "type": "string",
+              "enum": [
+                "fixed",
+                "predictive"
+              ]
+            },
+            "fuel": {
+              "type": "string",
+              "enum": [
+                "ron91",
+                "ron95",
+                "ron98",
+                "e85"
+              ]
+            },
+            "knockControl": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "burnRate",
+            "fuel",
+            "knockControl"
+          ],
+          "additionalProperties": false
+        },
         "firingOrder": {
           "type": "array",
           "prefixItems": [
@@ -672,6 +708,16 @@
           },
           "absorbedTorque": {
             "type": "number"
+          },
+          "knock": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "retard": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 90
           }
         },
         "required": [

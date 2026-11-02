@@ -478,6 +478,41 @@
           ],
           "additionalProperties": false
         },
+        "combustion": {
+          "default": {
+            "burnRate": "fixed",
+            "fuel": "ron95",
+            "knockControl": false
+          },
+          "type": "object",
+          "properties": {
+            "burnRate": {
+              "type": "string",
+              "enum": [
+                "fixed",
+                "predictive"
+              ]
+            },
+            "fuel": {
+              "type": "string",
+              "enum": [
+                "ron91",
+                "ron95",
+                "ron98",
+                "e85"
+              ]
+            },
+            "knockControl": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "burnRate",
+            "fuel",
+            "knockControl"
+          ],
+          "additionalProperties": false
+        },
         "firingOrder": {
           "type": "array",
           "prefixItems": [

@@ -49,6 +49,10 @@ import { NumberField } from './NumberField'
 import { InductionEditor } from './InductionEditor'
 import { FuelSystemEditor } from './FuelSystemEditor'
 import { ExhaustEditor } from './ExhaustEditor'
+import { CombustionEditor } from './CombustionEditor'
+import { describeCombustion } from './combustionFields'
+import { KnockStrip } from './KnockStrip'
+import { FUELS } from '../sim/fuel'
 import { describeExhaust, exhaustErrors } from './exhaustFields'
 import { Gauges } from './Gauges'
 import { RoadControls } from './RoadControls'
@@ -203,7 +207,7 @@ const numericFields: {
     min: 5,
     max: 38,
     step: 1,
-    help: 'Timing before firing top dead centre.',
+    help: 'Timing before firing top dead centre. More advance raises cylinder pressure and knock; past the best timing (MBT) torque falls again.',
   },
   {
     key: 'burnDuration',
@@ -213,7 +217,7 @@ const numericFields: {
     min: 35,
     max: 75,
     step: 1,
-    help: 'Wiebe combustion duration.',
+    help: 'Wiebe combustion duration. With a predictive burn rate this is the 3,000 RPM full-load figure.',
   },
   {
     key: 'lambda',
@@ -368,6 +372,7 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
       e.fuelSystem,
     ),
     ...describeExhaust(a.engine.exhaust, e.exhaust),
+    ...describeCombustion(a.engine.combustion, e.combustion),
   )
   if ((a.engine.limiterCut ?? 'fuel') !== e.limiterCut)
     changes.push(
@@ -1238,7 +1243,10 @@ export function BenchPage() {
                         '—'
                       ) : (
                         <>
-                          {(telemetry.fuel.lambda * 14.7).toFixed(1)}
+                          {(
+                            telemetry.fuel.lambda *
+                            FUELS[telemetry.knock.fuel].stoichiometric
+                          ).toFixed(1)}
                           <span>:1</span>
                         </>
                       )}
@@ -1287,6 +1295,7 @@ export function BenchPage() {
                     </strong>
                   </div>
                 </div>
+                <KnockStrip knock={telemetry.knock} />
                 {telemetry.induction.kind !== 'none' && (
                   <div className="stats-strip boost-strip" data-testid="boost">
                     <div>
@@ -1715,6 +1724,17 @@ export function BenchPage() {
                     setDraft((d) => ({
                       ...d,
                       fuelSystem: update(d.fuelSystem),
+                    }))
+                  }
+                />
+                <h3 className="workshop-subheading">Combustion & knock</h3>
+                <CombustionEditor
+                  value={draft.combustion}
+                  disabled={activeTest}
+                  onChange={(update) =>
+                    setDraft((d) => ({
+                      ...d,
+                      combustion: update(d.combustion),
                     }))
                   }
                 />

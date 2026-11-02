@@ -12,6 +12,7 @@ export class DynoTest {
   private sumTorque = 0
   private sumAbsorbed = 0
   private sumRpm = 0
+  private sumRetard = 0
   private count = 0
   private lastBin = 0.8
   private stepTarget: number
@@ -69,11 +70,18 @@ export class DynoTest {
       torque,
       power: (torque * rpm * Math.PI) / 30000,
       absorbedTorque: this.sumAbsorbed / this.count,
+      knock: Math.min(100, this.core.knockPeak),
+      retard: this.sumRetard / this.count,
     })
+    this.clear()
+  }
+  private clear() {
     this.sumTorque = 0
     this.sumAbsorbed = 0
     this.sumRpm = 0
+    this.sumRetard = 0
     this.count = 0
+    this.core.knockPeak = 0
   }
   tick() {
     if (this.run.status !== 'running') return 0
@@ -102,10 +110,13 @@ export class DynoTest {
       return 0
     }
     this.frame++
+    // Knock during warm-up belongs to no sample.
+    if (!testing) this.core.knockPeak = 0
     if (testing) {
       this.sumTorque += this.core.torque
       this.sumAbsorbed += this.core.absorbedTorque
       this.sumRpm += omegaToRpm(this.core.omega)
+      this.sumRetard += this.core.meanRetard()
       this.count++
       this.stageTime += 1 / 48000
       if (p.kind === 'sweep' && time - this.lastBin >= 0.15) {
@@ -134,12 +145,7 @@ export class DynoTest {
           this.stableWindows = 0
         } else if (this.stageTime >= 4)
           this.abort('Steady-state torque did not settle within 4 seconds')
-        else {
-          this.sumTorque = 0
-          this.sumAbsorbed = 0
-          this.sumRpm = 0
-          this.count = 0
-        }
+        else this.clear()
       }
       if (p.kind === 'sweep' && target >= p.endRpm) {
         this.record()

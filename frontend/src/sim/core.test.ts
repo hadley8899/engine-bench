@@ -746,7 +746,9 @@ describe('fuel systems', () => {
     expect(port.after.overrunCut).toBe(false)
     const carburettor = overrun(carb)
     expect(carburettor.during.fuel.overrunCut).toBe(false)
-    expect(carburettor.during.fuel.fuelFlow).toBeGreaterThan(1e-4)
+    // Ten times the injected engine's cut flow; 1.6.0's returned residual
+    // leaves less fresh air to fuel than 1.5.0's 1e-4 kg/s.
+    expect(carburettor.during.fuel.fuelFlow).toBeGreaterThan(5e-5)
   })
   it('a draw-through carburettor feeds a turbo', () => {
     const t = boosted(fuelled(carb, withInduction(turbo)), 5000)

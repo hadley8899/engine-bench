@@ -48,6 +48,8 @@ export class AcousticInput {
   /** Pressure being dumped by a blow-off valve or bypass, 0–1. */
   dump = 0
   surge = false
+  /** Unburned share at knock onset for a cylinder whose burn ended this step. */
+  knock = 0
 }
 
 /** RBJ band-pass with 0 dB peak gain. */
@@ -222,6 +224,9 @@ const SILENCERS = {
   chambered: { gain: 0.6, cutoff: 900, chamber: 0.7, reflection: 0.35 },
 } as const
 
+/** Knock rings down in about 3 ms. */
+const PING_DECAY = Math.exp(-1 / (FS * 0.003))
+
 export class Acoustics {
   listener: Listener = 'tailpipe'
   /** True for about 0.2 s after an afterfire, for display. */
@@ -277,6 +282,10 @@ export class Acoustics {
   private gain = 1
   private chamberGain = 0
   private runnerLength = 0.3
+  /** Knock ping: the end gas rings the cylinder's first circumferential mode. */
+  private pingHz = 6800
+  private pingPhase = 0
+  private pingLevel = 0
 
   constructor(engine: EngineDefinition, ambient: number) {
     this.wallTemperature = ambient
@@ -292,6 +301,8 @@ export class Acoustics {
     this.chamberGain = s.chamber
     this.tailpipe.setReflection(s.reflection)
     this.runnerLength = engine.intakeRunnerLength
+    // f = 1.84·c / (π·B), with c about 950 m/s in the hot charge.
+    this.pingHz = (1.84 * 950) / (Math.PI * engine.bore)
     // Airbox and inlet add to the runner's effective quarter-wave length.
     this.intakeResonance.tune(343 / (4 * (engine.intakeRunnerLength + 0.25)), 4)
     this.retune()
@@ -474,7 +485,20 @@ export class Acoustics {
     this.pressure2 = this.pressure1
     this.pressure1 = p
     const combustion = this.block.process(rise) * 0.8
-    return tick * 3 + combustion * 5
+    if (input.knock > 0) {
+      this.pingLevel = Math.max(this.pingLevel, Math.min(1, 0.3 + input.knock * 3))
+      this.pingPhase = 0
+    }
+    let ping = 0
+    if (this.pingLevel > 1e-4) {
+      // The fundamental with the second circumferential mode (×1.66).
+      ping =
+        this.pingLevel *
+        (Math.sin(this.pingPhase) + 0.5 * Math.sin(this.pingPhase * 1.66))
+      this.pingPhase += (2 * Math.PI * this.pingHz) / FS
+      this.pingLevel *= PING_DECAY
+    }
+    return tick * 3 + combustion * 5 + ping * 0.35
   }
 
   /** Compressor whistle or blower whine, blow-off, bypass and surge flutter. */

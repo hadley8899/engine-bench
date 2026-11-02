@@ -1,5 +1,6 @@
 /** Fictional starting builds with distinct characters. Not production replicas. */
 import {
+  combustionDefaults,
   exhaustDefaults,
   fuelSystemDefaults,
   inductionDefaults,
@@ -37,18 +38,19 @@ export const starterBuilds: StarterBuild[] = [
   {
     label: 'Turbo hot hatch',
     description:
-      'Lower compression, a small quick-spooling turbo and direct injection. Lift off to hear the blow-off valve.',
+      'Lower compression, a small quick-spooling turbo and direct injection on RON 98. Lift off to hear the blow-off valve.',
     engine: {
       ...roadEngine,
       name: 'Workshop 2.0T • Hot hatch',
       compression: 9,
       intakeArea: 0.00075,
       exhaustArea: 0.00065,
-      ignitionAdvance: 16,
+      ignitionAdvance: 14,
       revLimit: 6500,
       mechanicalLimit: 7000,
       induction: { ...inductionDefaults.turbo, boostTarget: 90000 },
       fuelSystem: fuelSystemDefaults.direct,
+      combustion: { ...combustionDefaults, fuel: 'ron98' },
       exhaust: {
         ...exhaustDefaults,
         headerLength: 0.35,

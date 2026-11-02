@@ -44,3 +44,21 @@ export function bandPower(run: Run, [from, to]: [number, number]) {
       (points[i].rpm - points[i - 1].rpm)
   return area / (to - from)
 }
+
+/**
+ * Where a run knocked, from samples recorded by model 1.6.0 or later: the
+ * RPM range with a knock index of 1 or more, the closest approach and the
+ * most ECU retard. Null for runs without knock data.
+ */
+export function knockSummary(run: Run) {
+  const samples = run.samples.filter((s) => s.knock !== undefined)
+  if (!samples.length) return null
+  const knocking = samples.filter((s) => s.knock! >= 1)
+  const worst = samples.reduce((a, b) => (b.knock! > a.knock! ? b : a))
+  return {
+    from: knocking.length ? Math.min(...knocking.map((s) => s.rpm)) : null,
+    to: knocking.length ? Math.max(...knocking.map((s) => s.rpm)) : null,
+    worst: { rpm: worst.rpm, index: worst.knock! },
+    retard: Math.max(...samples.map((s) => s.retard ?? 0)),
+  }
+}

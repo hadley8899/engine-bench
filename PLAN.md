@@ -4,12 +4,12 @@ Updated: 2 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stage 5 are complete. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: its combustion and knock slice is implemented (model 1.6.0). Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
-2. Stage 6, tuning, temperatures and limits: knock, ignition/fuel/boost maps, per-cylinder temperatures, upgradeable parts and failures.
+2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock are implemented (model 1.6.0); ignition/fuel/boost maps, per-cylinder temperatures, upgradeable parts and failures are next.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
@@ -262,16 +262,16 @@ Evidence is in `docs/VERIFICATION.md`. The user accepted the sound after the blo
 
 Acceptance: exhaust-system changes produce audible, explainable differences that physics, sound and the view share from one definition. Offline PCM tests check that the sound stays bounded and that exhaust changes alter its spectrum as intended. The user confirms in a listening session that the new sound is a clear improvement; automated checks do not substitute for this. The quick fixes have browser regression tests. Gauges and live plots add no React updates at audio rate. Audio cost stays inside the measured AudioWorklet budget (`npm run benchmark`).
 
-### 6. Tuning, temperatures and limits
+### 6. Tuning, temperatures and limits — in progress
 
 Requested by the user on 2 November 2026. This stage turns the bench into a tuning sandbox. Knock comes first: without it, extra boost and timing cost nothing, so maps, fuel grade and stronger parts would have no meaning.
 
 Combustion and knock:
 
-- [ ] Make burn duration depend on speed, charge motion and mixture, so the best ignition timing (MBT) moves with RPM and load.
-- [ ] Add an end-gas autoignition (knock) model, for example a Livengood–Wu induction-time integral with a Douaud–Eyzat-type correlation. Base it on end-gas pressure and temperature, fuel octane, mixture and residual gas. Report per-cylinder knock intensity.
-- [ ] Add a fuel grade choice (for example RON 91, 95, 98 and E85, including E85's stoichiometric ratio and charge cooling).
-- [ ] Add optional knock sensing and ECU timing retard, which can be turned off to show unprotected behaviour.
+- [x] Make burn duration depend on speed, charge motion and mixture, so the best ignition timing (MBT) moves with RPM and load. Model 1.6.0's opt-in predictive burn uses a Metghalchi–Keck laminar flame speed wrinkled by turbulence ∝ piston speed. Decision (2 November 2026): to make part load realistic, the predictive burn also returns gas pushed back into the intake runner as residual, with an idle-air integral trim for the diluted idle. Builds saved before 1.6.0 keep the fixed burn and are bit-identical to 1.5.0.
+- [x] Add an end-gas autoignition (knock) model, for example a Livengood–Wu induction-time integral with a Douaud–Eyzat-type correlation. Base it on end-gas pressure and temperature, fuel octane, mixture and residual gas. Report per-cylinder knock intensity. Knock is reported per cylinder, per cycle (index and intensity), recorded in dyno samples and heard as a ping. Decision: in this slice knock changes no cycle physics; its consequences are ECU retard now and damage when failures arrive.
+- [x] Add a fuel grade choice (for example RON 91, 95, 98 and E85, including E85's stoichiometric ratio and charge cooling).
+- [x] Add optional knock sensing and ECU timing retard, which can be turned off to show unprotected behaviour.
 
 Engine management:
 

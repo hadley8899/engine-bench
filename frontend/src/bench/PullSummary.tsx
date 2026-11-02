@@ -3,7 +3,7 @@ import type { Run } from '../sim/schema'
 import { NumberField } from './NumberField'
 import { formatFixed, fromKw, fromNm } from './units'
 import type { PowerUnit, TorqueUnit } from './units'
-import { bandPower, peaks } from './pullStats'
+import { bandPower, knockSummary, peaks } from './pullStats'
 
 const signed = (value: number, digits: number) =>
   `${value > 0 ? '+' : ''}${formatFixed(value, digits)}`
@@ -29,6 +29,7 @@ export function PullSummary({
   const b = compare ? peaks(compare) : null
   const mean = bandPower(run, band)
   const baseMean = compare ? bandPower(compare, band) : null
+  const knock = knockSummary(run)
   return (
     <div className="run-summary" data-testid="run-summary">
       <Stack direction="row" spacing={1} alignItems="center">
@@ -97,6 +98,26 @@ export function PullSummary({
           </b>
         )}
       </p>
+      {knock && (
+        <p data-testid="knock-summary">
+          {knock.from === null ? (
+            <>
+              No knock. Closest: {Math.round(knock.worst.index * 100)}% of
+              onset at {Math.round(knock.worst.rpm).toLocaleString()} RPM.
+            </>
+          ) : (
+            <>
+              <b className="knock-warning">
+                Knocked from {Math.round(knock.from).toLocaleString()} to{' '}
+                {Math.round(knock.to!).toLocaleString()} RPM
+              </b>{' '}
+              (worst {Math.round(knock.worst.index * 100)}% of onset).
+            </>
+          )}
+          {knock.retard >= 0.5 &&
+            ` The ECU pulled up to ${formatFixed(knock.retard, 1)}° of timing.`}
+        </p>
+      )}
       {run.reason && <p>{run.reason}</p>}
     </div>
   )

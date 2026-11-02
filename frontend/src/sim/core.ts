@@ -2,6 +2,7 @@ import { conditionsSchema, displacement, validateEngine } from './schema'
 import type {
   Conditions,
   EngineDefinition,
+  FuelGrade,
   Pascals,
   RadiansPerSecond,
 } from './schema'
@@ -11,12 +12,7 @@ import type { Listener } from './acoustics'
 import { validateRoad, Vehicle } from './road'
 import type { Road } from './road'
 import type { InductionTelemetry } from './induction'
-import {
-  FuelDelivery,
-  LEAN_MISFIRE,
-  RICH_MISFIRE,
-  STOICHIOMETRIC,
-} from './fuel'
+import { FUELS, FuelDelivery, LEAN_MISFIRE, RICH_MISFIRE } from './fuel'
 import type { FuelTelemetry } from './fuel'
 import {
   atmosphere,
@@ -42,6 +38,25 @@ const WALL_ABOVE_COOLANT = 80
 const FMEP_STATIC = 60000
 const FMEP_LINEAR = 4200
 const FMEP_QUADRATIC = 430
+/**
+ * Douaud–Eyzat ignition delay, τ = A·(ON/100)^3.402·p^-1.7·exp(3800/T) with
+ * p in atm, scaled by a calibration factor for this model's lumped end gas.
+ */
+const KNOCK_DELAY = 17.68e-3 * 3.3
+/** (γ − 1)/γ for isentropic compression of the unburned end gas. */
+const END_GAS_EXPONENT = 0.248
+/** The knock window closes once this much of the charge has burned. */
+const KNOCK_WINDOW_BURN = 0.98
+/** Unburned share at onset that a knock sensor detects. */
+const KNOCK_SENSED = 0.03
+/** ECU retard per detected knock event, its limit and recovery rate. */
+const RETARD_STEP = 2
+const RETARD_LIMIT = 12
+const RETARD_RECOVERY = 1.5
+/** C in S_T/S_L = 1 + C·(Ū_p/S_L)^0.7, with turbulence intensity taken as ∝ Ū_p. */
+const TURBULENCE = 2.5
+/** Idle-air integral gain, throttle per RPM-second. */
+const IDLE_INTEGRAL = 0.0003
 
 export type Controls = {
   throttle: number
@@ -78,6 +93,7 @@ export type Telemetry = {
   exhaustWall: number
   /** Road speed (km/h) and gear while road load is on. */
   road: { speed: number; gear: number } | null
+  knock: KnockTelemetry
 }
 interface Cylinder {
   mass: number
@@ -94,6 +110,42 @@ interface Cylinder {
   runner: number
   /** Flammable fuel left unburned by a misfire or cut spark, kg; leaves with the exhaust. */
   unburned: number
+  /** Spark angle (rad) and burn duration (deg) of the current burn. */
+  spark: number
+  duration: number
+  sparked: boolean
+  /** ECU knock retard, degrees. */
+  retard: number
+  /** Livengood–Wu integral since intake closing; 1 = end-gas autoignition. */
+  knock: number
+  knockOpen: boolean
+  /** Unburned share when the integral reached 1, or −1 before onset. */
+  knockOnset: number
+  /** 1 / ignition-delay prefactor for this cycle's mixture, 1/s. */
+  knockRate: number
+  ivcPressure: number
+  ivcTemperature: number
+  /** Results of the last completed cycle. */
+  knockIndex: number
+  knockIntensity: number
+  /** Gas pushed back into the runner, its fresh air and its fuel, kg. */
+  pushed: number
+  pushedFresh: number
+  pushedFuel: number
+}
+export type KnockTelemetry = {
+  fuel: FuelGrade
+  control: boolean
+  /** Per cylinder, last cycle: the knock integral, where 1 is onset. */
+  index: number[]
+  /** Per cylinder, last cycle: unburned share of the charge at onset. */
+  intensity: number[]
+  /** Per cylinder ECU retard, degrees. */
+  retard: number[]
+  /** Per cylinder burn duration of the last burn, degrees. */
+  burn: number[]
+  /** Knock in any cylinder within the last 0.3 s. */
+  knocking: boolean
 }
 /** Original 0D research prototype. All hosts advance this exact core at 48 kHz. */
 export class EngineCore {
@@ -152,6 +204,23 @@ export class EngineCore {
   private runnerGain: number
   /** The limiter cuts ignition rather than fuel. */
   private sparkCut: boolean
+  private grade: (typeof FUELS)[FuelGrade]
+  private knockTime = -Infinity
+  /** Highest knock index since the last read by a dyno test. */
+  knockPeak = 0
+  /** Strongest knock among burns that ended this step, for the sound. */
+  private knockEvent = 0
+  /**
+   * Return gas pushed back into the runner with its own composition, so
+   * burned gas from valve overlap comes back as residual. Predictive burn
+   * only: 1.5.0 re-inducted it as fresh air.
+   */
+  private runnerResidual: boolean
+  private idleTrim = 0
+  private runnerVolume: number
+  private octaneDelay: number
+  private referenceFlame: number
+  private pistonSpeedPerRpm: number
 
   constructor(engine: EngineDefinition, conditions: Conditions) {
     this.engine = validateEngine(engine)
@@ -165,7 +234,17 @@ export class EngineCore {
     // Exhaust-pulse loudness was calibrated on a 2.0 L engine.
     this.audioScale = 0.002 / displacement(engine)
     // Fuel in one full cylinder charge of standard air, for afterfire scale.
-    this.chargeFuel = (displacement(engine) / 4) * (1.2 / STOICHIOMETRIC)
+    this.grade = FUELS[engine.combustion.fuel]
+    this.chargeFuel =
+      (displacement(engine) / 4) * (1.2 / this.grade.stoichiometric)
+    this.runnerResidual = engine.combustion.burnRate === 'predictive'
+    this.octaneDelay = KNOCK_DELAY * (this.grade.octane / 100) ** 3.402
+    this.pistonSpeedPerRpm = (2 * engine.stroke) / 60
+    // burnDuration is quoted for gasoline at 3,000 RPM and full load.
+    this.referenceFlame = turbulentFlame(
+      laminarFlame(FUELS.ron95.flame, 1, 700, 1.5e6, 0.08),
+      this.pistonSpeedPerRpm * 3000,
+    )
     this.acoustics = new Acoustics(engine, conditions.temperature)
     this.intakeEnthalpy = enthalpy(conditions.temperature)
     this.exhaustEnthalpy = enthalpy(EXHAUST_BACKFLOW_TEMPERATURE)
@@ -178,6 +257,10 @@ export class EngineCore {
     // Runner diameter about 0.39 × bore, and never narrower than the valve.
     const runnerArea = Math.max(0.15 * this.pistonArea, 1.2 * engine.intakeArea)
     this.runnerGain = runnerArea / engine.intakeRunnerLength
+    this.runnerVolume = Math.min(
+      runnerArea * engine.intakeRunnerLength,
+      (this.pistonArea * engine.stroke) / 2,
+    )
     this.sparkCut =
       engine.limiterCut === 'spark' || engine.fuelSystem.kind === 'carburettor'
     this.airDensityRatio =
@@ -210,6 +293,21 @@ export class EngineCore {
         volume: g.volume,
         runner: 0,
         unburned: 0,
+        spark: CYCLE - (engine.ignitionAdvance * Math.PI) / 180,
+        duration: engine.burnDuration,
+        sparked: false,
+        retard: 0,
+        knock: 0,
+        knockOpen: false,
+        knockOnset: -1,
+        knockRate: 0,
+        ivcPressure: conditions.pressure,
+        ivcTemperature: conditions.temperature,
+        knockIndex: 0,
+        knockIntensity: 0,
+        pushed: 0,
+        pushedFresh: 0,
+        pushedFuel: 0,
       })
     }
   }
@@ -242,6 +340,8 @@ export class EngineCore {
     core.stallTime = previous.stallTime
     core.lambda = previous.lambda
     core.misfireTime = previous.misfireTime
+    core.knockTime = previous.knockTime
+    if (core.runnerResidual) core.idleTrim = previous.idleTrim
     core.maxSubsteps = previous.maxSubsteps
     core.sound = previous.sound
     core.acoustics.adopt(previous.acoustics)
@@ -274,6 +374,21 @@ export class EngineCore {
       cyl.volume = volume
       cyl.pressure = (cyl.mass * R * temperature) / volume
       cyl.runner = old.runner
+      cyl.spark = old.spark
+      cyl.duration = old.duration
+      cyl.sparked = old.sparked
+      cyl.knockIndex = old.knockIndex
+      cyl.knockIntensity = old.knockIntensity
+      cyl.pushed = old.pushed
+      cyl.pushedFresh = old.pushedFresh
+      cyl.pushedFuel = old.pushedFuel
+      if (engine.combustion.knockControl) cyl.retard = old.retard
+      cyl.knock = old.knock
+      cyl.knockOpen = old.knockOpen
+      cyl.knockOnset = old.knockOnset
+      cyl.knockRate = old.knockRate
+      cyl.ivcPressure = old.ivcPressure
+      cyl.ivcTemperature = old.ivcTemperature
     }
     return core
   }
@@ -295,8 +410,21 @@ export class EngineCore {
     else if (rpm < e.revLimit - 220) this.limited = false
     this.warning =
       rpm > e.mechanicalLimit ? 'Estimated mechanical RPM limit exceeded' : ''
+    // Idle air: proportional on speed, plus an integral trim with the
+    // predictive burn, whose diluted idle needs more air than 1.5.0's.
+    if (this.runnerResidual && this.controls.ignition && rpm > 300)
+      this.idleTrim = clamp(
+        this.idleTrim + (950 - rpm) * IDLE_INTEGRAL * this.dt,
+        0,
+        0.3,
+      )
+    else if (!this.controls.ignition) this.idleTrim = 0
     const idle = this.controls.ignition
-      ? clamp(0.09 + (950 - rpm) * 0.0004, 0, 0.38)
+      ? clamp(
+          0.09 + this.idleTrim + (950 - rpm) * 0.0004,
+          0,
+          this.runnerResidual ? 0.6 : 0.38,
+        )
       : 0
     const throttle = Math.max(this.controls.throttle, idle)
     const induction = this.induction
@@ -353,11 +481,9 @@ export class EngineCore {
         const phase = wrap(this.angle - this.phases[i])
         const deg = (phase * 180) / Math.PI
         const previousDeg = (cyl.phase * 180) / Math.PI
-        if (
-          (previousDeg < e.intakeClose && deg >= e.intakeClose) ||
-          (previousDeg < 370 && deg >= 370)
-        )
-          valveSeats++
+        const intakeClosing =
+          previousDeg < e.intakeClose && deg >= e.intakeClose
+        if (intakeClosing || (previousDeg < 370 && deg >= 370)) valveSeats++
         // Scalar geometry keeps allocations out of the per-sample audio hot path.
         const sin = Math.sin(phase),
           cos = Math.cos(phase)
@@ -408,10 +534,22 @@ export class EngineCore {
             )
             const dm = flow * dt
             cyl.mass += dm
-            cyl.fresh += dm
-            cyl.fuel += dm * fuel.fuelPerAir
             cyl.energy += dm * (intakeEnthalpy - fuel.cylinderCooling)
-            freshMass += dm
+            // Gas pushed back earlier returns first, as it left.
+            const back = Math.min(dm, cyl.pushed)
+            if (back > 0) {
+              const share = back / cyl.pushed
+              const fresh = cyl.pushedFresh * share
+              const burned = cyl.pushedFuel * share
+              cyl.fresh += fresh
+              cyl.fuel += burned
+              cyl.pushed -= back
+              cyl.pushedFresh -= fresh
+              cyl.pushedFuel -= burned
+            }
+            cyl.fresh += dm - back
+            cyl.fuel += (dm - back) * fuel.fuelPerAir
+            freshMass += dm - back
           } else {
             flow = Math.max(
               flow,
@@ -420,6 +558,22 @@ export class EngineCore {
             )
             const dm = -flow * dt
             const kept = 1 - dm / cyl.mass
+            if (this.runnerResidual) {
+              cyl.pushed += dm
+              cyl.pushedFresh += cyl.fresh * (1 - kept)
+              cyl.pushedFuel += cyl.fuel * (1 - kept)
+              // Only the gas near the valve returns as it left: up to the
+              // runner's volume or half the swept volume. The rest mixes
+              // into the plenum and returns as fresh charge.
+              const room =
+                (this.runnerVolume * this.manifold) / (R * intakeTemperature)
+              if (cyl.pushed > room) {
+                const share = room / cyl.pushed
+                cyl.pushed = room
+                cyl.pushedFresh *= share
+                cyl.pushedFuel *= share
+              }
+            }
             cyl.fresh *= kept
             cyl.fuel *= kept
             cyl.mass -= dm
@@ -468,21 +622,33 @@ export class EngineCore {
             exhaustEnergy -= dm * backEnthalpy
           }
         }
-        const ignition = CYCLE - (e.ignitionAdvance * Math.PI) / 180
+        const advance = Math.max(1, e.ignitionAdvance - cyl.retard)
+        const ignition = CYCLE - (advance * Math.PI) / 180
         if (cyl.phase < ignition && phase >= ignition) {
           // Fuel delivered with the charge; extra O2 can only burn available fuel.
           const lambda =
-            cyl.fuel > 0 ? cyl.fresh / (STOICHIOMETRIC * cyl.fuel) : Infinity
-          const burnable = Math.min(cyl.fuel, (cyl.fresh * this.oxygen) / 3.43)
+            cyl.fuel > 0
+              ? cyl.fresh / (this.grade.stoichiometric * cyl.fuel)
+              : Infinity
+          const burnable = Math.min(
+            cyl.fuel,
+            (cyl.fresh * this.oxygen) / this.grade.oxygen,
+          )
           const fires =
             this.controls.ignition && !(this.limited && this.sparkCut)
           const ignites = lambda <= LEAN_MISFIRE && lambda >= RICH_MISFIRE
-          cyl.heat = fires && ignites ? burnable * 43e6 * 0.96 : 0
+          cyl.heat = fires && ignites ? burnable * this.grade.heating * 0.96 : 0
+          cyl.spark = ignition
+          cyl.sparked = true
+          cyl.duration =
+            e.combustion.burnRate === 'fixed'
+              ? e.burnDuration
+              : this.burnAngle(cyl, lambda, temperature, pressure, rpm)
           // Unlit fuel leaves with the exhaust, weighted by how readily it
           // can afterfire: a charge too lean to light here barely burns
           // there, and fuel beyond the oxygen available needs tailpipe air.
           const flammable =
-            lambda > LEAN_MISFIRE ? 0.1 : lambda < RICH_MISFIRE ? 0.5 : 1
+            lambda > LEAN_MISFIRE ? 0.03 : lambda < RICH_MISFIRE ? 0.5 : 1
           cyl.unburned +=
             fires && ignites
               ? (cyl.fuel - burnable) * 0.3
@@ -500,9 +666,9 @@ export class EngineCore {
           cyl.fresh = 0
           cyl.fuel = 0
         }
-        const elapsed = (wrap(phase - ignition) * 180) / Math.PI
-        if (elapsed < e.burnDuration && cyl.burn < 1) {
-          const burned = wiebe(elapsed / e.burnDuration)
+        const elapsed = (wrap(phase - cyl.spark) * 180) / Math.PI
+        if (elapsed < cyl.duration && cyl.burn < 1) {
+          const burned = wiebe(elapsed / cyl.duration)
           cyl.energy += Math.max(0, burned - cyl.burn) * cyl.heat
           cyl.burn = burned
         }
@@ -533,6 +699,8 @@ export class EngineCore {
             'Cylinder state left the supported model range. Stop and rebuild.',
           )
         pressure = (cyl.mass * R * temperature) / volume
+        if (cyl.knockOpen) this.integrateKnock(cyl, pressure, elapsed, dt)
+        if (intakeClosing) this.closeIntake(cyl, pressure, temperature)
         this.traces[i][Math.min(359, Math.floor(deg / 2))] = pressure
         cyl.pressure = pressure
         cyl.phase = phase
@@ -623,8 +791,10 @@ export class EngineCore {
       input.venting = induction.venting
       input.dump = Math.min(1, (induction.outlet - c.pressure) / 40000)
       input.surge = induction.surge
+      input.knock = this.knockEvent
       sample = this.acoustics.process(input)
     }
+    this.knockEvent = 0
     // Only blame the starter when nothing else resists it: a loaded dyno
     // stalling a cranking engine is reported as an ordinary stall.
     if (
@@ -640,6 +810,9 @@ export class EngineCore {
       this.starterStalled = false
       this.stallTime = 0
     }
+    if (e.combustion.knockControl)
+      for (const cyl of this.cylinders)
+        cyl.retard = Math.max(0, cyl.retard - RETARD_RECOVERY * this.dt)
     this.torque += ((torque - this.torque) * this.dt) / 0.08
     this.time += this.dt
     this.sample++
@@ -650,6 +823,100 @@ export class EngineCore {
         90000) *
       this.dt
     return sample
+  }
+  /**
+   * Burn duration (deg) from a turbulent flame speed: laminar speed from
+   * mixture, unburned-gas state and residual dilution (Metghalchi–Keck),
+   * wrinkled by turbulence that scales with mean piston speed. Scaled so
+   * burnDuration holds at the 3,000 RPM full-load reference.
+   */
+  private burnAngle(
+    cyl: Cylinder,
+    lambda: number,
+    temperature: number,
+    pressure: number,
+    rpm: number,
+  ) {
+    const speed = Math.max(rpm, 300)
+    const residual = clamp(1 - cyl.fresh / cyl.mass, 0, 0.6)
+    const flame = turbulentFlame(
+      laminarFlame(
+        this.grade.flame,
+        clamp(1 / lambda, 0.5, 1.6),
+        temperature,
+        pressure,
+        residual,
+      ),
+      this.pistonSpeedPerRpm * speed,
+    )
+    // The floor only binds for laminar-dominated tiny engines, whose burns
+    // would otherwise leave the calibrated range at idle.
+    const reference = this.engine.burnDuration
+    return clamp(
+      ((reference * speed) / 3000) * (this.referenceFlame / flame),
+      Math.max(25, 0.7 * reference),
+      120,
+    )
+  }
+  /** Start the end-gas ignition-delay integral for the trapped charge. */
+  private closeIntake(cyl: Cylinder, pressure: number, temperature: number) {
+    const lambda =
+      cyl.fuel > 0
+        ? cyl.fresh / (this.grade.stoichiometric * cyl.fuel)
+        : LEAN_MISFIRE
+    const residual = clamp(1 - cyl.fresh / cyl.mass, 0, 0.6)
+    // Rich mixtures and inert residual lengthen the delay; lean shortens it.
+    const mixture = Math.exp(2 * (1 - Math.min(lambda, LEAN_MISFIRE)))
+    cyl.knockRate = 1 / (this.octaneDelay * mixture * (1 + 1.5 * residual))
+    cyl.ivcPressure = pressure
+    cyl.ivcTemperature = temperature
+    cyl.knock = 0
+    cyl.knockOnset = -1
+    cyl.sparked = false
+    cyl.knockOpen = true
+  }
+  /** Livengood–Wu: ∫ dt/τ over the unburned end gas until the burn ends. */
+  private integrateKnock(
+    cyl: Cylinder,
+    pressure: number,
+    elapsed: number,
+    dt: number,
+  ) {
+    const unburned =
+      cyl.ivcTemperature * (pressure / cyl.ivcPressure) ** END_GAS_EXPONENT
+    cyl.knock +=
+      dt *
+      cyl.knockRate *
+      (pressure / 101325) ** 1.7 *
+      Math.exp(-3800 / unburned)
+    if (cyl.knockOnset < 0 && cyl.knock >= 1)
+      cyl.knockOnset = cyl.sparked ? 1 - cyl.burn : 1
+    if (
+      !cyl.sparked ||
+      (cyl.burn < KNOCK_WINDOW_BURN && elapsed < cyl.duration)
+    )
+      return
+    cyl.knockOpen = false
+    // An unlit charge has no flame front to outrun.
+    const fired = cyl.heat > 0
+    cyl.knockIndex = fired ? Math.min(cyl.knock, 100) : 0
+    cyl.knockIntensity = fired ? Math.max(0, cyl.knockOnset) : 0
+    this.knockPeak = Math.max(this.knockPeak, cyl.knockIndex)
+    if (cyl.knockIntensity > 0) {
+      this.knockTime = this.time
+      this.knockEvent = Math.max(this.knockEvent, cyl.knockIntensity)
+    }
+    if (
+      this.engine.combustion.knockControl &&
+      cyl.knockIntensity > KNOCK_SENSED
+    )
+      cyl.retard = Math.min(RETARD_LIMIT, cyl.retard + RETARD_STEP)
+  }
+  /** Mean ECU knock retard across the cylinders, degrees. */
+  meanRetard() {
+    let sum = 0
+    for (const cyl of this.cylinders) sum += cyl.retard
+    return sum / this.cylinders.length
   }
   advance(seconds: number) {
     if (seconds < 0 || seconds > 0.1)
@@ -683,11 +950,40 @@ export class EngineCore {
       ),
       afterfire: this.acoustics.afterfire,
       exhaustWall: this.acoustics.wallTemperature,
+      knock: {
+        fuel: this.engine.combustion.fuel,
+        control: this.engine.combustion.knockControl,
+        index: this.cylinders.map((c) => c.knockIndex),
+        intensity: this.cylinders.map((c) => c.knockIntensity),
+        retard: this.cylinders.map((c) => c.retard),
+        burn: this.cylinders.map((c) => c.duration),
+        knocking: this.time - this.knockTime < 0.3,
+      },
       road: this.controls.road
         ? { speed: this.vehicle.speed * 3.6, gear: this.controls.road.gear }
         : null,
     }
   }
+}
+
+/** Laminar flame speed, m/s (Metghalchi–Keck, residual dilution 1 − 2.06·x^0.77). */
+function laminarFlame(
+  fit: { base: number; curve: number; peak: number },
+  phi: number,
+  temperature: number,
+  pressure: number,
+  residual: number,
+) {
+  return (
+    Math.max(0.05, fit.base + fit.curve * (phi - fit.peak) ** 2) *
+    (temperature / 298) ** 2.18 *
+    (pressure / 101325) ** -0.16 *
+    Math.max(0.1, 1 - 2.06 * residual ** 0.77)
+  )
+}
+/** Turbulent flame speed, S_T = S_L·(1 + C·(u′/S_L)^0.7), m/s. */
+function turbulentFlame(laminar: number, pistonSpeed: number) {
+  return laminar * (1 + TURBULENCE * (pistonSpeed / laminar) ** 0.7)
 }
 
 /**

@@ -171,3 +171,26 @@ The measurements above were taken on `eb-0d-1.0.0`. Model 1.1.0 scales friction 
 - The cutaway draws the exhaust from the same definition: headers to a collector past the flywheel end (further out for longer headers; paired for 4-2-1), then the catalyst, silencer type and tailpipe. It glows with the header wall temperature and flashes on afterfire. Checked in software-WebGL screenshots of the Road (4-1, catalyst, chambered) and Screaming 9k (4-2-1 straight pipe) builds; the first layout hid the cylinders and was rerouted clear of the open cutaway.
 - First user listening check (2 November 2026): "1000x better" overall, but the blow-off valve sounded like TV static and should be deeper; something still sounded slightly off. Cause: the valve was white noise through one fixed 2.5 kHz band, and the modelled valve (sized like the roots bypass, about 3,500 mm²) emptied the charge in under 0.1 s. Fix: a realistically sized valve (about 650 mm²) now vents for about a second after a lift from 0.8 bar, and its sound is a low thump followed by a darker jet whose pitch and level fall as it empties. A Vitest regression checks that it is still venting 0.4 s after the lift and that the jet gets quieter and darker as the dump pressure falls. `npm run sounds` adds a `turbo-blow-off` scenario.
 - Listening sign-off (2 November 2026): after the blow-off rework the user said it "sounds really good for now" and asked to mark the sound as done, with a possible revisit later. This closes Stage 5's listening acceptance.
+
+## Model 1.6.0: Stage 6 combustion and knock
+
+The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock estimate and ECU knock control. Engine-management maps, per-cylinder temperatures, parts and failures are not implemented yet.
+
+- Builds saved before 1.6.0 (no `combustion` block) read as fixed burn, RON 95 and no knock control. Each of the five starting builds, stripped of its combustion block, gave a dyno sweep bit-identical to the committed 1.5.0 core (compared in a separate worktree of commit 3c79f7f). The only change such builds see is sound-only: a lean misfire's afterfire weight fell from 10% to 3%.
+- Vitest (`src/sim/knock.test.ts`, 14 tests) checks the acceptance trends at wide-open throttle:
+  - more spark advance, more boost, lower octane (RON 91 > 95 > 98 > E85), hotter intake air and a leaner mixture each raise the knock index, and enrichment lowers it;
+  - full-load lugging at 1,200 RPM knocks, and the same timing at 4,500 RPM does not;
+  - knock control retards a knocking engine by more than 2°, lowers its intensity and recovers once the knock stops; with control off there is no retard;
+  - an unlit charge reports no knock, and dyno samples record knock and retard;
+  - torque has an interior optimum in spark advance (MBT), and MBT at 6,000 RPM is later than at 1,500 RPM;
+  - the predictive burn lengthens with speed, lean mixture and part load and is near `burnDuration` at 3,000 RPM full load, while the fixed burn keeps `burnDuration`;
+  - E85 meters to its own stoichiometric ratio.
+- Changed existing tests:
+  - The carburettor overrun fuel-flow threshold is now 5e-5 kg/s instead of 1e-4. The returned runner residual leaves less fresh air to fuel, and the value stays ten times the injected engine's cut flow.
+  - The extreme-size idle test still passes. The 20 mm engine idles at 519 RPM with the predictive burn (632 fixed), which depends on the 0.7 × `burnDuration` floor and the runner residual cap.
+- Full Vitest run: 88 passed. Playwright (Chromium and Firefox): the new `tests/stage6.spec.ts` loads the Turbo hot hatch, switches it to RON 91, rebuilds, runs a quick test and expects the summary to report the knock and the ECU retard, then turns knock control off. Full run: 42 passed, 2 storage cases skipped. `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 passed with the re-exported schemas. Build and lint (one existing warning) pass.
+- Benchmark (Node, 128-frame block): median 0.105 ms at 4,000 RPM (0.086 ms in 1.5.0) and 0.194 ms worst case at two substeps (0.155 ms), against a 2.67 ms budget.
+- Chromium (built-in browser pane): the knock strip shows the fuel, knock-control state and each cylinder's knock index. The Turbo hot hatch at 4,500 RPM and full boost (0.93 bar) on RON 98 ran at 94–95% of onset, drawn amber, with no knock. WebGL was unavailable in the pane, so the 3D view was not checked.
+- Seen in passing, not changed: at steady full boost the hot hatch shows AFTERFIRE continuously, in 1.5.0 as well as 1.6.0. At λ 1 about 2% of the fuel finds no oxygen (humid air holds slightly less than the stoichiometric ratio assumes), and the 1,150 K header lights it.
+- Open: the user's own check of how knock feels to tune against, and its ping sound.
+
