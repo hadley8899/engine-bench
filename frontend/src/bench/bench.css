@@ -921,3 +921,19 @@
   font-size: 12px;
   color: #93a6b0;
 }
+.cylinder-temps {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 11px;
+  color: #93a6b0;
+  font-variant-numeric: tabular-nums;
+}
+.cylinder-temps .hot {
+  color: #e3aa63;
+}
+.cylinder-temps .very-hot {
+  color: #ff8fa8;
+  font-weight: 600;
+}

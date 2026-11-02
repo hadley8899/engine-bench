@@ -4,12 +4,12 @@ Updated: 2 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0) and engine management (model 1.7.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0), engine management (1.7.0) and per-cylinder temperatures (1.8.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
-2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0) are implemented; per-cylinder temperatures, upgradeable parts and failures are next.
+2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0) and per-cylinder temperatures (1.8.0) are implemented; upgradeable parts and failures are next.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
@@ -281,8 +281,8 @@ Engine management:
 
 Temperatures:
 
-- [ ] Add lumped per-cylinder thermal states: exhaust gas temperature at the port, piston crown, exhaust valve and head. Make per-cylinder differences come only from modelled causes such as charge, mixture, timing and knock. Do not add cosmetic variation.
-- [ ] Show per-cylinder temperatures and knock in a strip and on the cutaway (heat colours, glowing manifold).
+- [x] Add lumped per-cylinder thermal states: exhaust gas temperature at the port, piston crown, exhaust valve and head. Make per-cylinder differences come only from modelled causes such as charge, mixture, timing and knock. Do not add cosmetic variation. Model 1.8.0. Decision (2 November 2026): the temperatures observe the gas and do not feed back, so results are unchanged. Known gap: the model lacks excess-fuel cooling, so enrichment barely lowers EGT.
+- [x] Show per-cylinder temperatures and knock in a strip and on the cutaway (heat colours, glowing manifold). The strip shows EGT, crown and valve. On the cutaway, pistons glow with crown temperature, knocking chambers flash and the spark follows the ECU's timing. The exhaust already glowed (Stage 5).
 
 Parts and limits:
 

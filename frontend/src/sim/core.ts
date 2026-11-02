@@ -13,6 +13,7 @@ import type {
 } from './schema'
 import { InductionSystem } from './induction'
 import { Acoustics, AcousticInput } from './acoustics'
+import { CylinderThermal } from './thermal'
 import type { Listener } from './acoustics'
 import { validateRoad, Vehicle } from './road'
 import type { Road } from './road'
@@ -62,6 +63,8 @@ const RETARD_RECOVERY = 1.5
 const MIN_ADVANCE = -10
 /** Steps between ECU map lookups. */
 const MAP_INTERVAL = 16
+/** Steps between component temperature updates. */
+const THERMAL_INTERVAL = 48
 /** C in S_T/S_L = 1 + C·(Ū_p/S_L)^0.7, with turbulence intensity taken as ∝ Ū_p. */
 const TURBULENCE = 2.5
 /** Idle-air integral gain, throttle per RPM-second. */
@@ -104,6 +107,13 @@ export type Telemetry = {
   road: { speed: number; gear: number } | null
   knock: KnockTelemetry
   ecu: EcuTelemetry
+  /** Per-cylinder estimated temperatures, K. */
+  temperatures: {
+    egt: number[]
+    crown: number[]
+    valve: number[]
+    head: number[]
+  }
 }
 export type EcuTelemetry = {
   /** Maps in use; otherwise the single values apply. */
@@ -155,6 +165,7 @@ interface Cylinder {
   pushed: number
   pushedFresh: number
   pushedFuel: number
+  thermal: CylinderThermal
 }
 export type KnockTelemetry = {
   fuel: FuelGrade
@@ -245,6 +256,8 @@ export class EngineCore {
   private sparkAdvance: number
   private targetLambda: number
   private mapsRead = false
+  /** One cylinder's exhaust flow at 6,000 RPM with a full standard charge, kg/s. */
+  private exhaustReference: number
   private octaneDelay: number
   private referenceFlame: number
   private pistonSpeedPerRpm: number
@@ -286,6 +299,7 @@ export class EngineCore {
     // Runner diameter about 0.39 × bore, and never narrower than the valve.
     const runnerArea = Math.max(0.15 * this.pistonArea, 1.2 * engine.intakeArea)
     this.runnerGain = runnerArea / engine.intakeRunnerLength
+    this.exhaustReference = ((displacement(engine) / 4) * 1.2 * 6000) / 120
     this.runnerVolume = Math.min(
       runnerArea * engine.intakeRunnerLength,
       (this.pistonArea * engine.stroke) / 2,
@@ -337,6 +351,7 @@ export class EngineCore {
         pushed: 0,
         pushedFresh: 0,
         pushedFuel: 0,
+        thermal: new CylinderThermal(conditions.coolant),
       })
     }
   }
@@ -408,6 +423,7 @@ export class EngineCore {
       cyl.sparked = old.sparked
       cyl.knockIndex = old.knockIndex
       cyl.knockIntensity = old.knockIntensity
+      cyl.thermal.adopt(old.thermal)
       cyl.pushed = old.pushed
       cyl.pushedFresh = old.pushedFresh
       cyl.pushedFuel = old.pushedFuel
@@ -540,7 +556,9 @@ export class EngineCore {
         const previousDeg = (cyl.phase * 180) / Math.PI
         const intakeClosing =
           previousDeg < e.intakeClose && deg >= e.intakeClose
-        if (intakeClosing || (previousDeg < 370 && deg >= 370)) valveSeats++
+        const exhaustClosing = previousDeg < 370 && deg >= 370
+        if (intakeClosing || exhaustClosing) valveSeats++
+        if (exhaustClosing) cyl.thermal.closeExhaust(this.time)
         // Scalar geometry keeps allocations out of the per-sample audio hot path.
         const sin = Math.sin(phase),
           cos = Math.cos(phase)
@@ -660,6 +678,7 @@ export class EngineCore {
             cyl.energy -= h
             portMass += dm
             portEnergy += dm * temperature
+            cyl.thermal.exhaust(dm, temperature)
             exhaustMass += dm
             exhaustEnergy += h
             audio += (dm / this.dt) * 5 * this.audioScale
@@ -746,11 +765,16 @@ export class EngineCore {
           (pressure / 1000) ** 0.8 *
           temperature ** -0.55 *
           gasVelocity
-        cyl.energy -=
+        const wallHeat =
           coefficient *
           surface *
           (temperature - this.coolant - WALL_ABOVE_COOLANT) *
           dt
+        cyl.energy -= wallHeat
+        // The crown and the combustion deck each take their area's share.
+        const deck = (wallHeat * this.pistonArea) / surface
+        cyl.thermal.crownHeat += deck
+        cyl.thermal.headHeat += deck
         temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
         if (
           !Number.isFinite(temperature) ||
@@ -876,6 +900,15 @@ export class EngineCore {
     if (e.combustion.knockControl)
       for (const cyl of this.cylinders)
         cyl.retard = Math.max(0, cyl.retard - RETARD_RECOVERY * this.dt)
+    if (this.sample % THERMAL_INTERVAL === 0)
+      for (const cyl of this.cylinders)
+        cyl.thermal.update(
+          THERMAL_INTERVAL * this.dt,
+          this.coolant,
+          this.pistonArea,
+          this.exhaustReference,
+          cyl.knockIntensity,
+        )
     this.torque += ((torque - this.torque) * this.dt) / 0.08
     this.time += this.dt
     this.sample++
@@ -1021,6 +1054,12 @@ export class EngineCore {
         retard: this.cylinders.map((c) => c.retard),
         burn: this.cylinders.map((c) => c.duration),
         knocking: this.time - this.knockTime < 0.3,
+      },
+      temperatures: {
+        egt: this.cylinders.map((c) => c.thermal.egt),
+        crown: this.cylinders.map((c) => c.thermal.crown),
+        valve: this.cylinders.map((c) => c.thermal.valve),
+        head: this.cylinders.map((c) => c.thermal.head),
       },
       ecu: {
         maps: !!this.engine.management,

@@ -212,3 +212,27 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Full runs: Vitest 102 passed. Playwright 42 passed, 2 storage cases skipped. In that run the new map test failed once in Firefox, because the typed 800 RPM cell interpolated into the idle timing (a test design error, fixed by editing a 6,000 RPM cell), and the existing bench sign-in test failed once in Chromium and passed on retry. Both then passed twice in each browser. `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 passed with the re-exported schemas. Build and lint (one existing warning) pass.
 - Cost (Node, 128-frame block, turbo at 4,000 RPM): 0.171 ms median with maps against 0.145 ms without, after moving map lookups to 3 kHz (0.273 ms when read every step). Standard benchmark: 0.117 ms median at 4,000 RPM, 0.211 ms at 8,400 RPM, against 2.67 ms.
 
+## Model 1.8.0: per-cylinder temperatures
+
+- Results unchanged: for all five starting builds, with and without flat maps, dyno sweeps (torque, knock and retard per sample) were bit-identical to the committed 1.7.0 core.
+- Vitest (`src/sim/thermal.test.ts`, 6 tests):
+  - full-load temperatures sit in plausible ranges (EGT 800–1,000 °C, crown 200–320 °C, valve above 500 °C and below EGT, deck below crown);
+  - every temperature rises with load by more than 20 K;
+  - EGT falls when rich;
+  - retarded timing raises EGT by more than 20 K and lowers the crown;
+  - on two fuels with the same cycle, the knocking one has the hotter crown and the same EGT;
+  - identical cylinders differ by under 1 K;
+  - temperatures carry through a live update, and dyno samples record EGT.
+- Known gap, not hidden by the tests: enrichment from λ 1.0 to 0.85 lowers EGT by only about 5 K and slightly raises the crown temperature, because the excess fuel's mass and chemistry are not modelled. Real engines lose roughly 30–60 K of EGT.
+- Calibration (16 s holds from an 87 °C coolant start, Road engine):
+
+  | Operating point | EGT | Crown | Valve | Deck |
+  | --- | --- | --- | --- | --- |
+  | Idle | 491 °C | 105 °C | 138 °C | 93 °C |
+  | 3,000 RPM, light load | 628 °C | 117 °C | 219 °C | 100 °C |
+  | 3,000 RPM, full load | 807 °C | 201 °C | 435 °C | 149 °C |
+  | 6,000 RPM, full load | 926 °C | 292 °C | 634 °C | 202 °C |
+  | Turbo hot hatch, 5,000 RPM, full boost | 1,012 °C | 348 °C | 759 °C | 234 °C |
+- Chromium (built-in browser pane): with the Turbo hot hatch at 5,000 RPM and full boost, the cylinder strip read EGT 1,008 °C, crown 323–324 °C (amber) and valve 735–739 °C, plus knock at 91% of onset. WebGL was unavailable in the pane, so the piston glow, knock flash and spark timing on the cutaway were type-checked but not seen.
+- Playwright: `tests/stage6.spec.ts` now checks that each cylinder shows EGT, piston and valve temperatures. Full run: 44 passed, 2 storage cases skipped. `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 passed. Vitest: 108 passed. Build and lint (one existing warning) pass. Benchmark: 0.108 ms median at 4,000 RPM and 0.194 ms at 8,400 RPM.
+

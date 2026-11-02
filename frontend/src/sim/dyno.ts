@@ -72,6 +72,7 @@ export class DynoTest {
       absorbedTorque: this.sumAbsorbed / this.count,
       knock: Math.min(100, this.core.knockPeak),
       retard: this.sumRetard / this.count,
+      egt: Math.max(...this.core.cylinders.map((c) => c.thermal.egt)),
     })
     this.clear()
   }

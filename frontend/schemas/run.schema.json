@@ -16,7 +16,8 @@
         "eb-0d-1.4.0",
         "eb-0d-1.5.0",
         "eb-0d-1.6.0",
-        "eb-0d-1.7.0"
+        "eb-0d-1.7.0",
+        "eb-0d-1.8.0"
       ]
     },
     "id": {
@@ -850,6 +851,11 @@
             "type": "number",
             "minimum": 0,
             "maximum": 90
+          },
+          "egt": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4000
           }
         },
         "required": [

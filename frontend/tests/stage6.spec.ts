@@ -59,6 +59,9 @@ test('engine maps drive the timing, and small injectors run out of fuel', async 
   await expect(page.getByTestId('ecu')).toContainText('TIMING · MAP')
   await expect(page.getByTestId('ecu')).toContainText('21.0')
   await expect(page.getByTestId('map-live')).toContainText('Running at')
+  // Estimated temperatures for each cylinder.
+  for (const n of [1, 2, 3, 4])
+    await expect(page.getByTestId(`temps-${n}`)).toContainText(/EGT \d+°.*Piston \d+°.*Valve \d+°/)
 
   // Starve the engine: tiny injectors cannot keep up at full throttle.
   await page.getByLabel('Injector flow, each (cc/min)').fill('60')

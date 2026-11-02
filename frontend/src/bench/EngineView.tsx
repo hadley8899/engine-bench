@@ -231,9 +231,13 @@ export function EngineView({
     crank.rotation.z = Math.PI / 2
     for (let i = 0; i < 4; i++) {
       const x = (i - 1.5) * spacing
+      // Each piston glows with its own estimated crown temperature.
+      const pistonMetal = aluminium.clone()
+      pistonMetal.emissive.setHex(0xff3a10)
+      pistonMetal.emissiveIntensity = 0
       const piston = mesh(
         new THREE.CylinderGeometry(0.475 * u, 0.465 * u, pistonHeight, 40),
-        aluminium,
+        pistonMetal,
         x,
         0.16,
         0,
@@ -898,15 +902,25 @@ export function EngineView({
             ? 0.95
             : 0.72
           : 0.12
+        // A knocking cylinder's chamber flashes white through the power stroke.
+        const knocking =
+          !!t && !options.current.slow && t.knock.intensity[i] > 0 && degrees < 90
+        if (knocking) material.emissive.setHex(0xffffff)
         material.emissiveIntensity =
           (options.current.selected === i ? 1.4 : 0.5) +
-          (options.current.overlays && degrees < 65 ? 1.2 : 0)
-        // Spark flashes from ignition until early in the power stroke.
-        const sinceSpark = wrap(
-          phase + (engine.ignitionAdvance * Math.PI) / 180,
-        )
+          (options.current.overlays && degrees < 65 ? 1.2 : 0) +
+          (knocking ? 2 : 0)
+        // Visible from about 250 °C, bright by 380 °C.
+        ;(pistons[i].material as THREE.MeshStandardMaterial).emissiveIntensity =
+          t ? Math.min(1.2, Math.max(0, (t.temperatures.crown[i] - 523) / 110)) : 0
+        // Spark flashes from ignition until early in the power stroke, at the
+        // timing the ECU is using (map and knock retard included).
+        const advance = t
+          ? t.ecu.advance - t.knock.retard[i]
+          : engine.ignitionAdvance
+        const sinceSpark = wrap(phase + (advance * Math.PI) / 180)
         sparks[i].emissiveIntensity =
-          sinceSpark < (engine.ignitionAdvance + 25) * (Math.PI / 180) ? 6 : 0
+          sinceSpark < (advance + 25) * (Math.PI / 180) ? 6 : 0
         const height = Math.max(0.02 * u, head - y - crown)
         chambers[i].scale.y = height
         chambers[i].position.y = y + crown + height / 2

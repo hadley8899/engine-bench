@@ -14,8 +14,11 @@ import { z } from 'zod'
  * 1.7.0: engine-management maps (ignition, target λ, boost) and fuel
  * supply limits (injectors, pump). Builds without them keep 1.6.0
  * behaviour.
+ * 1.8.0: per-cylinder estimated temperatures (port gas, piston crown,
+ * exhaust valve, combustion deck). They observe the gas and do not change
+ * any result.
  */
-export const MODEL_VERSION = 'eb-0d-1.7.0'
+export const MODEL_VERSION = 'eb-0d-1.8.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -25,6 +28,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.4.0',
   'eb-0d-1.5.0',
   'eb-0d-1.6.0',
+  'eb-0d-1.7.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -439,6 +443,8 @@ export const sampleSchema = z.strictObject({
   knock: z.number().min(0).max(100).optional(),
   /** Mean ECU knock retard over the sample, degrees; 1.6.0+. */
   retard: z.number().min(0).max(90).optional(),
+  /** Hottest cylinder's exhaust port gas temperature over the sample, K; 1.8.0+. */
+  egt: z.number().min(0).max(4000).optional(),
 })
 export const runSchema = z.strictObject({
   schemaVersion: z.literal(1),

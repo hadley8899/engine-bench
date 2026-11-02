@@ -1359,7 +1359,10 @@ export function BenchPage() {
                     </strong>
                   </div>
                 </div>
-                <KnockStrip knock={telemetry.knock} />
+                <KnockStrip
+                  knock={telemetry.knock}
+                  temperatures={telemetry.temperatures}
+                />
                 {telemetry.induction.kind !== 'none' && (
                   <div className="stats-strip boost-strip" data-testid="boost">
                     <div>
