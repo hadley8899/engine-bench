@@ -25,7 +25,7 @@ The 1.2.0 constants (Woschni factor, wall temperature, friction coefficients) an
 | Road (86 × 86 mm, 300 mm runner) | 193 Nm at 4,500 RPM (BMEP 1.22 MPa) | 110 kW at 6,000 RPM | 176 Nm | 86 bar |
 | Sport (240 mm runner, later intake closing) | 186 Nm at 5,500–6,000 RPM | 131 kW at 7,000 RPM | 165 Nm | 100 bar |
 
-Before 1.2.0 the Road preset made 281 Nm at 1,500 RPM (BMEP 1.77 MPa, about 55% brake efficiency) and fell steadily with speed because its valve areas choked flow from about 2,500 RPM. Neither preset replicates a production engine. Validation against a sourced reference torque curve is still Stage 4 work. Ignition timing is fixed and burn duration does not change with speed, so the best timing at one speed is not the best at another.
+Before 1.2.0 the Road preset made 281 Nm at 1,500 RPM (BMEP 1.77 MPa, about 55% brake efficiency) and fell steadily with speed because its valve areas choked flow from about 2,500 RPM. Neither preset replicates a production engine. Validation against a sourced reference torque curve is Stage 7 work. Ignition timing is fixed and burn duration does not change with speed, so the best timing at one speed is not the best at another.
 
 ## Forced induction
 
