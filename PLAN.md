@@ -8,7 +8,7 @@ Phases 1–3 are implemented. Phase 2's human first-use check remains open and d
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
-1. Stage 5, bench feel and usability: quick fixes, gauges, sound and keyboard shortcuts.
+1. Stage 5, sound and bench feel: a sound rework first (exhaust system, intake and mechanical noise, overrun pops), then quick fixes, gauges and keyboard shortcuts.
 2. Stage 6, tuning, temperatures and limits: knock, ignition/fuel/boost maps, per-cylinder temperatures, upgradeable parts and failures.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
@@ -225,9 +225,18 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 
 The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 11 and layouts to Stage 10.
 
-### 5. Bench feel and usability — next
+### 5. Sound and bench feel — next
 
-From the 2 November 2026 review of the running bench, which the user accepted. Fix the friction first, then make the bench more satisfying to drive and listen to.
+From the 2 November 2026 review of the running bench, which the user accepted. Decision (2 November 2026, user request): reworking the sound is the headline of this stage and comes first. It matters more to how fun the bench feels than any other item. The quick fixes are small and can go in alongside it.
+
+Sound (first):
+
+- [ ] Add an exhaust system to the build (header length, collector, catalyst, silencer, tailpipe) and an acoustic model of it: delay-line pipe resonances, silencer filtering and tailpipe radiation. The current sound is exhaust mass flow through a one-pole filter, a high-pass and soft clipping, with no pipe character.
+- [ ] Add intake induction noise and mechanical/valvetrain noise, mixed by throttle and load so idle, part throttle, full load and overrun sound distinct.
+- [ ] Add overrun pops and crackle driven by the simulation (unburned fuel reaching a hot exhaust after cut or misfire), not by random triggers.
+- [ ] Improve the forced-induction sounds: spool-up whistle, blow-off and, with the blow-off valve removed, compressor flutter from modelled surge.
+- [ ] Add listening positions, such as the tailpipe, the engine bay and the test cell with room reverb. Recheck the licence of any impulse response used.
+- [ ] Record whether the acoustic exhaust only shapes sound or also affects gas exchange. Wave-tuned breathing needs the quasi-1D pipe solver planned for the two-stroke (`docs/TWO_STROKE.md`); share it with four-stroke headers once it exists.
 
 Quick fixes:
 
@@ -242,20 +251,14 @@ Feel and feedback:
 - [ ] Analogue tachometer with limiter and estimated-mechanical-limit marks, plus boost, λ and temperature gauges, drawn outside React's render loop.
 - [ ] During a live pull, plot torque and power against RPM as the pull runs, with a peak marker.
 - [ ] After each run, show a pull summary card: peak power and torque, where they occur, the change against Baseline and the area under the curve over a chosen RPM band.
-- [ ] Add more fictional starting builds with distinct characters, such as "Turbo hot hatch", "Torquey long-stroke" and "Screaming 9k". Label them as fictional.
+- [ ] Add more fictional starting builds with distinct characters, such as "Turbo hot hatch", "Torquey long-stroke" and "Screaming 9k". Give each a distinct exhaust so it also sounds different. Label them as fictional.
 - [ ] Add keyboard shortcuts for start/stop, starting a test, swapping Baseline/Modified and auditioning, with a discoverable shortcut list. Do not trigger them from inside form fields.
-
-Sound:
-
-- [ ] Add an exhaust system to the build (header length, collector, catalyst, silencer, tailpipe) and an acoustic model of it: delay-line pipe resonances, silencer filtering and tailpipe radiation. Add intake induction noise and mechanical/valvetrain noise.
-- [ ] Add overrun pops and crackle driven by the simulation (unburned fuel reaching a hot exhaust after cut or misfire), not by random triggers.
-- [ ] Record whether the acoustic exhaust only shapes sound or also affects gas exchange. Wave-tuned breathing needs the quasi-1D pipe solver planned for the two-stroke (`docs/TWO_STROKE.md`); share it with four-stroke headers once it exists.
 
 Something to drive against:
 
 - [ ] Add an optional simple road-load mode to the dyno: vehicle mass, gear ratios, rolling resistance and aerodynamic drag, applied as crank load. Gear changes and turbo lag then come naturally instead of from the load slider. This is a load model for the bench, not a vehicle or drivetrain simulator. Keep reporting crank output only; do not invent wheel power.
 
-Acceptance: the quick fixes have browser regression tests. Exhaust-system changes produce audible, explainable differences that physics, sound and the view share from one definition. Gauges and live plots add no React updates at audio rate. Audio cost stays inside the measured AudioWorklet budget (`npm run benchmark`).
+Acceptance: exhaust-system changes produce audible, explainable differences that physics, sound and the view share from one definition. Offline PCM tests check that the sound stays bounded and that exhaust changes alter its spectrum as intended. The user confirms in a listening session that the new sound is a clear improvement; automated checks do not substitute for this. The quick fixes have browser regression tests. Gauges and live plots add no React updates at audio rate. Audio cost stays inside the measured AudioWorklet budget (`npm run benchmark`).
 
 ### 6. Tuning, temperatures and limits
 
