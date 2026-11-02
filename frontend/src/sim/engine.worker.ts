@@ -39,6 +39,8 @@ scope.onmessage = ({ data }) => {
         data.id,
         data.runtime,
       )
+      // Headless tests discard audio; sound never affects the physics.
+      active.core.sound = false
       const batch = () => {
         if (!active || task !== generation) return
         active.advance(4800)

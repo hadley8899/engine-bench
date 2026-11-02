@@ -1,5 +1,6 @@
 import workletUrl from '../sim/engine.worklet.ts?worker&url'
 import type { HostEvent, HostMessage } from '../sim/messages'
+import type { Listener } from '../sim/acoustics'
 
 export class BenchAudio {
   context: AudioContext | null = null
@@ -8,6 +9,7 @@ export class BenchAudio {
   private init: Promise<void> | null = null
   onEvent: (event: HostEvent) => void = () => {}
   volume = 0.25
+  listener: Listener = 'tailpipe'
   async enable() {
     if (!this.context) {
       this.context = new AudioContext({
@@ -33,6 +35,10 @@ export class BenchAudio {
           .connect(limiter)
           .connect(this.gain)
           .connect(context.destination)
+        this.node.port.postMessage({
+          type: 'listener',
+          value: this.listener,
+        } satisfies HostMessage)
         this.node.port.onmessage = (e: MessageEvent<HostEvent>) =>
           this.onEvent(e.data)
         this.node.onprocessorerror = () =>
@@ -48,6 +54,10 @@ export class BenchAudio {
   }
   send(message: HostMessage) {
     this.node?.port.postMessage(message)
+  }
+  setListener(listener: Listener) {
+    this.listener = listener
+    this.send({ type: 'listener', value: listener })
   }
   setVolume(volume: number) {
     this.volume = volume

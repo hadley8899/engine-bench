@@ -686,6 +686,124 @@ export function EngineView({
           injector(0, plenumY + 0.86 * u, plenumZ, 0)
       }
     }
+    // Exhaust system on the +z side, drawn from the build's exhaust settings:
+    // headers sized by length, a 4-1 or 4-2-1 merge, catalyst, silencer and
+    // tailpipe. It glows with the header wall temperature and flashes on
+    // afterfire; both come from telemetry.
+    const exhaust = engine.exhaust
+    const hotPipe = new THREE.MeshStandardMaterial({
+      color: 0x6b5d52,
+      metalness: 0.75,
+      roughness: 0.35,
+      emissive: 0xff4a12,
+      emissiveIntensity: 0,
+    })
+    const flash = new THREE.MeshStandardMaterial({
+      color: 0xffb347,
+      emissive: 0xff8a1f,
+      emissiveIntensity: 0,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    })
+    const pipeRadius = 0.11 * u
+    const tube = (points: THREE.Vector3[], radius = pipeRadius) => {
+      const curve = new THREE.CatmullRomCurve3(points)
+      mesh(new THREE.TubeGeometry(curve, 24, radius, 12), hotPipe, 0, 0, 0)
+    }
+    // Headers run across the top front of the head to a collector past the
+    // flywheel end, keeping the open cutaway clear; longer headers put the
+    // collector further out. The system then runs back along that side.
+    const portY = head + 0.18 * u
+    const frontZ = 0.95 * u
+    const ports = [0, 1, 2, 3].map(
+      (i) => new THREE.Vector3((i - 1.5) * spacing, portY, 0.4 * u),
+    )
+    const bend = (p: THREE.Vector3) =>
+      new THREE.Vector3(p.x, portY + 0.14 * u, frontZ)
+    const headerReach =
+      Math.min(3, Math.max(0.4, exhaust.headerLength / 0.5)) * 0.7 * u
+    const collector = new THREE.Vector3(
+      width / 2 + 0.9 * u + headerReach,
+      portY,
+      frontZ,
+    )
+    if (exhaust.collector === '4-2-1') {
+      // Cylinders 1 and 4, and 2 and 3, pair up (180° apart in the firing order).
+      const pairs = [
+        [0, 3, 0.18],
+        [1, 2, -0.18],
+      ]
+      for (const [a, b, lift] of pairs) {
+        const merge = new THREE.Vector3(
+          (ports[b].x + collector.x) / 2,
+          portY + 0.14 * u + lift * u,
+          frontZ + 0.1 * u,
+        )
+        for (const i of [a, b]) tube([ports[i], bend(ports[i]), merge])
+        tube([merge, collector], pipeRadius * 1.25)
+      }
+    } else
+      for (const port of ports) tube([port, bend(port), collector])
+    // Down past the flywheel, then back along the side: catalyst, silencer, tip.
+    const runY = Math.max(groundY + 0.25 * u, baseY - 0.2 * u)
+    const length = Math.min(
+      2.2 * u * 3,
+      Math.max(1.6 * u, (exhaust.tailpipeLength / 2.5) * 4.4 * u),
+    )
+    const runX = collector.x
+    const endZ = frontZ - length
+    tube(
+      [
+        collector,
+        new THREE.Vector3(runX, (collector.y + runY) / 2, frontZ),
+        new THREE.Vector3(runX, runY, frontZ - 0.3 * u),
+        new THREE.Vector3(runX, runY, endZ),
+      ],
+      pipeRadius * 1.3,
+    )
+    const along = (share: number) => frontZ - 0.3 * u - share * (length - 0.3 * u)
+    if (exhaust.catalyst)
+      mesh(
+        new THREE.CylinderGeometry(0.3 * u, 0.3 * u, 0.7 * u, 24),
+        ceramic,
+        runX,
+        runY,
+        along(0.2),
+      ).rotation.x = Math.PI / 2
+    if (exhaust.silencer !== 'straight') {
+      const chambered = exhaust.silencer === 'chambered'
+      const can = mesh(
+        new THREE.CylinderGeometry(
+          chambered ? 0.42 * u : 0.26 * u,
+          chambered ? 0.42 * u : 0.26 * u,
+          chambered ? 1.1 * u : 1.5 * u,
+          32,
+        ),
+        chambered ? steel : aluminium,
+        runX,
+        runY,
+        along(0.68),
+      )
+      can.rotation.x = Math.PI / 2
+      if (chambered) can.scale.set(1, 1, 0.7)
+    }
+    const tip = mesh(
+      new THREE.CylinderGeometry(pipeRadius * 1.6, pipeRadius * 1.3, 0.3 * u, 20),
+      steel,
+      runX,
+      runY,
+      endZ,
+    )
+    tip.rotation.x = Math.PI / 2
+    const fire = mesh(
+      new THREE.SphereGeometry(0.35 * u, 16, 12),
+      flash,
+      runX,
+      runY,
+      endZ - 0.35 * u,
+    )
+    fire.castShadow = false
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(1.2 * Math.max(size, 1), 64),
       new THREE.ShadowMaterial({ opacity: 0.35 }),
@@ -808,6 +926,17 @@ export function EngineView({
             : 0)
       }
       flywheel.rotation.x = angle
+      if (t) {
+        // Visible from about 400 °C, bright by 800 °C.
+        hotPipe.emissiveIntensity = Math.min(
+          1.6,
+          Math.max(0, (t.exhaustWall - 673) / 250),
+        )
+        const pop = t.afterfire && !options.current.slow ? 1 : 0
+        flash.opacity += (pop * 0.85 - flash.opacity) * 0.5
+        flash.emissiveIntensity = flash.opacity * 4
+        fire.scale.setScalar(0.6 + flash.opacity)
+      }
       if (t && t.induction.kind !== 'none') {
         // Shown far slower than the real shaft so the rotation stays readable.
         const rate =

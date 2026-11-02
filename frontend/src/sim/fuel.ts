@@ -41,6 +41,8 @@ export type FuelTelemetry = {
   fuelFlow: number
   misfire: boolean
   overrunCut: boolean
+  /** Injection stopped by a fuel-cut rev limiter. */
+  limiterCut: boolean
   /** Fuel held as liquid film on the intake walls, kg. */
   film: number
 }
@@ -64,6 +66,8 @@ export class FuelDelivery {
   /** High-pressure pump torque taken from the crank, Nm. */
   crankTorque = 0
   overrunCut = false
+  /** Set by the core while a fuel-cut rev limiter is active. */
+  limiterCut = false
   film = 0
   airFlow = 0
   private vapour = 0
@@ -159,11 +163,12 @@ export class FuelDelivery {
         if (throttle < 0.01 && rpm > 1800) this.overrunCut = true
         else if (throttle >= 0.01 || rpm < 1400) this.overrunCut = false
       }
-      const command = this.overrunCut ? 0 : this.metered
+      const cut = this.overrunCut || this.limiterCut
+      const command = cut ? 0 : this.metered
       // Inverse film model: inject what the wall will hold back or release.
       const ideal =
         film > 0 ? Math.max(0, (command - vapourPerAir) / (1 - film)) : command
-      this.injected = this.overrunCut
+      this.injected = cut
         ? 0
         : c.transientCorrection
           ? command + ECU_CORRECTION * (ideal - command)
@@ -201,6 +206,7 @@ export class FuelDelivery {
     this.vapour = previous.vapour
     this.airFlow = previous.airFlow
     this.overrunCut = previous.overrunCut
+    this.limiterCut = previous.limiterCut
     this.pumping = previous.pumping
     this.previousThrottle = previous.previousThrottle
     this.inletLoss = previous.inletLoss
@@ -218,6 +224,7 @@ export class FuelDelivery {
       fuelFlow: this.fuelPerAir * Math.max(0, this.airFlow),
       misfire,
       overrunCut: this.overrunCut,
+      limiterCut: this.limiterCut,
       film: this.film,
     }
   }

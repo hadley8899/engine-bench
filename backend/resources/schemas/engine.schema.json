@@ -85,6 +85,14 @@
       "minimum": 1000,
       "maximum": 20000
     },
+    "limiterCut": {
+      "default": "fuel",
+      "type": "string",
+      "enum": [
+        "fuel",
+        "spark"
+      ]
+    },
     "mechanicalLimit": {
       "type": "integer",
       "minimum": 1000,
@@ -414,6 +422,54 @@
           "additionalProperties": false
         }
       ]
+    },
+    "exhaust": {
+      "default": {
+        "headerLength": 0.5,
+        "collector": "4-1",
+        "catalyst": true,
+        "silencer": "chambered",
+        "tailpipeLength": 2.5
+      },
+      "type": "object",
+      "properties": {
+        "headerLength": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 1.5
+        },
+        "collector": {
+          "type": "string",
+          "enum": [
+            "4-1",
+            "4-2-1"
+          ]
+        },
+        "catalyst": {
+          "type": "boolean"
+        },
+        "silencer": {
+          "type": "string",
+          "enum": [
+            "straight",
+            "absorptive",
+            "chambered"
+          ]
+        },
+        "tailpipeLength": {
+          "type": "number",
+          "minimum": 0.3,
+          "maximum": 4
+        }
+      },
+      "required": [
+        "headerLength",
+        "collector",
+        "catalyst",
+        "silencer",
+        "tailpipeLength"
+      ],
+      "additionalProperties": false
     },
     "firingOrder": {
       "type": "array",

@@ -8,6 +8,8 @@ import {
   validateEngine,
 } from '../sim/schema'
 import type { Conditions, EngineDefinition, Run } from '../sim/schema'
+import { LISTENERS } from '../sim/acoustics'
+import type { Listener } from '../sim/acoustics'
 const key = 'engine-bench:guest-experiment:1'
 const stateSchema = z.object({
   engine: engineSchema,
@@ -80,6 +82,32 @@ export function loadLiveUpdates() {
 export function persistLiveUpdates(on: boolean) {
   try {
     localStorage.setItem(liveKey, on ? 'on' : 'off')
+  } catch {
+    // Preference only; the bench works without it.
+  }
+}
+
+/** Per-viewer bench preferences: listening position and display units. */
+const preferencesKey = 'engine-bench:preferences:1'
+const preferencesSchema = z.object({
+  listener: z.enum(LISTENERS).catch('tailpipe'),
+  power: z.enum(['kW', 'hp', 'PS']).catch('kW'),
+  torque: z.enum(['Nm', 'lb·ft']).catch('Nm'),
+})
+export type Preferences = z.infer<typeof preferencesSchema>
+export type { Listener }
+export function loadPreferences(): Preferences {
+  try {
+    return preferencesSchema.parse(
+      JSON.parse(localStorage.getItem(preferencesKey) || '{}'),
+    )
+  } catch {
+    return { listener: 'tailpipe', power: 'kW', torque: 'Nm' }
+  }
+}
+export function persistPreferences(value: Preferences) {
+  try {
+    localStorage.setItem(preferencesKey, JSON.stringify(value))
   } catch {
     // Preference only; the bench works without it.
   }

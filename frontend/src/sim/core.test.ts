@@ -244,6 +244,26 @@ describe('engine integration', () => {
     expect(core.telemetry().torque).toBeLessThan(0)
     expect(core.engine.mechanicalLimit).toBe(roadEngine.mechanicalLimit)
   })
+  it('stops injection on a fuel-cut limiter and lets fuel through on a spark cut', () => {
+    const at = (engine: EngineDefinition) => {
+      const core = new EngineCore(
+        { ...engine, revLimit: 3500 },
+        normalConditions,
+      )
+      core.setControls({ ignition: true, throttle: 1, holdRpm: 4000 })
+      advance(core, 1)
+      return core.telemetry()
+    }
+    const fuel = at(roadEngine)
+    const spark = at({ ...roadEngine, limiterCut: 'spark' })
+    const carb = at({ ...roadEngine, fuelSystem: fuelSystemDefaults.carburettor })
+    expect(fuel.fuel.limiterCut).toBe(true)
+    expect(spark.fuel.limiterCut).toBe(false)
+    // A carburettor cannot stop its fuel, so its limiter cuts the spark.
+    expect(carb.fuel.limiterCut).toBe(false)
+    expect(fuel.fuel.fuelFlow).toBeLessThan(spark.fuel.fuelFlow * 0.3)
+    for (const t of [fuel, spark, carb]) expect(t.torque).toBeLessThan(0)
+  })
   it('supports different settings without fabricating a power curve', () => {
     const run = (temperature: number, engine = roadEngine) => {
       const core = new EngineCore(engine, { ...normalConditions, temperature })

@@ -3,6 +3,7 @@ import { DynoTest } from './dyno'
 import { normalConditions, roadEngine } from './schema'
 import type { EngineDefinition, Conditions } from './schema'
 import type { HostEvent, HostMessage } from './messages'
+import type { Listener } from './acoustics'
 
 declare const sampleRate: number
 declare const currentTime: number
@@ -25,6 +26,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
   private automaticStarter = true
   private peakMs = 0
   private budgetMs = (128 / sampleRate) * 1000
+  private listener: Listener = 'tailpipe'
   constructor(options?: {
     processorOptions?: {
       initial?: {
@@ -38,7 +40,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
     super()
     const initial = options?.processorOptions?.initial
     if (initial) {
-      this.core = new EngineCore(initial.engine, initial.conditions)
+      this.use(new EngineCore(initial.engine, initial.conditions))
       this.core.setControls({
         throttle: initial.throttle,
         ignition: initial.autostart,
@@ -52,17 +54,23 @@ export class EngineProcessor extends AudioWorkletProcessor {
         try {
           if (this.dyno)
             throw new Error('Live updates are paused during an automatic test.')
-          this.core = this.running
-            ? EngineCore.continueFrom(this.core, data.engine, data.conditions)
-            : new EngineCore(data.engine, data.conditions)
+          this.use(
+            this.running
+              ? EngineCore.continueFrom(this.core, data.engine, data.conditions)
+              : new EngineCore(data.engine, data.conditions),
+          )
         } catch (error) {
           this.send({ type: 'error', message: String(error) })
         }
         return
       }
       try {
+        if (data.type === 'listener') {
+          this.listener = data.value
+          this.core.setListener(data.value)
+        }
         if (data.type === 'configure') {
-          this.core = new EngineCore(data.engine, data.conditions)
+          this.use(new EngineCore(data.engine, data.conditions))
           this.running = false
           this.dyno = null
           this.accumulator = 0
@@ -82,7 +90,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
           if (this.dyno) this.send({ type: 'run', value: this.dyno.run })
           this.dyno = null
           this.running = false
-          this.core = new EngineCore(this.core.engine, this.core.conditions)
+          this.use(new EngineCore(this.core.engine, this.core.conditions))
           this.sendTelemetry()
         }
         if (data.type === 'dyno') {
@@ -93,7 +101,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
             data.id,
             data.runtime,
           )
-          this.core = this.dyno.core
+          this.use(this.dyno.core)
           this.running = true
         }
         if (data.type === 'probe') {
@@ -113,6 +121,11 @@ export class EngineProcessor extends AudioWorkletProcessor {
         this.running = false
       }
     }
+  }
+  /** Every core the bench plays keeps the chosen listening position. */
+  private use(core: EngineCore) {
+    core.setListener(this.listener)
+    this.core = core
   }
   private send(event: HostEvent) {
     this.port.postMessage(event)
@@ -153,7 +166,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
           this.send({ type: 'run', value: this.dyno.run })
           this.dyno = null
           this.running = false
-          this.core = new EngineCore(this.core.engine, this.core.conditions)
+          this.use(new EngineCore(this.core.engine, this.core.conditions))
           this.sendTelemetry()
         }
       }

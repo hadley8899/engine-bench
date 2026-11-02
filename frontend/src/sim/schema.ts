@@ -6,14 +6,17 @@ import { z } from 'zod'
  * 1.3.0: turbochargers, superchargers and intercoolers.
  * 1.4.0: fuel systems (carburettor, throttle-body, port and direct
  * injection) with wall-film fuel transport and mixture limits.
+ * 1.5.0: the rev limiter cuts fuel (injection stops) or spark (fuel still
+ * flows and leaves unburned); exhaust systems and sound (no physics change).
  */
-export const MODEL_VERSION = 'eb-0d-1.4.0'
+export const MODEL_VERSION = 'eb-0d-1.5.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
   'eb-0d-1.1.0',
   'eb-0d-1.2.0',
   'eb-0d-1.3.0',
+  'eb-0d-1.4.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -131,6 +134,31 @@ export const fuelSystemDefaults = {
   direct: { kind: 'direct', ...ecuDefaults },
 } satisfies { [K in FuelSystemKind]: Extract<FuelSystem, { kind: K }> }
 
+/**
+ * Exhaust system after the ports. In this model version it shapes only the
+ * sound (pipe resonances, filtering and afterfire); it does not change gas
+ * exchange, back pressure or power.
+ */
+export const exhaustSchema = z.strictObject({
+  /** Primary (header) pipe length from port to collector. */
+  headerLength: z.number().min(0.2).max(1.5),
+  /** 4-2-1 pairs the primaries into two secondaries before the collector. */
+  collector: z.enum(['4-1', '4-2-1']),
+  catalyst: z.boolean(),
+  /** Straight-through, absorptive (packed) or chambered (reactive) silencer. */
+  silencer: z.enum(['straight', 'absorptive', 'chambered']),
+  /** Pipe from the collector to the outlet, including the silencer. */
+  tailpipeLength: z.number().min(0.3).max(4),
+})
+export type Exhaust = z.infer<typeof exhaustSchema>
+export const exhaustDefaults: Exhaust = {
+  headerLength: 0.5,
+  collector: '4-1',
+  catalyst: true,
+  silencer: 'chambered',
+  tailpipeLength: 2.5,
+}
+
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
@@ -152,6 +180,11 @@ export const engineSchema = z.strictObject({
   lambda: z.number().min(0.8).max(1.15),
   inertia: z.number().min(0.01).max(20),
   revLimit: z.number().int().min(1000).max(20000),
+  /**
+   * What the electronic limiter cuts. Spark cut lets fuel through unburned.
+   * A carburettor cannot stop its fuel, so it always cuts the spark.
+   */
+  limiterCut: z.enum(['fuel', 'spark']).default('fuel'),
   mechanicalLimit: z.number().int().min(1000).max(25000),
   // Defaulted so builds saved before this field existed keep their 70 Nm starter.
   starterTorque: z.number().min(1).max(20000).default(70),
@@ -159,6 +192,8 @@ export const engineSchema = z.strictObject({
   induction: inductionSchema.default({ kind: 'none' }),
   // Builds saved before fuel systems existed used ideal port injection.
   fuelSystem: fuelSystemSchema.default(fuelSystemDefaults.port),
+  // Builds saved before exhaust systems existed get the road exhaust.
+  exhaust: exhaustSchema.default(exhaustDefaults),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -250,10 +285,12 @@ export const roadEngine: EngineDefinition = {
   lambda: 1,
   inertia: 0.22,
   revLimit: 6800,
+  limiterCut: 'fuel',
   mechanicalLimit: 7400,
   starterTorque: 150,
   induction: { kind: 'none' },
   fuelSystem: fuelSystemDefaults.port,
+  exhaust: exhaustDefaults,
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {

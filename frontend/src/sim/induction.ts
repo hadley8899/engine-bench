@@ -100,8 +100,14 @@ export class InductionSystem {
     this.exhaustEnergy =
       this.exhaustMass * internalEnergy(this.ambientTemperature)
     const pistonArea = (Math.PI * engine.bore ** 2) / 4
-    // Blow-off/bypass valves sized like one intake runner per cylinder.
-    this.ventArea = 0.15 * pistonArea * engine.cylinders
+    // A roots bypass is a large passage, sized like one intake runner per
+    // cylinder. A blow-off valve is far smaller: about 650 mm² effective
+    // (a 29 mm hole) on a 2.0 L engine, so the charge takes a few tenths of
+    // a second to dump instead of emptying almost at once.
+    this.ventArea =
+      (engine.induction.kind === 'roots' ? 0.15 : 0.028) *
+      pistonArea *
+      engine.cylinders
     // The wastegate port is sized for the engine, not the turbine, so a tiny
     // turbine can still be bypassed.
     this.wastegateArea =

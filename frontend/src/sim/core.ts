@@ -6,6 +6,10 @@ import type {
   RadiansPerSecond,
 } from './schema'
 import { InductionSystem } from './induction'
+import { Acoustics, AcousticInput } from './acoustics'
+import type { Listener } from './acoustics'
+import { validateRoad, Vehicle } from './road'
+import type { Road } from './road'
 import type { InductionTelemetry } from './induction'
 import {
   FuelDelivery,
@@ -45,6 +49,8 @@ export type Controls = {
   ignition: boolean
   starter: boolean
   holdRpm: number | null
+  /** Optional road load through a gearbox and automatic clutch. */
+  road: Road | null
 }
 export type Telemetry = {
   time: number
@@ -66,6 +72,12 @@ export type Telemetry = {
   starterStalled: boolean
   induction: InductionTelemetry
   fuel: FuelTelemetry
+  /** Unburned fuel recently lit in the exhaust (sound only). */
+  afterfire: boolean
+  /** Lumped header wall temperature used for afterfire, K. */
+  exhaustWall: number
+  /** Road speed (km/h) and gear while road load is on. */
+  road: { speed: number; gear: number } | null
 }
 interface Cylinder {
   mass: number
@@ -80,6 +92,8 @@ interface Cylinder {
   volume: number
   /** Intake runner mass flow, kg/s; positive into the cylinder. */
   runner: number
+  /** Flammable fuel left unburned by a misfire or cut spark, kg; leaves with the exhaust. */
+  unburned: number
 }
 /** Original 0D research prototype. All hosts advance this exact core at 48 kHz. */
 export class EngineCore {
@@ -93,7 +107,9 @@ export class EngineCore {
     ignition: false,
     starter: false,
     holdRpm: null,
+    road: null,
   }
+  readonly vehicle = new Vehicle()
   time = 0
   angle = 0
   omega = 0
@@ -113,12 +129,12 @@ export class EngineCore {
   lambda: number
   private misfireTime = -Infinity
   private stallTime = 0
-  private whinePhase = 0
-  private noise = 0x2545f491
-  private ventSound = 0
-  private filter = 0
-  private previousAudio = 0
-  private audioHighpass = 0
+  /** Sound synthesis; it reads the simulated state but never changes it. */
+  readonly acoustics: Acoustics
+  /** Off for headless dyno tests, which discard the audio. */
+  sound = true
+  private input = new AcousticInput()
+  private chargeFuel: number
   private oxygen: number
   private traces = Array.from({ length: 4 }, () => new Float32Array(360))
   private phases: number[]
@@ -134,6 +150,8 @@ export class EngineCore {
   private airDensity: number
   /** Runner cross-section divided by length, m. */
   private runnerGain: number
+  /** The limiter cuts ignition rather than fuel. */
+  private sparkCut: boolean
 
   constructor(engine: EngineDefinition, conditions: Conditions) {
     this.engine = validateEngine(engine)
@@ -146,6 +164,9 @@ export class EngineCore {
     this.frictionPerPascal = displacement(engine) / (4 * Math.PI)
     // Exhaust-pulse loudness was calibrated on a 2.0 L engine.
     this.audioScale = 0.002 / displacement(engine)
+    // Fuel in one full cylinder charge of standard air, for afterfire scale.
+    this.chargeFuel = (displacement(engine) / 4) * (1.2 / STOICHIOMETRIC)
+    this.acoustics = new Acoustics(engine, conditions.temperature)
     this.intakeEnthalpy = enthalpy(conditions.temperature)
     this.exhaustEnthalpy = enthalpy(EXHAUST_BACKFLOW_TEMPERATURE)
     this.woschniBore = 3.26 * engine.bore ** -0.2
@@ -157,6 +178,8 @@ export class EngineCore {
     // Runner diameter about 0.39 × bore, and never narrower than the valve.
     const runnerArea = Math.max(0.15 * this.pistonArea, 1.2 * engine.intakeArea)
     this.runnerGain = runnerArea / engine.intakeRunnerLength
+    this.sparkCut =
+      engine.limiterCut === 'spark' || engine.fuelSystem.kind === 'carburettor'
     this.airDensityRatio =
       air.density / (conditions.pressure / R / conditions.temperature)
     this.induction = new InductionSystem(
@@ -186,6 +209,7 @@ export class EngineCore {
         pressure: conditions.pressure,
         volume: g.volume,
         runner: 0,
+        unburned: 0,
       })
     }
   }
@@ -203,6 +227,8 @@ export class EngineCore {
   ) {
     const core = new EngineCore(engine, conditions)
     core.controls = { ...previous.controls }
+    core.vehicle.speed = previous.vehicle.speed
+    core.vehicle.clutchTorque = previous.vehicle.clutchTorque
     core.time = previous.time
     core.sample = previous.sample
     core.angle = previous.angle
@@ -217,12 +243,8 @@ export class EngineCore {
     core.lambda = previous.lambda
     core.misfireTime = previous.misfireTime
     core.maxSubsteps = previous.maxSubsteps
-    core.whinePhase = previous.whinePhase
-    core.noise = previous.noise
-    core.ventSound = previous.ventSound
-    core.filter = previous.filter
-    core.previousAudio = previous.previousAudio
-    core.audioHighpass = previous.audioHighpass
+    core.sound = previous.sound
+    core.acoustics.adopt(previous.acoustics)
     core.traces = previous.traces.map((t) => t.slice())
     core.induction.adopt(previous.induction)
     core.fuel.adopt(previous.fuel)
@@ -246,6 +268,7 @@ export class EngineCore {
       cyl.fresh = old.fresh * scale
       cyl.fuel = old.fuel * scale
       cyl.heat = old.heat * scale
+      cyl.unburned = old.unburned * scale
       cyl.burn = old.burn
       cyl.phase = old.phase
       cyl.volume = volume
@@ -254,7 +277,11 @@ export class EngineCore {
     }
     return core
   }
+  setListener(listener: Listener) {
+    this.acoustics.listener = listener
+  }
   setControls(update: Partial<Controls>) {
+    if (update.road) update = { ...update, road: validateRoad(update.road) }
     Object.assign(this.controls, update)
     this.controls.throttle = clamp(this.controls.throttle, 0, 1)
     this.controls.load = clamp(this.controls.load, 0, 400)
@@ -275,6 +302,7 @@ export class EngineCore {
     const induction = this.induction
     const turbo = induction.config.kind === 'turbo'
     const fuel = this.fuel
+    fuel.limiterCut = this.limited && !this.sparkCut
     // A carburettor's venturi loss sits ahead of the throttle or compressor.
     induction.inletLoss = fuel.inletLoss
     const supply = induction.boosted
@@ -307,6 +335,10 @@ export class EngineCore {
       throw new Error('Engine exceeded the supported integration speed.')
     const dt = this.dt / n
     let audio = 0
+    let portEnergy = 0
+    let portMass = 0
+    let unburned = 0
+    let valveSeats = 0
     let intakeMass = 0
     let freshMass = 0
     let exhaustMass = 0
@@ -320,6 +352,12 @@ export class EngineCore {
         const cyl = this.cylinders[i]
         const phase = wrap(this.angle - this.phases[i])
         const deg = (phase * 180) / Math.PI
+        const previousDeg = (cyl.phase * 180) / Math.PI
+        if (
+          (previousDeg < e.intakeClose && deg >= e.intakeClose) ||
+          (previousDeg < 370 && deg >= 370)
+        )
+          valveSeats++
         // Scalar geometry keeps allocations out of the per-sample audio hot path.
         const sin = Math.sin(phase),
           cos = Math.cos(phase)
@@ -403,10 +441,14 @@ export class EngineCore {
             )
             const h = dm * enthalpy(temperature)
             const kept = 1 - dm / cyl.mass
+            unburned += cyl.unburned * (1 - kept)
+            cyl.unburned *= kept
             cyl.fresh *= kept
             cyl.fuel *= kept
             cyl.mass -= dm
             cyl.energy -= h
+            portMass += dm
+            portEnergy += dm * temperature
             exhaustMass += dm
             exhaustEnergy += h
             audio += (dm / this.dt) * 5 * this.audioScale
@@ -432,10 +474,25 @@ export class EngineCore {
           const lambda =
             cyl.fuel > 0 ? cyl.fresh / (STOICHIOMETRIC * cyl.fuel) : Infinity
           const burnable = Math.min(cyl.fuel, (cyl.fresh * this.oxygen) / 3.43)
-          const fires = this.controls.ignition && !this.limited
+          const fires =
+            this.controls.ignition && !(this.limited && this.sparkCut)
           const ignites = lambda <= LEAN_MISFIRE && lambda >= RICH_MISFIRE
           cyl.heat = fires && ignites ? burnable * 43e6 * 0.96 : 0
-          if (fires && cyl.fresh > 0 && !fuel.overrunCut) {
+          // Unlit fuel leaves with the exhaust, weighted by how readily it
+          // can afterfire: a charge too lean to light here barely burns
+          // there, and fuel beyond the oxygen available needs tailpipe air.
+          const flammable =
+            lambda > LEAN_MISFIRE ? 0.1 : lambda < RICH_MISFIRE ? 0.5 : 1
+          cyl.unburned +=
+            fires && ignites
+              ? (cyl.fuel - burnable) * 0.3
+              : cyl.fuel * flammable
+          if (
+            fires &&
+            cyl.fresh > 0 &&
+            !fuel.overrunCut &&
+            !fuel.limiterCut
+          ) {
             if (!ignites) this.misfireTime = this.time
             this.lambda += 0.3 * (Math.min(lambda, 9.99) - this.lambda)
           }
@@ -494,13 +551,23 @@ export class EngineCore {
       torque += (indicated - friction) / n
       const starter = this.controls.starter && rpm < 500 ? e.starterTorque : 0
       if (this.controls.holdRpm === null) {
-        this.absorbedTorque = this.controls.load
+        const road = this.controls.road
+        const load =
+          this.controls.load +
+          (road
+            ? this.vehicle.step(
+                road,
+                this.omega,
+                omegaToRpm(this.omega),
+                this.airDensity,
+                dt,
+              )
+            : 0)
+        this.absorbedTorque = load
         this.omega = Math.max(
           0,
           this.omega +
-            ((indicated - friction - this.controls.load + starter) /
-              e.inertia) *
-              dt,
+            ((indicated - friction - load + starter) / e.inertia) * dt,
         )
       } else {
         // Speed-controlled dynamometer: constraint reaction includes rotational acceleration.
@@ -533,6 +600,31 @@ export class EngineCore {
     )
     // A turbo's manifold and turbine smooth the pulses reaching the tailpipe.
     if (turbo) audio = induction.tailpipeFlow * 5 * this.audioScale
+    let sample = 0
+    if (this.sound) {
+      const input = this.input
+      input.exhaust = audio
+      input.portTemperature = portMass > 0 ? portEnergy / portMass : 0
+      input.intake = (intakeMass / this.dt) * 5 * this.audioScale
+      input.throttle = throttle
+      input.manifoldRatio = this.manifold / Math.max(supply, 1)
+      let pressureSum = 0
+      for (const cyl of this.cylinders) pressureSum += cyl.pressure
+      input.pressureSum = pressureSum
+      input.valveSeats = valveSeats
+      input.unburned = unburned / this.chargeFuel
+      input.rpm = rpm
+      input.induction = induction.config.kind
+      input.shaftHz = induction.shaftHz
+      input.boost = Math.min(
+        1,
+        Math.max(0, induction.supply - c.pressure) / 100000,
+      )
+      input.venting = induction.venting
+      input.dump = Math.min(1, (induction.outlet - c.pressure) / 40000)
+      input.surge = induction.surge
+      sample = this.acoustics.process(input)
+    }
     // Only blame the starter when nothing else resists it: a loaded dyno
     // stalling a cranking engine is reported as an ordinary stall.
     if (
@@ -557,41 +649,7 @@ export class EngineCore {
         (this.coolant - c.temperature) * 110) /
         90000) *
       this.dt
-    this.filter += 0.12 * (audio - this.filter)
-    const high = this.filter - this.previousAudio + 0.995 * this.audioHighpass
-    this.previousAudio = this.filter
-    this.audioHighpass = high
-    return Math.tanh((high + this.inductionSound()) * 2) * 0.65
-  }
-  /** Compressor whistle or blower whine, plus blow-off noise; bounded. */
-  private inductionSound() {
-    const induction = this.induction
-    if (!induction.boosted) return 0
-    const kind = induction.config.kind
-    // Roots: three-lobe rotor pair; centrifugal wheels: shaft rate.
-    const hz = kind === 'roots' ? induction.shaftHz * 6 : induction.shaftHz
-    this.whinePhase = (this.whinePhase + ((hz * this.dt) % 1)) % 1
-    const loud = Math.min(
-      1,
-      Math.abs(induction.supply - this.conditions.pressure) / 100000,
-    )
-    const whine =
-      hz < 18000 ? Math.sin(2 * Math.PI * this.whinePhase) * 0.05 * loud : 0
-    // Deterministic noise so results do not depend on host or batching.
-    this.noise ^= this.noise << 13
-    this.noise ^= this.noise >>> 17
-    this.noise ^= this.noise << 5
-    const white = (this.noise >>> 0) / 4294967296 - 0.5
-    // Blow-off hiss follows the pressure being dumped, so it fades as it empties.
-    const dumped = (induction.outlet - this.conditions.pressure) / 40000
-    const target = induction.venting
-      ? 0.5 * Math.min(1, dumped)
-      : induction.surge
-        ? 0.15
-        : 0
-    this.ventSound +=
-      (target - this.ventSound) * (target > this.ventSound ? 0.01 : 0.0003)
-    return whine + white * this.ventSound
+    return sample
   }
   advance(seconds: number) {
     if (seconds < 0 || seconds > 0.1)
@@ -623,6 +681,11 @@ export class EngineCore {
         this.lambda,
         this.time - this.misfireTime < 0.3,
       ),
+      afterfire: this.acoustics.afterfire,
+      exhaustWall: this.acoustics.wallTemperature,
+      road: this.controls.road
+        ? { speed: this.vehicle.speed * 3.6, gear: this.controls.road.gear }
+        : null,
     }
   }
 }

@@ -4,11 +4,11 @@ Updated: 2 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 are implemented. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stage 5 are complete. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
-1. Stage 5, sound and bench feel: a sound rework first (exhaust system, intake and mechanical noise, overrun pops), then quick fixes, gauges and keyboard shortcuts.
+1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
 2. Stage 6, tuning, temperatures and limits: knock, ignition/fuel/boost maps, per-cylinder temperatures, upgradeable parts and failures.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
@@ -225,38 +225,40 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 
 The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 11 and layouts to Stage 10.
 
-### 5. Sound and bench feel — next
+### 5. Sound and bench feel — complete
 
 From the 2 November 2026 review of the running bench, which the user accepted. Decision (2 November 2026, user request): reworking the sound is the headline of this stage and comes first. It matters more to how fun the bench feels than any other item. The quick fixes are small and can go in alongside it.
 
 Sound (first):
 
-- [ ] Add an exhaust system to the build (header length, collector, catalyst, silencer, tailpipe) and an acoustic model of it: delay-line pipe resonances, silencer filtering and tailpipe radiation. The current sound is exhaust mass flow through a one-pole filter, a high-pass and soft clipping, with no pipe character.
-- [ ] Add intake induction noise and mechanical/valvetrain noise, mixed by throttle and load so idle, part throttle, full load and overrun sound distinct.
-- [ ] Add overrun pops and crackle driven by the simulation (unburned fuel reaching a hot exhaust after cut or misfire), not by random triggers.
-- [ ] Improve the forced-induction sounds: spool-up whistle, blow-off and, with the blow-off valve removed, compressor flutter from modelled surge.
-- [ ] Add listening positions, such as the tailpipe, the engine bay and the test cell with room reverb. Recheck the licence of any impulse response used.
-- [ ] Record whether the acoustic exhaust only shapes sound or also affects gas exchange. Wave-tuned breathing needs the quasi-1D pipe solver planned for the two-stroke (`docs/TWO_STROKE.md`); share it with four-stroke headers once it exists.
+- [x] Add an exhaust system to the build (header length, collector, catalyst, silencer, tailpipe) and an acoustic model of it: delay-line pipe resonances, silencer filtering and tailpipe radiation. The current sound is exhaust mass flow through a one-pole filter, a high-pass and soft clipping, with no pipe character.
+- [x] Add intake induction noise and mechanical/valvetrain noise, mixed by throttle and load so idle, part throttle, full load and overrun sound distinct.
+- [x] Add overrun pops and crackle driven by the simulation (unburned fuel reaching a hot exhaust after cut or misfire), not by random triggers. Decision (2 November 2026): pops come from a spark-cut limiter, ignition cuts, misfires and rich running. A fuel-cut overrun stays quiet; deliberate "pops and bangs" from retarded overrun timing need the Stage 6 ignition maps.
+- [x] Improve the forced-induction sounds: spool-up whistle, blow-off and, with the blow-off valve removed, compressor flutter from modelled surge.
+- [x] Add listening positions, such as the tailpipe, the engine bay and the test cell with room reverb. The room is an algorithmic Schroeder reverb; no impulse responses or recorded assets are used.
+- [x] Record whether the acoustic exhaust only shapes sound or also affects gas exchange. Decision (2 November 2026): sound only in model 1.5.0, labelled in the editor and `docs/SIMULATION.md`. Wave-tuned breathing needs the quasi-1D pipe solver planned for the two-stroke (`docs/TWO_STROKE.md`); share it with four-stroke headers once it exists.
 
 Quick fixes:
 
-- [ ] After a Baseline is captured, switch "Capture in" to Modified so the next run cannot silently replace the baseline. Ask before overwriting an existing slot.
-- [ ] Keep the live engine running (or return it to idle) while a Quick test calculates in the worker; a silent calculation should not switch off the engine being listened to.
-- [ ] Show limiter fuel cut in the fuel status, and show zero or "cut" fuel flow while fuel is cut. Never display "-0.00".
-- [ ] Add a unit preference for power (kW, hp, PS) and torque (Nm, lb·ft). Store SI values and test the conversions.
-- [ ] Bring the main controls (Start, throttle, load, live readouts) within the first screen on common laptop sizes. Keep the workshop and dyno room below.
+- [x] After a Baseline is captured, switch "Capture in" to Modified so the next run cannot silently replace the baseline. Ask before overwriting an existing slot.
+- [x] Keep the live engine running (or return it to idle) while a Quick test calculates in the worker; a silent calculation should not switch off the engine being listened to.
+- [x] Show limiter fuel cut in the fuel status, and show zero or "cut" fuel flow while fuel is cut. Never display "-0.00". The review found the limiter only suppressed combustion while fuel kept flowing; model 1.5.0 makes the cut explicit: fuel (injection stops, the default) or spark (fuel passes unburned; always for carburettors).
+- [x] Add a unit preference for power (kW, hp, PS) and torque (Nm, lb·ft). Store SI values and test the conversions.
+- [x] Bring the main controls (Start, throttle, load, live readouts) within the first screen on common laptop sizes. Keep the workshop and dyno room below.
 
 Feel and feedback:
 
-- [ ] Analogue tachometer with limiter and estimated-mechanical-limit marks, plus boost, λ and temperature gauges, drawn outside React's render loop.
-- [ ] During a live pull, plot torque and power against RPM as the pull runs, with a peak marker.
-- [ ] After each run, show a pull summary card: peak power and torque, where they occur, the change against Baseline and the area under the curve over a chosen RPM band.
-- [ ] Add more fictional starting builds with distinct characters, such as "Turbo hot hatch", "Torquey long-stroke" and "Screaming 9k". Give each a distinct exhaust so it also sounds different. Label them as fictional.
-- [ ] Add keyboard shortcuts for start/stop, starting a test, swapping Baseline/Modified and auditioning, with a discoverable shortcut list. Do not trigger them from inside form fields.
+- [x] Analogue tachometer with limiter and estimated-mechanical-limit marks, plus boost, λ and temperature gauges, drawn outside React's render loop.
+- [x] During a live pull, plot torque and power against RPM as the pull runs, with a peak marker.
+- [x] After each run, show a pull summary card: peak power and torque, where they occur, the change against Baseline and the area under the curve over a chosen RPM band.
+- [x] Add more fictional starting builds with distinct characters, such as "Turbo hot hatch", "Torquey long-stroke" and "Screaming 9k". Give each a distinct exhaust so it also sounds different. Label them as fictional.
+- [x] Add keyboard shortcuts for start/stop, starting a test, swapping Baseline/Modified and auditioning, with a discoverable shortcut list. Do not trigger them from inside form fields.
 
 Something to drive against:
 
-- [ ] Add an optional simple road-load mode to the dyno: vehicle mass, gear ratios, rolling resistance and aerodynamic drag, applied as crank load. Gear changes and turbo lag then come naturally instead of from the load slider. This is a load model for the bench, not a vehicle or drivetrain simulator. Keep reporting crank output only; do not invent wheel power.
+- [x] Add an optional simple road-load mode to the dyno: vehicle mass, gear ratios, rolling resistance and aerodynamic drag, applied as crank load. Gear changes and turbo lag then come naturally instead of from the load slider. This is a load model for the bench, not a vehicle or drivetrain simulator. Keep reporting crank output only; do not invent wheel power.
+
+Evidence is in `docs/VERIFICATION.md`. The user accepted the sound after the blow-off rework on 2 November 2026 ("sounds really good for now"), and may revisit it later; further sound polish is not scheduled.
 
 Acceptance: exhaust-system changes produce audible, explainable differences that physics, sound and the view share from one definition. Offline PCM tests check that the sound stays bounded and that exhaust changes alter its spectrum as intended. The user confirms in a listening session that the new sound is a clear improvement; automated checks do not substitute for this. The quick fixes have browser regression tests. Gauges and live plots add no React updates at audio rate. Audio cost stays inside the measured AudioWorklet budget (`npm run benchmark`).
 

@@ -3,6 +3,10 @@ import {
   Alert,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   MenuItem,
   Paper,
@@ -27,9 +31,7 @@ import {
   MIN_ROD_STROKE,
   normalConditions,
   recipeSchema,
-  roadEngine,
   scaledProportions,
-  sportEngine,
   undersizedForEngine,
   validateEngine,
   validateProcedure,
@@ -46,6 +48,26 @@ import { EngineView } from './EngineView'
 import { NumberField } from './NumberField'
 import { InductionEditor } from './InductionEditor'
 import { FuelSystemEditor } from './FuelSystemEditor'
+import { ExhaustEditor } from './ExhaustEditor'
+import { describeExhaust, exhaustErrors } from './exhaustFields'
+import { Gauges } from './Gauges'
+import { RoadControls } from './RoadControls'
+import { useShortcuts } from './shortcuts'
+import type { ShortcutAction } from './shortcuts'
+import { ShortcutHelp } from './ShortcutHelp'
+import { PullSummary } from './PullSummary'
+import { starterBuilds } from './builds'
+import {
+  formatFixed,
+  fromKw,
+  fromNm,
+  POWER_UNITS,
+  TORQUE_UNITS,
+} from './units'
+import type { PowerUnit, TorqueUnit } from './units'
+import { LISTENERS } from '../sim/acoustics'
+import type { Listener } from '../sim/acoustics'
+import type { Road } from '../sim/road'
 import { describeFuel, fuelErrors, fuelShortLabels } from './fuelFields'
 import {
   describeInduction,
@@ -57,17 +79,22 @@ import {
   loadDraft,
   loadExperiment,
   loadLiveUpdates,
+  loadPreferences,
   persistDraft,
   persistExperiment,
   persistLiveUpdates,
+  persistPreferences,
 } from './storage'
 import './bench.css'
 
 const theme = buildTheme('dark')
 const historyLabels = ['seconds', 'RPM']
 const pressureLabels = ['crank degrees', 'Cylinder pressure · bar']
-const curveLabels = ['RPM', 'Baseline · Nm', 'Modified · Nm']
-const powerLabels = ['RPM', 'Baseline · kW', 'Modified · kW']
+const listenerLabels: Record<Listener, string> = {
+  tailpipe: 'Tailpipe',
+  bay: 'Engine bay',
+  cell: 'Test cell (room)',
+}
 const numericFields: {
   key: keyof EngineDefinition
   label: string
@@ -340,7 +367,12 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
       },
       e.fuelSystem,
     ),
+    ...describeExhaust(a.engine.exhaust, e.exhaust),
   )
+  if ((a.engine.limiterCut ?? 'fuel') !== e.limiterCut)
+    changes.push(
+      `Limiter cuts: ${a.engine.limiterCut ?? 'fuel'} → ${e.limiterCut}`,
+    )
   for (const f of conditionFields)
     if (a.conditions[f.key] !== c[f.key])
       changes.push(
@@ -350,12 +382,15 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     ? changes
     : ['Same engine geometry, settings and environment.']
 }
-function alignCurves(a: Run | null, b: Run | null, field: 'torque' | 'power') {
+function alignCurves(
+  runs: (Run | null)[],
+  field: 'torque' | 'power',
+  convert: (value: number) => number,
+) {
   const xs = [
-    ...new Set([
-      ...(a?.samples.map((s) => Math.round(s.rpm)) ?? []),
-      ...(b?.samples.map((s) => Math.round(s.rpm)) ?? []),
-    ]),
+    ...new Set(
+      runs.flatMap((r) => r?.samples.map((s) => Math.round(s.rpm)) ?? []),
+    ),
   ].sort((x, y) => x - y)
   const interpolate = (run: Run | null, x: number) => {
     if (!run?.samples.length) return null
@@ -373,8 +408,12 @@ function alignCurves(a: Run | null, b: Run | null, field: 'torque' | 'power') {
   }
   return [
     xs,
-    xs.map((x) => interpolate(a, x)),
-    xs.map((x) => interpolate(b, x)),
+    ...runs.map((run) =>
+      xs.map((x) => {
+        const v = interpolate(run, x)
+        return v === null ? null : convert(v)
+      }),
+    ),
   ] as number[][]
 }
 
@@ -399,6 +438,18 @@ export function BenchPage() {
   const [throttle, setThrottle] = useState(0)
   const [load, setLoad] = useState(0)
   const [volume, setVolume] = useState(0.25)
+  const [prefs, setPrefs] = useState(loadPreferences)
+  /** A quick test is calculating in the worker; the live engine is untouched. */
+  const [calculating, setCalculating] = useState(false)
+  const calculatingRef = useRef(false)
+  const [road, setRoad] = useState<Road | null>(null)
+  /** Pending test that would replace an existing comparison run. */
+  const [overwrite, setOverwrite] = useState<{
+    kind: 'live' | 'quick'
+    slot: 'baseline' | 'modified'
+  } | null>(null)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [band, setBand] = useState<[number, number]>([2500, 5500])
   const [hold, setHold] = useState(0)
   const [selected, setSelected] = useState(0)
   const [slow, setSlow] = useState(false)
@@ -428,6 +479,7 @@ export function BenchPage() {
   const activeRef = useRef(false)
   const activeRunId = useRef<string | null>(null)
   const activeRunSlot = useRef<'baseline' | 'modified'>(slot)
+  const activeRunKind = useRef<'live' | 'quick'>('live')
   const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const dirty =
@@ -440,6 +492,7 @@ export function BenchPage() {
     ...numericFields.filter((f) => draftErrors[f.key]).map((f) => f.label),
     ...Object.keys(inductionErrors(draft.induction)),
     ...Object.keys(fuelErrors(draft.fuelSystem)),
+    ...Object.keys(exhaustErrors(draft.exhaust)),
     ...conditionFields.filter((f) => envErrors[f.key]).map((f) => f.label),
   ]
   const invalid = invalidLabels.length > 0
@@ -544,15 +597,21 @@ export function BenchPage() {
         if (event.value.id !== activeRunId.current) return
         setRun(event.value)
         if (event.value.status !== 'running') {
-          setExperiment((prev) => ({
-            ...prev,
-            [activeRunSlot.current]: event.value,
-          }))
-          setRunning(false)
-          setMode('manual')
+          const captured = activeRunSlot.current
+          setExperiment((prev) => ({ ...prev, [captured]: event.value }))
+          // The next run should not silently replace a fresh baseline.
+          if (captured === 'baseline' && event.value.status === 'complete')
+            setSlot('modified')
+          if (activeRunKind.current === 'quick') {
+            calculatingRef.current = false
+            setCalculating(false)
+          } else {
+            setRunning(false)
+            setMode('manual')
+          }
           setNotice(
             event.value.status === 'complete'
-              ? `Test complete. ${event.value.samples.length} measured points captured in ${activeRunSlot.current}.`
+              ? `Test complete. ${event.value.samples.length} measured points captured in ${captured}.${captured === 'baseline' ? ' The next run will capture in Modified.' : ''}`
               : `Test aborted: ${event.value.reason}`,
           )
         }
@@ -561,6 +620,8 @@ export function BenchPage() {
         setError(event.message)
         setRunning(false)
         setMode('manual')
+        calculatingRef.current = false
+        setCalculating(false)
       }
     }
     engineAudio.onEvent = receive
@@ -568,7 +629,8 @@ export function BenchPage() {
       receive(event.data)
     engineWorker.onerror = () => {
       setError('Quick-test worker stopped. Reload the bench to recover.')
-      setRunning(false)
+      calculatingRef.current = false
+      setCalculating(false)
     }
     const visibility = () => {
       if (document.hidden) {
@@ -586,6 +648,8 @@ export function BenchPage() {
         void engineAudio.suspend()
         setRunning(false)
         setMode('manual')
+        calculatingRef.current = false
+        setCalculating(false)
         setNotice(
           'Paused because the tab was hidden. Press Start to resume a fresh bench run.',
         )
@@ -602,13 +666,14 @@ export function BenchPage() {
   }, [])
   const setManualThrottle = useCallback((value: number) => {
     if (modeRef.current !== 'manual' && modeRef.current !== 'audition') return
+    if (calculatingRef.current) return
     setThrottle(value)
     audio.current?.send({ type: 'controls', value: { throttle: value } })
   }, [])
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (
-        (event.target as HTMLElement)?.closest(
+        (event.target as HTMLElement | null)?.closest?.(
           'input,textarea,select,button',
         ) ||
         event.code !== 'Space'
@@ -652,6 +717,8 @@ export function BenchPage() {
     activeRef.current = false
     audio.current?.send({ type: 'stop', reason })
     worker.current?.postMessage({ type: 'stop', reason })
+    calculatingRef.current = false
+    setCalculating(false)
     setRunning(false)
     setMode('manual')
     setThrottle(0)
@@ -740,8 +807,9 @@ export function BenchPage() {
       })
       audio.current!.send({
         type: 'controls',
-        value: { throttle: 0, load: 0, holdRpm: null },
+        value: { throttle: 0, load: 0, holdRpm: null, road: null },
       })
+      setRoad(null)
       setThrottle(0)
       setLoad(0)
       setHold(0)
@@ -770,13 +838,28 @@ export function BenchPage() {
       const testConditions = snapshot?.conditions ?? experiment.conditions
       const testProcedure = snapshot?.procedure ?? procedure
       validateProcedure(testProcedure, testEngine)
-      stop('New test started')
+      if (kind === 'live') {
+        stop('New test started')
+        setHistory([[], []])
+        setSlow(false)
+      } else {
+        // The worker calculates silently; the live engine stays on the bench
+        // and returns to idle until the result arrives.
+        worker.current!.postMessage({ type: 'stop', reason: 'New test started' })
+        setThrottle(0)
+        setLoad(0)
+        setHold(0)
+        setRoad(null)
+        audio.current?.send({
+          type: 'controls',
+          value: { throttle: 0, load: 0, holdRpm: null, road: null },
+        })
+      }
       const generation = startupGeneration.current
       setRun(null)
-      setHistory([[], []])
-      setSlow(false)
       const id = crypto.randomUUID()
       activeRunId.current = id
+      activeRunKind.current = kind
       activeRunSlot.current = captureSlot ?? slot
       const message = {
         type: 'dyno' as const,
@@ -791,13 +874,17 @@ export function BenchPage() {
         if (generation !== startupGeneration.current) return
         audio.current!.setVolume(volume)
         audio.current!.send(message)
-      } else worker.current!.postMessage(message)
-      setMode(kind)
-      setRunning(true)
+        setMode('live')
+        setRunning(true)
+      } else {
+        worker.current!.postMessage(message)
+        calculatingRef.current = true
+        setCalculating(true)
+      }
       setNotice(
         kind === 'live'
           ? 'Automatic live pull: the dyno owns throttle and RPM. Emergency stop remains available.'
-          : 'Quick test calculating in a worker. Manual controls are locked until it finishes.',
+          : 'Quick test calculating in a worker. The engine idles and manual controls are locked until it finishes.',
       )
     } catch (err) {
       setError(String(err))
@@ -868,36 +955,77 @@ export function BenchPage() {
     anchor.click()
     URL.revokeObjectURL(url)
   }
+  const activeTest = (running && mode === 'live') || calculating
+  const fuelCut = telemetry.fuel.overrunCut || telemetry.fuel.limiterCut
   const baseline = experiment.baseline,
     modified = experiment.modified
+  // While a test runs, its samples are drawn as a third curve.
+  const current = activeTest ? run : null
   const curves = useMemo(
-    () => alignCurves(baseline, modified, 'torque'),
-    [baseline, modified],
+    () =>
+      alignCurves([baseline, modified, current], 'torque', (v) =>
+        fromNm(v, prefs.torque),
+      ),
+    [baseline, modified, current, prefs.torque],
   )
   const powers = useMemo(
-    () => alignCurves(baseline, modified, 'power'),
-    [baseline, modified],
+    () =>
+      alignCurves([baseline, modified, current], 'power', (v) =>
+        fromKw(v, prefs.power),
+      ),
+    [baseline, modified, current, prefs.power],
   )
+  const curveLabels = useMemo(
+    () => [
+      'RPM',
+      `Baseline · ${prefs.torque}`,
+      `Modified · ${prefs.torque}`,
+      `This run · ${prefs.torque}`,
+    ],
+    [prefs.torque],
+  )
+  const powerLabels = useMemo(
+    () => [
+      'RPM',
+      `Baseline · ${prefs.power}`,
+      `Modified · ${prefs.power}`,
+      `This run · ${prefs.power}`,
+    ],
+    [prefs.power],
+  )
+  const updatePrefs = (update: Partial<typeof prefs>) => {
+    const next = { ...prefs, ...update }
+    setPrefs(next)
+    persistPreferences(next)
+    if (update.listener) audio.current?.setListener(update.listener)
+  }
+  const changeRoad = (next: Road | null) => {
+    setRoad(next)
+    if (next) {
+      setLoad(0)
+      setHold(0)
+    }
+    audio.current?.send({
+      type: 'controls',
+      value: next ? { road: next, load: 0, holdRpm: null } : { road: null },
+    })
+  }
+  /** Start a test, asking first if it would replace a comparison run. */
+  const requestTest = (kind: 'live' | 'quick') => {
+    if (experiment[slot]) setOverwrite({ kind, slot })
+    else void test(kind)
+  }
   const trace = useMemo(() => {
     const values = telemetry.traces?.[selected] ?? []
     return [values.map((_, i) => i * 2), values.map((v) => v / 100000)]
   }, [telemetry, selected])
   const viewEngine =
     mode === 'audition' && auditionEngine ? auditionEngine : experiment.engine
-  const activeTest = running && (mode === 'live' || mode === 'quick')
   const displayed = busy
     ? null
     : activeTest
       ? run
       : (run ?? modified ?? baseline)
-  const peak = displayed?.samples.length
-    ? Math.max(...displayed.samples.map((s) => s.power))
-    : 0
-  const peakTorque = displayed?.samples.length
-    ? Math.max(...displayed.samples.map((s) => s.torque))
-    : 0
-  const powerPoint = displayed?.samples.find((s) => s.power === peak)
-  const torquePoint = displayed?.samples.find((s) => s.torque === peakTorque)
   // Starting a test stops a manually running engine, so only an active test,
   // unapplied edits or an invalid procedure block the dyno.
   const procedureError = (() => {
@@ -930,6 +1058,31 @@ export function BenchPage() {
       setError(String(err))
     }
   }
+  const shiftTo = (gear: number) =>
+    road &&
+    changeRoad({ ...road, gear: Math.max(0, Math.min(road.ratios.length, gear)) })
+  useShortcuts((action: ShortcutAction) => {
+    if (action === 'help') return setShowShortcuts(true)
+    if (action === 'stop') return stop()
+    if (action === 'listener')
+      return updatePrefs({
+        listener:
+          LISTENERS[(LISTENERS.indexOf(prefs.listener) + 1) % LISTENERS.length],
+      })
+    if (activeTest || busy) return
+    if (action === 'start' && !(running && telemetry.rpm > 100)) void start()
+    if ((action === 'live' || action === 'quick') && !dynoBlocked)
+      requestTest(action)
+    if (action === 'slot')
+      setSlot((s) => (s === 'baseline' ? 'modified' : 'baseline'))
+    if (action === 'baseline' && baseline) void audition(baseline, 'Baseline')
+    if (action === 'modified' && modified) void audition(modified, 'Modified')
+    if (road && mode === 'manual') {
+      if (action === 'gearUp') shiftTo(road.gear + 1)
+      if (action === 'gearDown') shiftTo(road.gear - 1)
+      if (action === 'neutral') shiftTo(0)
+    }
+  })
 
   return (
     <ThemeProvider theme={theme}>
@@ -969,13 +1122,13 @@ export function BenchPage() {
             <Stack alignItems="flex-end" spacing={1}>
               <Chip
                 label={
-                  running
-                    ? mode === 'quick'
-                      ? 'CALCULATING'
-                      : 'ENGINE RUNNING'
-                    : 'READY TO START'
+                  calculating
+                    ? 'CALCULATING'
+                    : running
+                      ? 'ENGINE RUNNING'
+                      : 'READY TO START'
                 }
-                color={running ? 'success' : 'default'}
+                color={running || calculating ? 'success' : 'default'}
               />
               <Button
                 variant="contained"
@@ -1051,15 +1204,15 @@ export function BenchPage() {
                   <div>
                     <small>BRAKE TORQUE</small>
                     <strong>
-                      {telemetry.torque.toFixed(1)}
-                      <span> Nm</span>
+                      {formatFixed(fromNm(telemetry.torque, prefs.torque), 1)}
+                      <span> {prefs.torque}</span>
                     </strong>
                   </div>
                   <div>
                     <small>CRANK POWER</small>
                     <strong>
-                      {telemetry.power.toFixed(1)}
-                      <span> kW</span>
+                      {formatFixed(fromKw(telemetry.power, prefs.power), 1)}
+                      <span> {prefs.power}</span>
                     </strong>
                   </div>
                   <div>
@@ -1075,15 +1228,13 @@ export function BenchPage() {
                     <small>MIXTURE</small>
                     <strong>
                       λ{' '}
-                      {telemetry.fuel.overrunCut
-                        ? '—'
-                        : telemetry.fuel.lambda.toFixed(2)}
+                      {fuelCut ? '—' : telemetry.fuel.lambda.toFixed(2)}
                     </strong>
                   </div>
                   <div>
                     <small>AIR–FUEL</small>
                     <strong>
-                      {telemetry.fuel.overrunCut ? (
+                      {fuelCut ? (
                         '—'
                       ) : (
                         <>
@@ -1106,11 +1257,26 @@ export function BenchPage() {
                       {telemetry.fuel.overrunCut && (
                         <em className="boost-flag">OVERRUN CUT</em>
                       )}
+                      {limiterVisible && (
+                        <em className="boost-flag warn">
+                          {experiment.engine.limiterCut === 'spark' ||
+                          experiment.engine.fuelSystem.kind === 'carburettor'
+                            ? 'SPARK CUT'
+                            : 'LIMITER CUT'}
+                        </em>
+                      )}
                       {telemetry.fuel.misfire && (
                         <em className="boost-flag warn">MISFIRE</em>
                       )}
-                      {!telemetry.fuel.overrunCut &&
+                      {telemetry.afterfire && (
+                        <em className="boost-flag pop" data-testid="afterfire">
+                          AFTERFIRE
+                        </em>
+                      )}
+                      {!fuelCut &&
+                        !limiterVisible &&
                         !telemetry.fuel.misfire &&
+                        !telemetry.afterfire &&
                         (telemetry.fuel.lambda > 1.1 ? (
                           <em className="boost-flag warn">LEAN</em>
                         ) : telemetry.fuel.lambda < 0.8 ? (
@@ -1126,7 +1292,7 @@ export function BenchPage() {
                     <div>
                       <small>BOOST</small>
                       <strong>
-                        {(telemetry.induction.boost / 1e5).toFixed(2)}
+                        {formatFixed(telemetry.induction.boost / 1e5, 2)}
                         <span> bar</span>
                       </strong>
                     </div>
@@ -1163,9 +1329,10 @@ export function BenchPage() {
                           <>
                             {Math.round(telemetry.induction.wastegate * 100)}
                             <span>% · </span>
-                            {(
-                              telemetry.induction.exhaustBackPressure / 1e5
-                            ).toFixed(2)}
+                            {formatFixed(
+                              telemetry.induction.exhaustBackPressure / 1e5,
+                              2,
+                            )}
                             <span> bar </span>
                           </>
                         )}
@@ -1187,11 +1354,36 @@ export function BenchPage() {
                   </div>
                 )}
               </Paper>
+              <Paper className="chart-panel" variant="outlined">
+                <Chart
+                  title="Live engine speed"
+                  labels={historyLabels}
+                  data={history}
+                />
+                <Chart
+                  title={`Cylinder ${selected + 1} pressure · latest cycle`}
+                  labels={pressureLabels}
+                  data={trace}
+                />
+              </Paper>
+            </section>
+            <aside className="bench-sidebar">
               <Paper className="control-panel" variant="outlined">
                 <div className="panel-heading">
                   <h2>Bench controls</h2>
-                  <span className="eyebrow">SPACE / RT = THROTTLE</span>
+                  <Button
+                    size="small"
+                    className="shortcut-link"
+                    onClick={() => setShowShortcuts(true)}
+                  >
+                    Shortcuts (?)
+                  </Button>
                 </div>
+                <Gauges
+                  telemetry={telemetryRef}
+                  revLimit={viewEngine.revLimit}
+                  mechanicalLimit={viewEngine.mechanicalLimit}
+                />
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   <Button
                     variant="outlined"
@@ -1212,7 +1404,8 @@ export function BenchPage() {
                 <div className="control-sliders">
                   <div>
                     <label id="throttle-label">
-                      Throttle <b>{Math.round(throttle * 100)}%</b>
+                      Throttle <small>(Space / RT)</small>{' '}
+                      <b>{Math.round(throttle * 100)}%</b>
                     </label>
                     <Slider
                       aria-labelledby="throttle-label"
@@ -1232,7 +1425,9 @@ export function BenchPage() {
                       value={load}
                       min={0}
                       max={300}
-                      disabled={busy || activeTest || mode === 'audition'}
+                      disabled={
+                        busy || activeTest || mode === 'audition' || !!road
+                      }
                       onChange={(_, v) => {
                         setLoad(Number(v))
                         audio.current?.send({
@@ -1256,6 +1451,53 @@ export function BenchPage() {
                       }}
                     />
                   </div>
+                </div>
+                <div className="listen-row">
+                  <TextField
+                    select
+                    size="small"
+                    label="Listen from (V)"
+                    value={prefs.listener}
+                    onChange={(e) =>
+                      updatePrefs({ listener: e.target.value as Listener })
+                    }
+                  >
+                    {LISTENERS.map((l) => (
+                      <MenuItem key={l} value={l}>
+                        {listenerLabels[l]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    size="small"
+                    label="Power"
+                    value={prefs.power}
+                    onChange={(e) =>
+                      updatePrefs({ power: e.target.value as PowerUnit })
+                    }
+                  >
+                    {POWER_UNITS.map((u) => (
+                      <MenuItem key={u} value={u}>
+                        {u}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    size="small"
+                    label="Torque"
+                    value={prefs.torque}
+                    onChange={(e) =>
+                      updatePrefs({ torque: e.target.value as TorqueUnit })
+                    }
+                  >
+                    {TORQUE_UNITS.map((u) => (
+                      <MenuItem key={u} value={u}>
+                        {u}
+                      </MenuItem>
+                    ))}
+                  </TextField>
                 </div>
                 <Stack direction="row" spacing={2} alignItems="center" mb={2}>
                   <FormControlLabel
@@ -1307,7 +1549,9 @@ export function BenchPage() {
                         experiment.engine.mechanicalLimit - 100,
                       ),
                     ]}
-                    disabled={busy || activeTest || mode === 'audition'}
+                    disabled={
+                      busy || activeTest || mode === 'audition' || !!road
+                    }
                     slotProps={{
                       htmlInput: {
                         min: 0,
@@ -1331,10 +1575,21 @@ export function BenchPage() {
                     estimate: {experiment.engine.mechanicalLimit} RPM
                   </span>
                 </div>
+                <RoadControls
+                  road={road}
+                  onChange={changeRoad}
+                  speed={telemetry.road?.speed ?? null}
+                  disabled={busy || activeTest || mode === 'audition'}
+                />
                 {limiterVisible && (
                   <Alert severity="warning">
-                    Rev limiter cycling — electronic fuel cut. Release throttle
-                    or add dyno load. Mechanical capability is unchanged.
+                    Rev limiter cycling —{' '}
+                    {experiment.engine.limiterCut === 'spark' ||
+                    experiment.engine.fuelSystem.kind === 'carburettor'
+                      ? 'spark cut: unburned fuel can pop in a hot exhaust'
+                      : 'electronic fuel cut'}
+                    . Release throttle or add load. Mechanical capability is
+                    unchanged.
                   </Alert>
                 )}
                 {running &&
@@ -1364,20 +1619,6 @@ export function BenchPage() {
                   {notice}
                 </p>
               </Paper>
-              <Paper className="chart-panel" variant="outlined">
-                <Chart
-                  title="Live engine speed"
-                  labels={historyLabels}
-                  data={history}
-                />
-                <Chart
-                  title={`Cylinder ${selected + 1} pressure · latest cycle`}
-                  labels={pressureLabels}
-                  data={trace}
-                />
-              </Paper>
-            </section>
-            <aside className="bench-sidebar">
               <Paper className="editor-panel" variant="outlined">
                 <div className="panel-heading">
                   <h2>Engine workshop</h2>
@@ -1392,27 +1633,23 @@ export function BenchPage() {
                   />
                 </div>
                 <div className="preset-buttons">
-                  <Button
-                    variant="outlined"
-                    disabled={activeTest}
-                    onClick={() => loadBuild(roadEngine, experiment.conditions)}
-                  >
-                    Road 2.0
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    disabled={activeTest}
-                    onClick={() =>
-                      loadBuild(sportEngine, experiment.conditions)
-                    }
-                  >
-                    Sport 2.0
-                  </Button>
+                  {starterBuilds.map((b) => (
+                    <Button
+                      key={b.label}
+                      variant="outlined"
+                      size="small"
+                      title={b.description}
+                      disabled={activeTest}
+                      onClick={() => loadBuild(b.engine, experiment.conditions)}
+                    >
+                      {b.label}
+                    </Button>
+                  ))}
                 </div>
                 <p className="helper-text">
-                  Road: mild compression and modest ports. Sport: freer
-                  breathing, longer intake timing and lighter inertia. Fictional
-                  starting points, not production replicas.
+                  {starterBuilds.find((b) => b.engine.name === draft.name)
+                    ?.description ?? 'Your own build.'}{' '}
+                  Fictional starting points, not production replicas.
                 </p>
                 <TextField
                   size="small"
@@ -1489,6 +1726,42 @@ export function BenchPage() {
                     setDraft((d) => ({ ...d, induction: update(d.induction) }))
                   }
                 />
+                <h3 className="workshop-subheading">Exhaust & limiter</h3>
+                <ExhaustEditor
+                  value={draft.exhaust}
+                  disabled={activeTest}
+                  onChange={(update) =>
+                    setDraft((d) => ({ ...d, exhaust: update(d.exhaust) }))
+                  }
+                />
+                <TextField
+                  select
+                  size="small"
+                  fullWidth
+                  label="Rev limiter cuts"
+                  value={
+                    draft.fuelSystem.kind === 'carburettor'
+                      ? 'spark'
+                      : draft.limiterCut
+                  }
+                  disabled={activeTest || draft.fuelSystem.kind === 'carburettor'}
+                  helperText={
+                    draft.fuelSystem.kind === 'carburettor'
+                      ? 'A carburettor cannot stop its fuel, so the limiter cuts the spark.'
+                      : draft.limiterCut === 'spark'
+                        ? 'Fuel keeps flowing unburned: pops and bangs in a hot exhaust.'
+                        : 'Injection stops: quiet and clean.'
+                  }
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      limiterCut: e.target.value as 'fuel' | 'spark',
+                    }))
+                  }
+                >
+                  <MenuItem value="fuel">Fuel (injection stops)</MenuItem>
+                  <MenuItem value="spark">Spark (ignition cut)</MenuItem>
+                </TextField>
                 <p className="derived-capacity">
                   Derived capacity{' '}
                   <strong>
@@ -1682,14 +1955,14 @@ export function BenchPage() {
                   <Button
                     variant="contained"
                     disabled={dynoBlocked}
-                    onClick={() => void test('live')}
+                    onClick={() => requestTest('live')}
                   >
                     Live pull
                   </Button>
                   <Button
                     variant="outlined"
                     disabled={dynoBlocked}
-                    onClick={() => void test('quick')}
+                    onClick={() => requestTest('quick')}
                   >
                     Quick test
                   </Button>
@@ -1705,39 +1978,27 @@ export function BenchPage() {
                   samples.
                 </p>
                 {displayed && (
-                  <div className="run-summary" data-testid="run-summary">
-                    <Chip
-                      size="small"
-                      color={
-                        displayed.status === 'complete' ? 'success' : 'warning'
-                      }
-                      label={displayed.status.toUpperCase()}
-                    />
-                    <p>
-                      {displayed.samples.length} points ·{' '}
-                      {displayed.procedure.kind}
-                    </p>
-                    <strong>
-                      {peak.toFixed(1)} kW{' '}
-                      <small>@ {Math.round(powerPoint?.rpm ?? 0)} RPM</small>
-                    </strong>
-                    <strong>
-                      {peakTorque.toFixed(1)} Nm{' '}
-                      <small>@ {Math.round(torquePoint?.rpm ?? 0)} RPM</small>
-                    </strong>
-                    {displayed.reason && <p>{displayed.reason}</p>}
-                  </div>
+                  <PullSummary
+                    run={displayed}
+                    baseline={baseline}
+                    power={prefs.power}
+                    torque={prefs.torque}
+                    band={band}
+                    onBand={setBand}
+                  />
                 )}
               </Paper>
               <Paper className="chart-panel" variant="outlined">
                 <Chart
                   title="Brake torque comparison"
+                  markPeaks
                   labels={curveLabels}
                   data={curves}
                   height={205}
                 />
                 <Chart
                   title="Crank power comparison"
+                  markPeaks
                   labels={powerLabels}
                   data={powers}
                   height={205}
@@ -1891,6 +2152,41 @@ export function BenchPage() {
             </details>
           </footer>
         </main>
+        <ShortcutHelp
+          open={showShortcuts}
+          onClose={() => setShowShortcuts(false)}
+        />
+        <Dialog
+          open={!!overwrite}
+          onClose={() => setOverwrite(null)}
+          aria-labelledby="overwrite-title"
+        >
+          <DialogTitle id="overwrite-title">
+            Replace the {overwrite?.slot === 'baseline' ? 'Baseline' : 'Modified'}{' '}
+            run?
+          </DialogTitle>
+          <DialogContent>
+            <p className="helper-text">
+              This test will replace the run already captured in{' '}
+              {overwrite?.slot === 'baseline' ? 'Baseline' : 'Modified'}.
+              Saved runs in your library are not affected. To keep it, cancel
+              and switch “Capture in” to the other slot.
+            </p>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOverwrite(null)}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={() => {
+                const kind = overwrite!.kind
+                setOverwrite(null)
+                void test(kind)
+              }}
+            >
+              Replace and test
+            </Button>
+          </DialogActions>
+        </Dialog>
       </div>
     </ThemeProvider>
   )
