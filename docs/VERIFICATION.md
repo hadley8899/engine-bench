@@ -236,3 +236,27 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Chromium (built-in browser pane): with the Turbo hot hatch at 5,000 RPM and full boost, the cylinder strip read EGT 1,008 °C, crown 323–324 °C (amber) and valve 735–739 °C, plus knock at 91% of onset. WebGL was unavailable in the pane, so the piston glow, knock flash and spark timing on the cutaway were type-checked but not seen.
 - Playwright: `tests/stage6.spec.ts` now checks that each cylinder shows EGT, piston and valve temperatures. Full run: 44 passed, 2 storage cases skipped. `scripts/test-storage-browser.sh`: 2 passed. Backend: 34 passed. Vitest: 108 passed. Build and lint (one existing warning) pass. Benchmark: 0.108 ms median at 4,000 RPM and 0.194 ms at 8,400 RPM.
 
+## Model 1.9.0: enrichment cooling, and full reset
+
+- Decision (3 November 2026, user): no saved builds need to keep 1.8.0 results, so 1.9.0 applies to every build without an opt-in.
+- Vitest: 111 passed.
+  - `src/sim/knock.test.ts`: the rich products are exactly stoichiometric at λ ≥ 1, release less heat into more moles and more heat capacity as the mixture richens, and give a combustion efficiency of about 0.8 at φ 1.18 for petrol and E85.
+  - `src/sim/thermal.test.ts`: λ 0.85 at 4,500 RPM lowers EGT by 50–150 K, the crown by more than 3 K and the valve by more than 25 K.
+- λ at 1: for all five starting builds, the 1,500–6,200 RPM sweep (capped below each limiter) gives the same peak power and hottest EGT as 1.8.0 to within 0.1 kW and 1 K. It is not bit-identical, because brief rich transients now form rich products.
+- λ 0.85, same sweeps against 1.8.0:
+
+  | Build | Peak power | Hottest EGT | Peak knock index |
+  | --- | --- | --- | --- |
+  | Road 2.0 | 106.2 kW (109.7) | 820 °C (918) | 0.85 (0.89) |
+  | Sport 2.0 | 115.5 kW (119.0) | 758 °C (855) | 0.83 (0.88) |
+  | Turbo hot hatch | 209.5 kW (218.3) | 934 °C (1,041) | 0.65 (0.70) |
+  | Torquey long-stroke | 92.7 kW (95.6) | 776 °C (870) | 1.01 (1.06) |
+  | Screaming 9k | 102.2 kW (105.1) | 736 °C (832) | 0.80 (0.84) |
+
+- Known gaps, recorded in `docs/SIMULATION.md`: with no dissociation, enrichment costs about 3% power instead of reaching a best-power mixture slightly rich of λ 1, and the EGT drop (about 100 K from λ 1.0 to 0.85) is larger than the 30–60 K first quoted in the plan. A web search found the direction confirmed in patent literature (EGT highest near λ 1 and falling with enrichment), but no calibrated full-load data.
+- Cost (Node, standard benchmark, 1.9.0 and 1.8.0 interleaved three times on the same machine): median per 128-frame block 0.45 against 0.41–0.48 ms at 4,000 RPM and 0.89–1.02 against 0.79–0.81 ms at 8,400 RPM, against a 2.67 ms budget. This machine was slower than for earlier entries, so compare only within this entry.
+- Full reset: a confirmed **Full reset** button beside Reset bench returns the bench to the Road build in normal air with default test settings and controls. It replaces the AudioWorklet and Worker hosts, and keeps comparison runs, saved builds and preferences. Reset bench only rebuilds the current build, and the guest build persists across reloads in the same tab (sessionStorage), so a build or conditions that could not rev had no way out short of editing every field. Emergency stop and rebuilds now also clear the UI's dyno and road load, matching the fresh core. New hosts also take the saved listening position; before, the audio used the tailpipe until the setting was changed.
+- Chromium (built-in browser pane, production preview build): an 88 mm bore build was rebuilt, survived a reload and started. After a full reset the bore read 86 mm and the engine was stopped. The new host then idled at 961 RPM and revved to 6,638 RPM on throttle.
+- Playwright (browsers downloaded for 1.64.1, Chromium and Firefox): 40 passed, 6 failed, 2 storage cases skipped. Four of the failures ran while Node simulation scripts were loading the CPU; rerun alone, all four passed. Those include the new full-reset case (`tests/bench.spec.ts`) in Chromium. It was not rerun in Firefox, where it passed in the full run. The other two are the sign-in navigation test in both browsers. They fail because the local API was not running, so the sign-in page never shows its button. Backend tests were not run for the same reason; only the run schema's model-version list changed (re-exported with `npm run schemas`).
+- A reported restart problem on the deployed site (the 5.4 L "Workshop 1.8 • 9k" recipe: hold 5,000 RPM, ignition off, hold 0, ignition on) was not reproduced. It restarted in Node, in the built-in browser pane with this build and in Chrome on the deployed site. Turning ignition back on while the engine coasts refires it at about 940 RPM. Once it has stopped, the ignition alone does not crank it: Start engine or the held starter does, as the stall notice says.
+- Build passes. Lint passes with the one existing warning.

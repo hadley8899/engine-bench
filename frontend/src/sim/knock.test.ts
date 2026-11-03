@@ -11,7 +11,7 @@ import {
 } from './schema'
 import type { Conditions, EngineDefinition, FuelGrade } from './schema'
 import { starterBuilds } from '../bench/builds'
-import { FUELS } from './fuel'
+import { FUELS, richProducts } from './fuel'
 
 const unprotected: EngineDefinition = {
   ...roadEngine,
@@ -184,5 +184,32 @@ describe('combustion', () => {
     expect(flow(e85) / flow(petrol)).toBeGreaterThan(
       (0.9 * FUELS.ron95.stoichiometric) / FUELS.e85.stoichiometric,
     )
+  })
+})
+
+describe('rich-burn products', () => {
+  it('are stoichiometric at λ ≥ 1', () => {
+    for (const phi of [0.6, 1])
+      expect(richProducts(FUELS.ron95, phi)).toEqual({
+        heat: 1,
+        moles: 1,
+        capacity: 1,
+      })
+  })
+  it('release less heat into more gas as the mixture richens', () => {
+    let previous = richProducts(FUELS.ron95, 1)
+    for (const lambda of [0.95, 0.85, 0.7, 0.55]) {
+      const p = richProducts(FUELS.ron95, 1 / lambda)
+      expect(p.heat).toBeLessThan(previous.heat)
+      expect(p.moles).toBeGreaterThan(previous.moles)
+      expect(p.capacity).toBeGreaterThan(previous.capacity)
+      previous = p
+    }
+  })
+  it("match Heywood's rich combustion efficiency of about 0.8 at φ 1.18", () => {
+    // Heat per unit of air / fuel supplied per unit of air.
+    const phi = 1 / 0.85
+    expect(richProducts(FUELS.ron95, phi).heat / phi).toBeCloseTo(0.8, 1)
+    expect(richProducts(FUELS.e85, phi).heat / phi).toBeCloseTo(0.8, 1)
   })
 })

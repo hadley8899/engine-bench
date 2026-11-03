@@ -1,6 +1,6 @@
 # Engine model and browser-host decision
 
-Model version: `eb-0d-1.8.0`. 1.8.0 adds per-cylinder estimated temperatures (see Component temperatures); they observe the gas and change no result, so dyno results are bit-identical to 1.7.0. 1.7.0 adds optional engine-management maps and fuel-supply limits (see Engine management and fuel supply); builds without them give dyno results bit-identical to 1.6.0. 1.6.0 adds fuel grades, an end-gas knock estimate, optional ECU knock control and an optional predictive burn rate (see Combustion and knock). Builds saved before 1.6.0 read as fixed burn, RON 95 and no knock control, and their dyno results are bit-identical to 1.5.0. 1.5.0 makes the rev limiter's cut explicit (see Rev limiter) and adds exhaust systems, sound synthesis and optional road load, none of which change the physics of a run below the limiter: dyno results match 1.4.0. 1.4.0 adds fuel systems with wall-film fuel transport and misfire limits (see Fuel systems); steady full-load results for port injection, the default, match 1.3.0. 1.3.0 adds forced induction (see Forced induction); naturally aspirated results are unchanged from 1.2.0. 1.1.0 scaled friction with displacement and made starter torque configurable. 1.2.0 adds temperature-dependent gas properties, Woschni-form wall heat transfer, piston-speed friction and intake runner inertia, and recalibrates the presets (see Calibration). Runs recorded by earlier model versions remain readable as history. Written in TypeScript. Scope: four-stroke, fictional inline-four petrol engines, naturally aspirated or with the lumped forced-induction model. The Road and Sport definitions are experimental starting points, not calibrated replicas of production engines.
+Model version: `eb-0d-1.9.0`. 1.9.0 makes rich burns form CO and H2 by water–gas shift equilibrium, so enrichment releases less heat into more gas and cools the charge (see Rich mixtures). Port injection also cools the charge with the extra fuel's latent heat. It applies to every build: by the user's decision of 3 November 2026, no saved builds needed to keep 1.8.0 results. Results at λ ≥ 1 are unchanged apart from brief transient richness. 1.8.0 adds per-cylinder estimated temperatures (see Component temperatures); they observe the gas and change no result, so dyno results are bit-identical to 1.7.0. 1.7.0 adds optional engine-management maps and fuel-supply limits (see Engine management and fuel supply); builds without them give dyno results bit-identical to 1.6.0. 1.6.0 adds fuel grades, an end-gas knock estimate, optional ECU knock control and an optional predictive burn rate (see Combustion and knock). Builds saved before 1.6.0 read as fixed burn, RON 95 and no knock control, and their dyno results are bit-identical to 1.5.0. 1.5.0 makes the rev limiter's cut explicit (see Rev limiter) and adds exhaust systems, sound synthesis and optional road load, none of which change the physics of a run below the limiter: dyno results match 1.4.0. 1.4.0 adds fuel systems with wall-film fuel transport and misfire limits (see Fuel systems); steady full-load results for port injection, the default, match 1.3.0. 1.3.0 adds forced induction (see Forced induction); naturally aspirated results are unchanged from 1.2.0. 1.1.0 scaled friction with displacement and made starter torque configurable. 1.2.0 adds temperature-dependent gas properties, Woschni-form wall heat transfer, piston-speed friction and intake runner inertia, and recalibrates the presets (see Calibration). Runs recorded by earlier model versions remain readable as history. Written in TypeScript. Scope: four-stroke, fictional inline-four petrol engines, naturally aspirated or with the lumped forced-induction model. The Road and Sport definitions are experimental starting points, not calibrated replicas of production engines.
 
 ## Core equations and assumptions
 
@@ -8,9 +8,9 @@ Each cylinder has gas mass, internal energy, fresh charge, pressure and combusti
 
 Each cylinder has a lumped intake runner whose gas momentum is driven by the manifold-to-cylinder pressure difference and resisted by the intake valve's quadratic (incompressible orifice) loss: `L/A · dṁ/dt = Δp − ṁ|ṁ|/(2ρA_v²)`. It is solved implicitly each substep so a nearly closed valve stays stable, and capped at the valve's choked flow. Runner area is 0.15 × piston area (about 0.39 × bore diameter), or 1.2 × the peak valve area if larger; runner length is a build setting. Momentum is discarded when the valve closes; pressure waves and reflections are not solved, so this captures inertial ram filling but not wave tuning. The exhaust valve remains a quasi-steady compressible isentropic orifice with sonic choking and reverse flow. Flow transports enthalpy; energy changes through combustion, pressure-volume work and wall heat transfer.
 
-In-cylinder gas uses a specific heat at constant volume rising linearly with temperature (cv = 660 + 0.17·T J/kg·K, so γ ≈ 1.40 at 300 K and ≈ 1.26 at 2,500 K), a single-zone approximation of air and burned-gas properties without dissociation. Valve-flow equations keep cold-air γ = 1.4. Wall heat transfer uses the Woschni correlation form (h = 3.26·B^-0.2·p^0.8·T^-0.55·w^0.8, with p in kPa) with gas velocity 2.28 × mean piston speed + 1 m/s and no separate combustion term; a calibration factor of 3 stands in for that term. Wall area is the head, the crown and the exposed liner. Walls are assumed to be 80 K above the coolant state. Combustion uses a Wiebe fraction with exponent 3 and coefficient 6.9. Effective valve areas include the discharge coefficient. Specific heats and gas constant are held fixed. Wave propagation, exhaust pipes, acoustic radiation and detailed chemical kinetics are not solved.
+In-cylinder gas uses a specific heat at constant volume rising linearly with temperature (cv = 660 + 0.17·T J/kg·K, so γ ≈ 1.40 at 300 K and ≈ 1.26 at 2,500 K), a single-zone approximation of air and burned-gas properties without dissociation. Rich-burn products scale it and the gas constant per cylinder (see Rich mixtures). Valve-flow equations keep cold-air γ = 1.4. Wall heat transfer uses the Woschni correlation form (h = 3.26·B^-0.2·p^0.8·T^-0.55·w^0.8, with p in kPa) with gas velocity 2.28 × mean piston speed + 1 m/s and no separate combustion term; a calibration factor of 3 stands in for that term. Wall area is the head, the crown and the exposed liner. Walls are assumed to be 80 K above the coolant state. Combustion uses a Wiebe fraction with exponent 3 and coefficient 6.9. Effective valve areas include the discharge coefficient. Apart from rich-burn products, specific heats and gas constant are held fixed. Wave propagation, exhaust pipes, acoustic radiation and detailed chemical kinetics are not solved.
 
-Air humidity is relative humidity; oxygen is dry-gas mole/volume fraction. Water vapour displaces dry air. Dry gas is approximated as oxygen/nitrogen; the bulk gas constant and specific heats remain air approximations over the supported range. Fuel arrives with the fresh charge as set by the fuel system (see Fuel systems), and leaves with any charge pushed back out of the cylinder. Heat release is limited by both the delivered fuel and oxygen, with the fuel grade's heating value (43 MJ/kg for petrol). Extra oxygen cannot burn fuel that is not present. A charge whose delivered λ is above 1.6 or below 0.55 does not ignite (a misfire). Fuel enrichment is not automatically recalibrated for every environment.
+Air humidity is relative humidity; oxygen is dry-gas mole/volume fraction. Water vapour displaces dry air. Dry gas is approximated as oxygen/nitrogen; the bulk gas constant and specific heats remain air approximations over the supported range. Fuel arrives with the fresh charge as set by the fuel system (see Fuel systems), and leaves with any charge pushed back out of the cylinder. Heat release is limited by both the delivered fuel and oxygen, with the fuel grade's heating value (43 MJ/kg for petrol). Extra oxygen cannot burn fuel that is not present, and a rich charge releases less than a stoichiometric one (see Rich mixtures). A charge whose delivered λ is above 1.6 or below 0.55 does not ignite (a misfire). Fuel enrichment is not automatically recalibrated for every environment.
 
 A simple lumped coolant state evolves separately from ambient temperature. This is illustrative thermal behaviour, not a prediction of overheating or component life. Knock is estimated (see Combustion and knock) but causes no damage yet. Emissions, oil pressure, valve float, wear and failures are not implemented. The mechanical limit is a configurable assumed capability used for warnings and dyno validation/abort; it is not a component stress calculation.
 
@@ -55,7 +55,7 @@ A build's `fuelSystem` is `carburettor`, `throttleBody`, `port` (the default, an
 | --- | --- | --- | --- | --- |
 | Carburettor | 0.3 + 0.35·exp(−v/40 m/s), from venturi velocity v | 0.35 s | Venturi: by volume | 25% of latent heat taken from the charge air |
 | Throttle-body injection | 0.4 | 0.3 s | ECU: by air mass | 25%, from the charge air |
-| Port injection | 0.25 | 0.12 s | ECU: by air mass | None beyond the 1.2.0 calibration |
+| Port injection | 0.25 | 0.12 s | ECU: by air mass | 50% of the latent heat beyond stoichiometric petrol's, which is inside the 1.2.0 calibration |
 | Direct injection | 0 | — | ECU: by air mass | 60%, from the cylinder charge during intake |
 
 - **Carburettor**: fuel flow through a fixed jet follows √(Δp·ρ_fuel) and air flow √(Δp·ρ_air), so the delivered fuel–air ratio scales with 1/√ρ_air. Jetting is set by λ at standard dry air (20 °C, 1,013.25 hPa): thin or hot air runs rich, cold dense air lean. The venturi, booster and throttle plate lose 0.6 throat dynamic heads (`0.6·ṁ²/(2ρA²)`, capped at 50 kPa) ahead of the throttle. With forced induction the carburettor is draw-through: the loss lowers the compressor inlet pressure, and metering uses ambient density. The accelerator pump squirts 0.185 kg per m³ of displacement over a full throttle opening, released with a 0.15 s time constant into the airstream, where it wets the walls like the jet fuel. There is no overrun fuel cut. Not modelled: idle and progression circuits, weak main-jet signal at low airflow, enrichment (power) valves, float-bowl dynamics and chokes.
@@ -86,7 +86,7 @@ A build's `combustion` block holds the fuel grade, the burn-rate model and ECU k
 | RON 91, 95, 98 petrol | 91 / 95 / 98 | 14.7 | 43 MJ/kg | 350 kJ/kg |
 | E85 | 105 | 9.8 | 29.2 MJ/kg | 850 kJ/kg |
 
-The ECU meters to the fuel's own stoichiometric ratio, so λ means the same for every fuel and E85 needs about 50% more fuel by mass. Oxygen needed per kilogram of fuel scales with the stoichiometric ratio. E85's extra evaporative cooling comes from its latent heat through the fuel-system cooling shares (port injection, whose petrol cooling is inside the calibration, gets half of the extra latent heat over petrol). Its octane figure is a commonly quoted value; much of E85's knock resistance in practice comes from that cooling, which is modelled separately.
+The ECU meters to the fuel's own stoichiometric ratio, so λ means the same for every fuel and E85 needs about 50% more fuel by mass. Oxygen needed per kilogram of fuel scales with the stoichiometric ratio. E85's extra evaporative cooling comes from its latent heat through the fuel-system cooling shares (port injection, whose stoichiometric petrol cooling is inside the calibration, gets half of any latent heat beyond it, from E85 or from enrichment). Its octane figure is a commonly quoted value; much of E85's knock resistance in practice comes from that cooling, which is modelled separately.
 
 **Burn rate.** With `fixed`, every burn takes `burnDuration`. With `predictive`, `burnDuration` is the figure at 3,000 RPM and full load, and each burn is scaled by the ratio of a reference turbulent flame speed to the one at spark:
 
@@ -122,6 +122,36 @@ Knock does not change the cycle's heat release, pressure or torque in this versi
 
 These are estimates for comparing builds and seeing trends, not knock-limited spark advance predictions for a real engine.
 
+## Rich mixtures
+
+The gas model is calibrated on stoichiometric and lean burns. In 1.8.0 a rich charge released the same heat as a stoichiometric one and its extra fuel left unchanged, so enrichment did not cool the engine. From 1.9.0, a burn richer than λ 1 forms the products of water–gas shift equilibrium: the oxygen is shared between CO2, CO, H2O and H2, with `K = [CO][H2O]/([CO2][H2]) = 3.5`, the value Heywood (*Internal Combustion Engine Fundamentals*, §4.9) uses for rich burned gas frozen near 1,740 K. Fuels are CH1.87 petrol and an E85 of 83% ethanol by mass (CH2.71O0.373). For the products of a unit of air, relative to stoichiometric products:
+
+- **Heat** is the fuel's heating value less what the CO (283 kJ/mol) and H2 (242 kJ/mol) still hold. It multiplies the usual 96% of the oxygen-limited fuel's heating value.
+- **Moles** rise because every fuel atom ends up in the gas, which scales the cylinder's gas constant and raises pressure at a given temperature.
+- **Heat capacity** rises from CO and H2, using molar cv near 1,800 K (JANAF): CO2 52.8, CO 27.8, H2O 42.6, H2 25.2 and N2 27.4 J/(mol·K). It scales the cylinder gas's cv curve.
+
+| λ (petrol) | Heat | Moles | Heat capacity |
+| --- | --- | --- | --- |
+| 0.95 | 0.982 | 1.014 | 1.005 |
+| 0.85 | 0.940 | 1.046 | 1.018 |
+| 0.70 | 0.860 | 1.111 | 1.046 |
+| 0.55 | 0.745 | 1.212 | 1.093 |
+
+At λ 0.85, heat per unit of fuel supplied is 0.80 of the heating value, which matches the combustion efficiency of rich mixtures in Heywood. The products form with the burn and are tracked per cylinder as extra mass-weighted heat capacity and moles. They leave with the exhaust and the intake backflow, and dilute as fresh charge arrives. Gas returning from either manifold, including pushed-back runner gas, re-enters with air properties. Factors are on an air-mass basis: the fuel's own mass is still not added to the gas. Valve flow uses the scaled gas constant through `√(R·T)`, but keeps cold-air γ. A turbocharger receives the exhaust's enthalpy and converts it with air properties. The unburned charge, including the excess fuel vapour, keeps air properties during compression, so the knock correlation's mixture factor is unchanged.
+
+Results on the Road engine, full-load holds of 16 s:
+
+| λ | 4,500 RPM torque | EGT | Crown | Valve | Knock index |
+| --- | --- | --- | --- | --- | --- |
+| 1.00 | 192 Nm | 867 °C | 239 °C | 534 °C | 0.61 |
+| 0.90 | 189 Nm | 802 °C | 235 °C | 499 °C | 0.49 |
+| 0.85 | 187 Nm | 767 °C | 232 °C | 480 °C | 0.44 |
+| 0.80 | 185 Nm | 730 °C | 228 °C | 459 °C | 0.39 |
+
+1.8.0 gave 192–193 Nm and 863–867 °C EGT across the same range. At 2,000 RPM, λ 0.85 lowers EGT by 90 K. Over a sweep, every starting build at λ 0.85 has a hottest-cylinder EGT 98–113 K lower than at λ 1.
+
+**Known gap: no best-power mixture.** Without dissociation, enrichment costs power: about 3% at λ 0.85 for every starting build. Real engines usually make their best power slightly rich (around λ 0.86–0.9), a few per cent above λ 1. At peak temperature, a stoichiometric burn's own CO2 and H2O dissociate and hold back heat that a rich burn, already short of oxygen, largely does not. The model's single cv curve has no dissociation, so this is not reproduced. Enrichment therefore trades power for cooling and knock margin in this version. The 100 K EGT drop from λ 1.0 to 0.85 is also larger than the rough 30–60 K this plan first quoted. No calibrated full-load EGT-against-λ data was found to settle it, and the missing dissociation probably accounts for part of the difference.
+
 ## Engine management and fuel supply
 
 A build's `management` is null (the single ignition advance, λ and boost target apply everywhere; how builds saved before 1.7.0 read) or a set of maps:
@@ -152,7 +182,7 @@ Trends follow the cycle model:
 - Load raises every temperature.
 - Retarded timing moves heat from the crown into the exhaust.
 - Knock heats the crown.
-- Enrichment lowers EGT only slightly. The excess fuel's own mass, heat capacity and chemistry are not modelled, so running rich does not cool the engine as much as it does in reality (real engines lose roughly 30–60 K of EGT from λ 1.0 to 0.85).
+- Enrichment cools (1.9.0): from λ 1.0 to 0.85 at 4,500 RPM, EGT falls 100 K, the valve 54 K and the crown 7 K (see Rich mixtures).
 
 Identical cylinders read the same: differences come only from modelled causes, such as manifold interactions, per-cylinder knock retard and knock heat. Dyno samples recorded by 1.8.0 carry the hottest cylinder's EGT.
 

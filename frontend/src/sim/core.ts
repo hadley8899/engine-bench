@@ -18,7 +18,13 @@ import type { Listener } from './acoustics'
 import { validateRoad, Vehicle } from './road'
 import type { Road } from './road'
 import type { InductionTelemetry } from './induction'
-import { FUELS, FuelDelivery, LEAN_MISFIRE, RICH_MISFIRE } from './fuel'
+import {
+  FUELS,
+  FuelDelivery,
+  LEAN_MISFIRE,
+  RICH_MISFIRE,
+  richProducts,
+} from './fuel'
 import type { FuelTelemetry } from './fuel'
 import {
   atmosphere,
@@ -165,6 +171,15 @@ interface Cylinder {
   pushed: number
   pushedFresh: number
   pushedFuel: number
+  /**
+   * Rich-burn products' extra heat capacity and moles over air, as
+   * Σ mass × (factor − 1), kg: they leave and dilute with the gas.
+   */
+  capacityExcess: number
+  molesExcess: number
+  /** What the current burn adds to them when complete, kg. */
+  burnCapacity: number
+  burnMoles: number
   thermal: CylinderThermal
 }
 export type KnockTelemetry = {
@@ -351,6 +366,10 @@ export class EngineCore {
         pushed: 0,
         pushedFresh: 0,
         pushedFuel: 0,
+        capacityExcess: 0,
+        molesExcess: 0,
+        burnCapacity: 0,
+        burnMoles: 0,
         thermal: new CylinderThermal(conditions.coolant),
       })
     }
@@ -405,7 +424,9 @@ export class EngineCore {
       const volume = sameGeometry
         ? old.volume
         : geometry(engine, old.phase).volume
-      const temperature = temperatureFromEnergy(old.energy / old.mass)
+      const temperature = temperatureFromEnergy(
+        old.energy / (old.mass + old.capacityExcess),
+      )
       const scale = volume / old.volume
       cyl.mass = old.mass * scale
       cyl.energy = old.energy * scale
@@ -413,10 +434,15 @@ export class EngineCore {
       cyl.fuel = old.fuel * scale
       cyl.heat = old.heat * scale
       cyl.unburned = old.unburned * scale
+      cyl.capacityExcess = old.capacityExcess * scale
+      cyl.molesExcess = old.molesExcess * scale
+      cyl.burnCapacity = old.burnCapacity * scale
+      cyl.burnMoles = old.burnMoles * scale
       cyl.burn = old.burn
       cyl.phase = old.phase
       cyl.volume = volume
-      cyl.pressure = (cyl.mass * R * temperature) / volume
+      cyl.pressure =
+        ((cyl.mass + cyl.molesExcess) * R * temperature) / volume
       cyl.runner = old.runner
       cyl.spark = old.spark
       cyl.duration = old.duration
@@ -570,8 +596,16 @@ export class EngineCore {
         const derivative =
           this.pistonArea * (r * sin + (r * r * sin * cos) / root)
         const previousVolume = cyl.volume
-        let temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
-        let pressure = (cyl.mass * R * temperature) / previousVolume
+        // Rich products carry more heat capacity and moles than air.
+        let capacity = 1 + cyl.capacityExcess / cyl.mass
+        let moles = 1 + cyl.molesExcess / cyl.mass
+        let temperature = temperatureFromEnergy(
+          cyl.energy / (cyl.mass * capacity),
+        )
+        let pressure = (cyl.mass * moles * R * temperature) / previousVolume
+        // Specific enthalpy of the cylinder gas leaving through a valve.
+        const outflowEnthalpy =
+          capacity * internalEnergy(temperature) + moles * R * temperature
         const inlet =
           deg >= 350 && deg < e.intakeClose
             ? Math.sin((Math.PI * (deg - 350)) / (e.intakeClose - 350)) *
@@ -628,7 +662,12 @@ export class EngineCore {
           } else {
             flow = Math.max(
               flow,
-              -massFlow(pressure as Pascals, 0 as Pascals, temperature, inlet),
+              -massFlow(
+                pressure as Pascals,
+                0 as Pascals,
+                temperature * moles,
+                inlet,
+              ),
               (-cyl.mass * 0.08) / dt,
             )
             const dm = -flow * dt
@@ -651,8 +690,10 @@ export class EngineCore {
             }
             cyl.fresh *= kept
             cyl.fuel *= kept
+            cyl.capacityExcess *= kept
+            cyl.molesExcess *= kept
             cyl.mass -= dm
-            cyl.energy -= dm * enthalpy(temperature)
+            cyl.energy -= dm * outflowEnthalpy
           }
           cyl.runner = flow
           intakeMass += flow * dt
@@ -664,16 +705,18 @@ export class EngineCore {
               massFlow(
                 pressure as Pascals,
                 backPressure as Pascals,
-                temperature,
+                temperature * moles,
                 exhaust,
               ) * dt,
             )
-            const h = dm * enthalpy(temperature)
+            const h = dm * outflowEnthalpy
             const kept = 1 - dm / cyl.mass
             unburned += cyl.unburned * (1 - kept)
             cyl.unburned *= kept
             cyl.fresh *= kept
             cyl.fuel *= kept
+            cyl.capacityExcess *= kept
+            cyl.molesExcess *= kept
             cyl.mass -= dm
             cyl.energy -= h
             portMass += dm
@@ -719,7 +762,17 @@ export class EngineCore {
           const fires =
             this.controls.ignition && !(this.limited && this.sparkCut)
           const ignites = lambda <= LEAN_MISFIRE && lambda >= RICH_MISFIRE
-          cyl.heat = fires && ignites ? burnable * this.grade.heating * 0.96 : 0
+          // A rich burn forms CO and H2: less heat, more gas to heat.
+          const products = richProducts(
+            this.grade,
+            fires && ignites ? 1 / lambda : 1,
+          )
+          cyl.heat =
+            fires && ignites
+              ? burnable * this.grade.heating * 0.96 * products.heat
+              : 0
+          cyl.burnCapacity = (products.capacity - 1) * cyl.fresh
+          cyl.burnMoles = (products.moles - 1) * cyl.fresh
           cyl.spark = ignition
           cyl.sparked = true
           cyl.duration =
@@ -751,15 +804,21 @@ export class EngineCore {
         const elapsed = (wrap(phase - cyl.spark) * 180) / Math.PI
         if (elapsed < cyl.duration && cyl.burn < 1) {
           const burned = wiebe(elapsed / cyl.duration)
-          cyl.energy += Math.max(0, burned - cyl.burn) * cyl.heat
+          const progress = Math.max(0, burned - cyl.burn)
+          cyl.energy += progress * cyl.heat
+          cyl.capacityExcess += progress * cyl.burnCapacity
+          cyl.molesExcess += progress * cyl.burnMoles
           cyl.burn = burned
         }
         // First law: dU = dQ - p dV; simple wall heat transfer, ideal gas.
         cyl.energy -= pressure * (volume - previousVolume)
-        temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
+        // Valve flow and the burn changed the gas; refresh its properties.
+        capacity = 1 + cyl.capacityExcess / cyl.mass
+        moles = 1 + cyl.molesExcess / cyl.mass
+        temperature = temperatureFromEnergy(cyl.energy / (cyl.mass * capacity))
         // Head, crown and the currently exposed liner.
         const surface = 2 * this.pistonArea + (4 * volume) / e.bore
-        pressure = (cyl.mass * R * temperature) / volume
+        pressure = (cyl.mass * moles * R * temperature) / volume
         const coefficient =
           this.woschniBore *
           (pressure / 1000) ** 0.8 *
@@ -775,7 +834,7 @@ export class EngineCore {
         const deck = (wallHeat * this.pistonArea) / surface
         cyl.thermal.crownHeat += deck
         cyl.thermal.headHeat += deck
-        temperature = temperatureFromEnergy(cyl.energy / cyl.mass)
+        temperature = temperatureFromEnergy(cyl.energy / (cyl.mass * capacity))
         if (
           !Number.isFinite(temperature) ||
           temperature < 30 ||
@@ -785,7 +844,7 @@ export class EngineCore {
           throw new Error(
             'Cylinder state left the supported model range. Stop and rebuild.',
           )
-        pressure = (cyl.mass * R * temperature) / volume
+        pressure = (cyl.mass * moles * R * temperature) / volume
         if (cyl.knockOpen) this.integrateKnock(cyl, pressure, elapsed, dt)
         if (intakeClosing) this.closeIntake(cyl, pressure, temperature)
         this.traces[i][Math.min(359, Math.floor(deg / 2))] = pressure

@@ -1,19 +1,19 @@
 # Engine Bench — Delivery Plan
 
-Updated: 2 November 2026
+Updated: 3 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0), engine management (1.7.0) and per-cylinder temperatures (1.8.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0) and enrichment cooling (1.9.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
-2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0) and per-cylinder temperatures (1.8.0) are implemented; upgradeable parts and failures are next.
+2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0) and enrichment cooling (1.9.0) are implemented; upgradeable parts and failures are next.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
-Two-stroke engines (Stage 9) move behind these, followed by other layouts (Stage 10).
+Two-stroke engines (Stage 9) move behind these, followed by other layouts (Stage 10). A UI revision (Stage 11) follows once those features are in place (user decision, 3 November 2026).
 
 ## Product direction
 
@@ -40,7 +40,7 @@ The core loop is: start an engine, make an understandable change, hear and see t
 - **Immediate first run:** open a ready-to-run inline-four on the bench without registration or company setup. One explicit Start action enables sound and starts the engine; expose throttle immediately.
 - **Reversible experiments:** offer temporary Baseline and Modified slots, duplicate/reset actions, curve overlays and a clear list of changed settings before server persistence exists. Preserve the guest experiment through sign-in so saving does not require starting again.
 - **Approachable configuration:** provide described starting configurations, such as a mild road engine and a higher-revving variant, using only supported model differences. Keep the detailed editor available without making every numerical parameter part of the first-use experience.
-- **Clear edit lifecycle:** by default, geometry and structural changes require an explicit stop/rebuild/reset. Throttle and supported operational adjustments may change live. Show which applies before a change is committed and retain the previous configuration for restoration. Decision (1 November 2026, user request): an opt-in **Live updates** mode applies each valid edit to the running engine without stopping it, carrying crank speed, controls and gas state over; Restore previous build returns to the build before the live edits. Automatic tests and snapshot auditioning hold live edits until they end, and Stop & rebuild remains the explicit full reset.
+- **Clear edit lifecycle:** by default, geometry and structural changes require an explicit stop/rebuild/reset. Throttle and supported operational adjustments may change live. Show which applies before a change is committed and retain the previous configuration for restoration. Decision (1 November 2026, user request): an opt-in **Live updates** mode applies each valid edit to the running engine without stopping it, carrying crank speed, controls and gas state over; Restore previous build returns to the build before the live edits. Automatic tests and snapshot auditioning hold live edits until they end, and Stop & rebuild remains the explicit reset. Decision (3 November 2026, user request): a confirmed **Full reset** returns everything to the Road build in normal air, with default test settings and controls and fresh audio and worker hosts. It keeps comparison runs, saved builds and preferences, so a build that has stopped working can always be escaped.
 - **A bench worth watching:** prioritise responsive throttle, audible engine character, visible motion and a live dyno pull. Keep quick calculation available as a separate mode.
 - **Optional explanations:** add cylinder firing highlights and intake/compression/power/exhaust colour overlays to the cutaway. Selecting a cylinder can reveal its pressure trace. Keep these overlays optional and distinguish slow-motion inspection from real-time operation.
 - **Small optional challenges:** give experiments a purpose without restricting the sandbox. Examples include improving torque in a chosen RPM range at fixed displacement, comparing ambient conditions, or finding a useful operating range within modelled limits. Use genuine simulated trade-offs and published challenge conditions, with no currency, grind or unlock requirements.
@@ -223,7 +223,7 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 - [x] Add fuel systems (model 1.4.0): carburettor (venturi metering by volume, restriction, accelerator pump), throttle-body, port and direct injection, with x–τ wall-film transport, transient correction, overrun cut, evaporative charge cooling and misfire limits. Requested by the user with the period variety engines have used.
 - [x] Add opt-in Live updates that apply valid edits to the running engine.
 
-The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 11 and layouts to Stage 10.
+The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 12 and layouts to Stage 10.
 
 ### 5. Sound and bench feel — complete
 
@@ -281,8 +281,9 @@ Engine management:
 
 Temperatures:
 
-- [x] Add lumped per-cylinder thermal states: exhaust gas temperature at the port, piston crown, exhaust valve and head. Make per-cylinder differences come only from modelled causes such as charge, mixture, timing and knock. Do not add cosmetic variation. Model 1.8.0. Decision (2 November 2026): the temperatures observe the gas and do not feed back, so results are unchanged. Known gap: the model lacks excess-fuel cooling, so enrichment barely lowers EGT.
-- [ ] Model enrichment cooling: add the excess fuel's mass, heat capacity and rich-combustion chemistry to the charge, so running rich lowers EGT and crown temperature as in real engines (roughly 30–60 K of EGT from λ 1.0 to 0.85). It changes cycle physics, so it needs a model version bump and must leave existing builds unchanged unless they opt in. Do this before failures, so that adding fuel protects an engine.
+- [x] Add lumped per-cylinder thermal states: exhaust gas temperature at the port, piston crown, exhaust valve and head. Make per-cylinder differences come only from modelled causes such as charge, mixture, timing and knock. Do not add cosmetic variation. Model 1.8.0. Decision (2 November 2026): the temperatures observe the gas and do not feed back, so results are unchanged. Enrichment cooling followed in 1.9.0.
+- [x] Model enrichment cooling: add the excess fuel's mass, heat capacity and rich-combustion chemistry to the charge, so running rich lowers EGT and crown temperature as in real engines (roughly 30–60 K of EGT from λ 1.0 to 0.85). Do this before failures, so that adding fuel protects an engine. Model 1.9.0. Rich burns form water–gas shift products, so they release less heat into more moles and more heat capacity, and port injection also cools with the extra fuel's latent heat. From λ 1.0 to 0.85 at 4,500 RPM on the Road engine, EGT falls 100 K, the valve 54 K and the crown 7 K, and knock falls. Decision (3 November 2026, user): no saved builds needed to keep 1.8.0 results, so it applies to every build without an opt-in. Known gaps: without dissociation, enrichment costs about 3% power, and the EGT drop is larger than the figure above.
+- [ ] Model dissociation, or an equivalent lumped effect, so best power falls slightly rich of λ 1 (around λ 0.86–0.9) as in real engines. Today enrichment only trades power for cooling. Check it against a published fuel–air cycle or engine data, and recheck the EGT drop when it lands.
 - [x] Show per-cylinder temperatures and knock in a strip and on the cutaway (heat colours, glowing manifold). The strip shows EGT, crown and valve. On the cutaway, pistons glow with crown temperature, knocking chambers flash and the spark follows the ECU's timing. The exhaust already glowed (Stage 5).
 
 Parts and limits:
@@ -338,7 +339,20 @@ Acceptance: port timing is derived from geometry and validated; mass and energy 
 
 Acceptance: each released layout works through configuration, animation, audio, dyno and persistence.
 
-### 11. Fidelity and release readiness
+### 11. UI revision
+
+Requested by the user on 3 November 2026: the interface has become hard to understand, and the bench controls pane on the right is very long. Scheduled once the feature stages are in place, so the layout is designed around the finished set of controls, not revised again for each new one. Bring it forward if the bench becomes hard to use for the work in between.
+
+- [ ] Audit every control, readout and notice on the bench, workshop, maps and library: what it does, how often it is used and which tasks need it. Use that audit to drive the new structure.
+- [ ] Split the bench controls pane into task-based areas, for example drive (start, ignition, throttle, load), dyno test, test-cell conditions, sound and display. Keep the controls needed every run visible and move the rest behind clear tabs or sections.
+- [ ] Reorganise the engine workshop into understandable groups with progressive disclosure: everyday settings first, detailed parameters on demand. Show at a glance what differs from the starting build.
+- [ ] Make status consistent: one place for engine state, warnings and notices, with stall, limiter, knock, fuel-limit and (later) failure messages saying what to do next.
+- [ ] Recheck narrow and mobile layouts, keyboard and gamepad use, and accessible names for every control.
+- [ ] Repeat the one-minute first-use check with an unfamiliar user, which is still open from Phase 2.
+
+Acceptance: a new user can start an engine, make a change, run a test and compare it without help. Every existing workflow keeps working, and browser tests cover the new layout in Chromium and Firefox.
+
+### 12. Fidelity and release readiness
 
 - [ ] Improve thermal behaviour, forced induction, valvetrain and mechanical-limit models in bounded increments.
 - [ ] Add browser compatibility/performance checks, accessible controls, recovery from audio suspension and worker errors.

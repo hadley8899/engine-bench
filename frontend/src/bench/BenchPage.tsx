@@ -31,6 +31,7 @@ import {
   MIN_ROD_STROKE,
   normalConditions,
   recipeSchema,
+  roadEngine,
   scaledProportions,
   undersizedForEngine,
   validateEngine,
@@ -496,6 +497,9 @@ export function BenchPage() {
   const activeRunKind = useRef<'live' | 'quick'>('live')
   const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  /** Bumped by a full reset to replace the audio and worker hosts. */
+  const [hostKey, setHostKey] = useState(0)
+  const [confirmReset, setConfirmReset] = useState(false)
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(experiment.engine) ||
     JSON.stringify(conditions) !== JSON.stringify(experiment.conditions)
@@ -588,6 +592,7 @@ export function BenchPage() {
   ])
   useEffect(() => {
     const engineAudio = new BenchAudio()
+    engineAudio.listener = loadPreferences().listener
     audio.current = engineAudio
     const engineWorker = new Worker(
       new URL('../sim/engine.worker.ts', import.meta.url),
@@ -679,7 +684,7 @@ export function BenchPage() {
       engineWorker.terminate()
       void engineAudio.close()
     }
-  }, [])
+  }, [hostKey])
   const setManualThrottle = useCallback((value: number) => {
     if (modeRef.current !== 'manual' && modeRef.current !== 'audition') return
     if (calculatingRef.current) return
@@ -739,6 +744,9 @@ export function BenchPage() {
     setMode('manual')
     setThrottle(0)
     setHold(0)
+    // The host replaces the stopped core, which has no dyno or road load.
+    setLoad(0)
+    setRoad(null)
   }, [])
   const crankStarter = async (engaged: boolean) => {
     if (!engaged) {
@@ -807,6 +815,40 @@ export function BenchPage() {
     audio.current?.send({ type: 'configure', engine, conditions: env })
     setError('')
     setNotice('Engine rebuilt and stopped. Press Start to run it.')
+  }
+  /**
+   * Everything back to a fresh Road build in normal air, with new audio and
+   * worker hosts. Comparison runs, saved builds and preferences are kept.
+   */
+  const fullReset = () => {
+    stop('Full reset')
+    setHostKey((key) => key + 1)
+    liveOrigin.current = null
+    activeRunId.current = null
+    lastFuelCut.current = -Infinity
+    setExperiment((prev) => ({
+      ...prev,
+      previous: null,
+      engine: roadEngine,
+      conditions: normalConditions,
+    }))
+    setDraft(roadEngine)
+    setConditions(normalConditions)
+    setProcedure(defaultProcedure)
+    setIgnition(true)
+    setSlow(false)
+    setBusy(false)
+    setAuditionEngine(null)
+    setRun(null)
+    setLimiterVisible(false)
+    setHistory([[], []])
+    const t = new EngineCore(roadEngine, normalConditions).telemetry()
+    setTelemetry(t)
+    telemetryRef.current = t
+    setError('')
+    setNotice(
+      'Full reset: the Road build in normal air with fresh audio and simulation. Comparison runs and saved builds are kept. Press Start to run it.',
+    )
   }
   const start = async () => {
     const generation = ++startupGeneration.current
@@ -1498,11 +1540,19 @@ export function BenchPage() {
                   </Button>
                   <Button
                     disabled={activeTest}
+                    title="Stop and rebuild the current build"
                     onClick={() =>
                       configure(experiment.engine, experiment.conditions)
                     }
                   >
                     Reset bench
+                  </Button>
+                  <Button
+                    color="warning"
+                    title="Back to the Road build with fresh audio and simulation"
+                    onClick={() => setConfirmReset(true)}
+                  >
+                    Full reset
                   </Button>
                 </Stack>
                 <div className="control-sliders">
@@ -2297,6 +2347,36 @@ export function BenchPage() {
           open={showShortcuts}
           onClose={() => setShowShortcuts(false)}
         />
+        <Dialog
+          open={confirmReset}
+          onClose={() => setConfirmReset(false)}
+          aria-labelledby="full-reset-title"
+        >
+          <DialogTitle id="full-reset-title">Reset everything?</DialogTitle>
+          <DialogContent>
+            <p className="helper-text">
+              The engine stops and the bench returns to the Road build in
+              normal air, with default test settings, controls and fresh
+              audio and simulation. Your current build and unapplied edits
+              are discarded; download a recipe or save it first to keep it.
+              Baseline and Modified runs, saved builds and preferences are
+              kept.
+            </p>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmReset(false)}>Cancel</Button>
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={() => {
+                setConfirmReset(false)
+                fullReset()
+              }}
+            >
+              Reset everything
+            </Button>
+          </DialogActions>
+        </Dialog>
         <Dialog
           open={!!overwrite}
           onClose={() => setOverwrite(null)}

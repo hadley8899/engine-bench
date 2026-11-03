@@ -17,8 +17,12 @@ import { z } from 'zod'
  * 1.8.0: per-cylinder estimated temperatures (port gas, piston crown,
  * exhaust valve, combustion deck). They observe the gas and do not change
  * any result.
+ * 1.9.0: rich burns form CO and H2 by water–gas shift equilibrium, so
+ * enrichment releases less heat into more gas and cools the charge. It
+ * applies to every build (decision of 3 November 2026: no saved builds
+ * needed to keep 1.8.0 results).
  */
-export const MODEL_VERSION = 'eb-0d-1.8.0'
+export const MODEL_VERSION = 'eb-0d-1.9.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -29,6 +33,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.5.0',
   'eb-0d-1.6.0',
   'eb-0d-1.7.0',
+  'eb-0d-1.8.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({

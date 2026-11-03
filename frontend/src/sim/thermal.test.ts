@@ -41,10 +41,13 @@ describe('component temperatures', () => {
     for (const k of ['egt', 'crown', 'valve', 'head'] as const)
       expect(full[k]).toBeGreaterThan(part[k] + 20)
   })
-  it('EGT falls rich; retarded timing moves heat from crown to exhaust', () => {
-    // Only slightly: excess fuel's own mass and chemistry are not modelled.
+  it('enrichment cools; retarded timing moves heat from crown to exhaust', () => {
+    // Rich products release less heat into more gas (1.9.0).
     const rich = soak({ ...engine, lambda: 0.85 }, 4500)
-    expect(rich.egt).toBeLessThan(full.egt)
+    expect(rich.egt).toBeLessThan(full.egt - 50)
+    expect(rich.egt).toBeGreaterThan(full.egt - 150)
+    expect(rich.crown).toBeLessThan(full.crown - 3)
+    expect(rich.valve).toBeLessThan(full.valve - 25)
     const retarded = soak({ ...engine, ignitionAdvance: 8 }, 4500)
     expect(retarded.egt).toBeGreaterThan(full.egt + 20)
     expect(retarded.crown).toBeLessThan(full.crown)

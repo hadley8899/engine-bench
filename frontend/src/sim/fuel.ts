@@ -28,6 +28,9 @@ export const FUELS: Record<
     density: number
     /** Laminar flame speed fit S_L0 = base + curve·(φ − peak)², m/s. */
     flame: { base: number; curve: number; peak: number }
+    /** Hydrogen and oxygen atoms per carbon atom, for the rich products. */
+    hydrogen: number
+    oxygenAtoms: number
   }
 > = {
   ron91: gasoline('RON 91 regular', 91),
@@ -42,6 +45,9 @@ export const FUELS: Record<
     latent: 850000,
     density: 781,
     flame: { base: 0.36, curve: -1.0, peak: 1.11 },
+    // 83% ethanol (C2H5OH) and 17% gasoline by mass.
+    hydrogen: 2.71,
+    oxygenAtoms: 0.373,
   },
 }
 function gasoline(label: string, octane: number) {
@@ -55,6 +61,9 @@ function gasoline(label: string, octane: number) {
     density: 740,
     // Metghalchi and Keck's fit for gasoline (indolene).
     flame: { base: 0.305, curve: -0.549, peak: 1.21 },
+    // A typical gasoline, CH1.87 (Heywood, table D.4).
+    hydrogen: 1.87,
+    oxygenAtoms: 0,
   }
 }
 /** Carburettors are jetted for standard dry air at 20 °C and 1,013.25 hPa. */
@@ -138,6 +147,8 @@ export class FuelDelivery {
   /** Accelerator-pump fuel still to squirt, kg. */
   private pumping = 0
   private latent: number
+  /** Evaporation heat per kg of air already inside the calibration, J/kg. */
+  private calibratedLatent: number
   private stoichiometric: number
   private fuelDensity: number
   /** Most fuel the injectors (at their duty limit) and pump deliver, kg/s. */
@@ -165,12 +176,15 @@ export class FuelDelivery {
         this.injectorCapacity * supply.maxDuty,
       )
     }
-    // Port injection's gasoline evaporation is inside the calibration, so
-    // only the extra of a fuel with more latent heat cools a port charge.
+    // Port injection's stoichiometric gasoline evaporation is inside the
+    // calibration, so only heat beyond it (more fuel, or a fuel with more
+    // latent heat) cools a port charge.
     this.latent =
       c.kind === 'port'
-        ? 0.5 * (grade.latent - LATENT_HEAT)
+        ? 0.5 * grade.latent
         : transport[c.kind].cooling * grade.latent
+    this.calibratedLatent =
+      c.kind === 'port' ? (0.5 * LATENT_HEAT) / STOICHIOMETRIC : 0
     // A fixed jet meters by volume: denser air runs leaner, thinner air richer.
     if (c.kind === 'carburettor')
       this.metered /= Math.sqrt(density / JETTING_DENSITY)
@@ -277,7 +291,10 @@ export class FuelDelivery {
     this.vapour += evaporated + (1 - film) * squirt - drawn
     this.fuelPerAir = (1 - film) * this.injected + this.vapour / air
     if (this.latent > 0) {
-      const heat = this.latent * this.injected
+      const heat = Math.max(
+        0,
+        this.latent * this.injected - this.calibratedLatent,
+      )
       if (c.kind === 'direct') this.cylinderCooling = heat
       else this.manifoldCooling = heat / CP
     }
@@ -336,6 +353,73 @@ export class FuelDelivery {
           : null,
       fuelLimited: this.limitedFor > 0,
     }
+  }
+}
+
+/** Water–gas shift equilibrium [CO][H2O]/([CO2][H2]), taken frozen near 1,740 K (Heywood). */
+const SHIFT_EQUILIBRIUM = 3.5
+/** Molar heat capacity at constant volume near 1,800 K (JANAF), J/(mol·K). */
+const MOLAR_CV = { co2: 52.8, co: 27.8, h2o: 42.6, h2: 25.2, n2: 27.4 }
+/** Lower heating values of CO and H2, J/mol. */
+const CO_HEATING = 283.0e3
+const H2_HEATING = 241.8e3
+/** Nitrogen (with argon) per oxygen molecule in dry air. */
+const NITROGEN_PER_OXYGEN = 3.773
+export type RichProducts = {
+  /** Heat released per unit of air, relative to a stoichiometric burn. */
+  heat: number
+  /** Product moles per unit of air, relative to stoichiometric products. */
+  moles: number
+  /** Product heat capacity per unit of air, relative to stoichiometric products. */
+  capacity: number
+}
+const STOICHIOMETRIC_PRODUCTS: RichProducts = { heat: 1, moles: 1, capacity: 1 }
+/**
+ * Products of a rich burn per unit of air, relative to the stoichiometric
+ * products the gas model is calibrated on. The oxygen is shared between
+ * CO2, CO, H2O and H2 by water–gas shift equilibrium (Heywood §4.9), so all
+ * the fuel takes part: the gas gains moles and heat capacity, and the CO
+ * and H2 left unburned carry heat the burn did not release. Lean and
+ * stoichiometric burns return 1 for each.
+ */
+export function richProducts(
+  fuel: (typeof FUELS)[FuelGrade],
+  phi: number,
+): RichProducts {
+  if (!(phi > 1)) return STOICHIOMETRIC_PRODUCTS
+  const y = fuel.hydrogen
+  const z = fuel.oxygenAtoms
+  const K = SHIFT_EQUILIBRIUM
+  // Per carbon atom of a stoichiometric charge's fuel: O2 needed, and
+  // with φ times the fuel, the H2O and H2 if all carbon became CO2.
+  const oxygen = 1 + y / 4 - z / 2
+  const water = 2 * oxygen + phi * z - phi
+  const hydrogen = (phi * y) / 2 - water
+  // CO2 = a: (φ − a)(water − a) = K·a·(hydrogen + a).
+  const A = 1 - K
+  const B = phi + water + K * hydrogen
+  const C = phi * water
+  const root = Math.sqrt(B * B - 4 * A * C)
+  let a = (B - root) / (2 * A)
+  if (a < Math.max(0, -hydrogen) - 1e-12) a = (B + root) / (2 * A)
+  const co = phi - a
+  const h2o = water - a
+  const h2 = hydrogen + a
+  const n2 = NITROGEN_PER_OXYGEN * oxygen
+  const molarMass = 0.012011 + 0.001008 * y + 0.015999 * z
+  const heat = fuel.heating * molarMass
+  const stoichiometricCapacity =
+    MOLAR_CV.co2 + (y / 2) * MOLAR_CV.h2o + n2 * MOLAR_CV.n2
+  return {
+    heat: (phi * heat - co * CO_HEATING - h2 * H2_HEATING) / heat,
+    moles: (phi * (1 + y / 2) + n2) / (1 + y / 2 + n2),
+    capacity:
+      (a * MOLAR_CV.co2 +
+        co * MOLAR_CV.co +
+        h2o * MOLAR_CV.h2o +
+        h2 * MOLAR_CV.h2 +
+        n2 * MOLAR_CV.n2) /
+      stoichiometricCapacity,
   }
 }
 

@@ -594,3 +594,32 @@ test('live updates apply edits to the running engine without stopping it', async
   await expect(page.getByLabel('Live updates')).toBeChecked()
   expect(errors).toEqual([])
 })
+
+test('full reset returns a persisted edited build to a running Road engine', async ({
+  page,
+}) => {
+  const rpm = async () =>
+    Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
+  await page.goto('/')
+  await page.getByLabel('Bore (mm)', { exact: true }).fill('88')
+  await page
+    .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
+    .click()
+  // A reload in the same tab keeps the edited build.
+  await page.reload()
+  await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('88')
+  await page.getByRole('button', { name: 'Start engine' }).click()
+  await expect.poll(rpm).toBeGreaterThan(500)
+  await page.getByRole('button', { name: 'Full reset' }).click()
+  await page.getByRole('button', { name: 'Reset everything' }).click()
+  await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('86')
+  await expect.poll(async () => (await page.getByTestId('rpm').innerText()).trim()).toBe('0 RPM')
+  await expect(page.getByText('Full reset: the Road build')).toBeVisible()
+  // The new audio host starts and revs the engine.
+  await page.getByRole('button', { name: 'Start engine' }).click()
+  await expect.poll(rpm).toBeGreaterThan(500)
+  await page.getByRole('heading', { level: 1 }).click()
+  await page.keyboard.down('Space')
+  await expect.poll(rpm).toBeGreaterThan(2000)
+  await page.keyboard.up('Space')
+})
