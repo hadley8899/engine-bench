@@ -138,11 +138,14 @@
   position: relative;
   height: 350px;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 45%, #23394455, transparent 70%);
+  background:
+    radial-gradient(ellipse at 50% 35%, #29414b66 0%, #16252d44 43%, transparent 72%),
+    linear-gradient(180deg, #142129 0%, #0e181e 100%);
 }
 .engine-viewport canvas {
   display: block;
   touch-action: none;
+
 }
 .viewport-caption {
   pointer-events: none;

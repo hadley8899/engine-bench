@@ -4,12 +4,12 @@ Updated: 3 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0) and enrichment cooling (1.9.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0) and dissociation (1.10.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
-2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0) and enrichment cooling (1.9.0) are implemented; upgradeable parts and failures are next.
+2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0) and dissociation (1.10.0) are implemented; upgradeable parts and failures are next.
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
@@ -282,8 +282,8 @@ Engine management:
 Temperatures:
 
 - [x] Add lumped per-cylinder thermal states: exhaust gas temperature at the port, piston crown, exhaust valve and head. Make per-cylinder differences come only from modelled causes such as charge, mixture, timing and knock. Do not add cosmetic variation. Model 1.8.0. Decision (2 November 2026): the temperatures observe the gas and do not feed back, so results are unchanged. Enrichment cooling followed in 1.9.0.
-- [x] Model enrichment cooling: add the excess fuel's mass, heat capacity and rich-combustion chemistry to the charge, so running rich lowers EGT and crown temperature as in real engines (roughly 30–60 K of EGT from λ 1.0 to 0.85). Do this before failures, so that adding fuel protects an engine. Model 1.9.0. Rich burns form water–gas shift products, so they release less heat into more moles and more heat capacity, and port injection also cools with the extra fuel's latent heat. From λ 1.0 to 0.85 at 4,500 RPM on the Road engine, EGT falls 100 K, the valve 54 K and the crown 7 K, and knock falls. Decision (3 November 2026, user): no saved builds needed to keep 1.8.0 results, so it applies to every build without an opt-in. Known gaps: without dissociation, enrichment costs about 3% power, and the EGT drop is larger than the figure above.
-- [ ] Model dissociation, or an equivalent lumped effect, so best power falls slightly rich of λ 1 (around λ 0.86–0.9) as in real engines. Today enrichment only trades power for cooling. Check it against a published fuel–air cycle or engine data, and recheck the EGT drop when it lands.
+- [x] Model enrichment cooling: add the excess fuel's mass, heat capacity and rich-combustion chemistry to the charge, so running rich lowers EGT and crown temperature as in real engines (roughly 30–60 K of EGT from λ 1.0 to 0.85). Do this before failures, so that adding fuel protects an engine. Model 1.9.0. Rich burns form water–gas shift products, so they release less heat into more moles and more heat capacity, and port injection also cools with the extra fuel's latent heat. From λ 1.0 to 0.85 at 4,500 RPM on the Road engine, EGT falls 100 K, the valve 54 K and the crown 7 K, and knock falls. Decision (3 November 2026, user): no saved builds needed to keep 1.8.0 results, so it applies to every build without an opt-in. Known gaps: without dissociation, enrichment cost about 3% power (addressed in 1.10.0, below), and the EGT drop is larger than the figure above.
+- [x] Model dissociation, or an equivalent lumped effect, so best power falls slightly rich of λ 1 (around λ 0.86–0.9) as in real engines. Check it against a published fuel–air cycle or engine data, and recheck the EGT drop when it lands. Model 1.10.0: equilibrium burned gas (CO2, CO, H2O, H2, OH, H, O2, O) with constants fitted to NIST-JANAF holds heat back while hot and returns it in expansion. Best power is now at about λ 0.95, 0.6% above λ 1, and torque at λ 0.9 matches λ 1 while EGT is 83 K lower. λ 1 full-load torque fell 2–3% and peak gas temperature about 200 K. Known gaps: real engines peak nearer λ 0.86–0.9 and a few per cent higher, and the EGT drop from λ 1.0 to 0.85 (120 K) is still larger than the figure above. Applies to every build (user decision of 3 November 2026).
 - [x] Show per-cylinder temperatures and knock in a strip and on the cutaway (heat colours, glowing manifold). The strip shows EGT, crown and valve. On the cutaway, pistons glow with crown temperature, knocking chambers flash and the spark follows the ECU's timing. The exhaust already glowed (Stage 5).
 
 Parts and limits:
@@ -310,9 +310,15 @@ Acceptance: each released preset has provenance and model limitations, reproduce
 
 ### 8. 3D overhaul
 
-The user reported on 2 November 2026 that the 3D graphics need improving. Confirm their priorities before starting; the automated review could not see the view because the review browser lacked WebGL. This stage is independent of the simulation and can run alongside Stages 5–7.
+Timing/valve-gear pass (3 November): added a visible 24/48-tooth crank/cam drive with a flat belt, half-speed cam rotation, firing-order-phased illustrative cam profiles, valve followers/retainers and compressing springs. The rear half-cover now has ribs, fasteners and an oil cap; the front stays open. Valve event windows match the current simulation (intake 350° to configured close; exhaust 145–370°), but lift and cam geometry remain visual approximations. No physics changes. Rendered review and frame-time checks remain pending.
 
-- [ ] Use physically based materials with environment lighting, shadows and tone mapping, while keeping the cutaway readable.
+The user reviewed and accepted the block/piston/rod/head pass, but reported overlap with the cylinder buttons. The next visual pass reserves a 76 px control strip below the canvas, backs the default camera off slightly, adds deterministic casting grain and more distinct machined/forged finishes, replaces decorative gold on major internals with steel, and adds exhaust flanges, bolts, tangent-aligned weld collars, a tapered collector and an open tailpipe. Headers stay near head height until beyond the block to expose more of the cutaway. This pass awaits rendered review.
+
+3 November follow-up: the cutaway now has solid rear half-bores with machined liners and deck faces, crankcase end walls, relieved piston skirts and wrist pins, rigid I-section connecting rods with bearing eyes/caps, stepped head flanges and cam supports, and closer, more frontal default framing. These are visual changes only. Build and lint verification are recorded in `docs/VERIFICATION.md`; rendered review remains pending because the current execution environment blocks the Vite listening port.
+
+The user reported on 2 November 2026 that the 3D graphics need improving and confirmed on 3 November that the current model looks too toy-like. The first industrial-cutaway pass is in progress: it replaces the bright primitive look with more subdued PBR metals and lighting, rounded castings, a shaped sump, casting ribs and fasteners, visible camshafts and curved intake runners. The automated review still cannot see the view because its browser lacks usable WebGL, so the final material, lighting and composition judgement needs a real-browser review. This stage is independent of the simulation and can run alongside Stages 5–7.
+
+- [x] Use physically based materials with environment lighting, shadows and tone mapping, while keeping the cutaway readable.
 - [ ] Add engine detail generated from the definition: block and head, cams and valves moving to the valve timing, timing belt or chain, intake and exhaust manifolds, turbocharger, intercooler piping and the exhaust system.
 - [ ] Add orbit and preset camera views, an exploded view and part highlighting on hover or selection.
 - [ ] Show Stage 6 state on the model: per-cylinder heat, a glowing exhaust manifold and turbine housing, knock flashes, failed components and the fitted parts.

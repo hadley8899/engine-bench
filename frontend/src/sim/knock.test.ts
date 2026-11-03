@@ -11,7 +11,8 @@ import {
 } from './schema'
 import type { Conditions, EngineDefinition, FuelGrade } from './schema'
 import { starterBuilds } from '../bench/builds'
-import { FUELS, richProducts } from './fuel'
+import { FUELS } from './fuel'
+import { BurnedGas, richProducts } from './chemistry'
 
 const unprotected: EngineDefinition = {
   ...roadEngine,
@@ -212,4 +213,38 @@ describe('rich-burn products', () => {
     expect(richProducts(FUELS.ron95, phi).heat / phi).toBeCloseTo(0.8, 1)
     expect(richProducts(FUELS.e85, phi).heat / phi).toBeCloseTo(0.8, 1)
   })
+})
+
+describe('burned-gas dissociation', () => {
+  const held = (phi: number, temperature: number, bar = 60) => {
+    const gas = new BurnedGas()
+    gas.set(FUELS.ron95, phi)
+    gas.at(temperature, bar * 1e5)
+    return gas
+  }
+  it('holds back heat in hot stoichiometric gas and returns it as it cools', () => {
+    expect(held(1, 1800).held).toBeLessThan(0.005)
+    expect(held(1, 2600).held).toBeGreaterThan(0.03)
+    expect(held(1, 3000).held).toBeGreaterThan(0.12)
+    expect(held(1, 3000).moles).toBeGreaterThan(1.015)
+    // Pressure suppresses dissociation.
+    expect(held(1, 3000, 80).held).toBeLessThan(held(1, 3000, 20).held)
+  })
+  it('dissociates less in lean gas, and a rich burn adds little beyond its frozen CO and H2', () => {
+    expect(held(0.87, 3000).held).toBeLessThan(held(1, 3000).held)
+    const rich = 1 / 0.85
+    const frozen = 1 - richProducts(FUELS.ron95, rich).heat
+    expect(held(rich, 1740).held).toBeCloseTo(frozen, 3)
+    expect(held(rich, 3000).held - frozen).toBeLessThan(held(1, 3000).held / 2)
+  })
+  it('puts best power slightly rich, with torque flat from λ 0.9 to 1', () => {
+    const torque = (lambda: number) =>
+      hold({ ...unprotected, lambda }, 4500, normalConditions, 2).torque
+    const stoichiometric = torque(1)
+    const best = torque(0.95)
+    expect(best).toBeGreaterThan(stoichiometric)
+    expect(torque(0.9)).toBeGreaterThan(stoichiometric * 0.995)
+    expect(torque(0.8)).toBeLessThan(best * 0.99)
+    expect(torque(1.1)).toBeLessThan(stoichiometric * 0.95)
+  }, 40000)
 })

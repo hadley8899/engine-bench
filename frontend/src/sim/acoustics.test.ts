@@ -118,11 +118,13 @@ describe('engine sound', () => {
         }
         expect(rms(audio)).toBeGreaterThan(0.005)
       }
-  })
+    // Fifteen engine runs: longer than the default limit under a parallel run.
+  }, 40000)
   it('makes a straight pipe louder and brighter than a silenced exhaust', () => {
     const quiet = listen(roadEngine, { throttle: 1, holdRpm: 4000 }).audio
     const loud = listen(straight, { throttle: 1, holdRpm: 4000 }).audio
-    expect(rms(loud)).toBeGreaterThan(rms(quiet) * 1.4)
+    // About +2.8 dB since 1.10.0's dissociation made λ 1 exhaust pulses hotter.
+    expect(rms(loud)).toBeGreaterThan(rms(quiet) * 1.35)
     expect(brightness(loud)).toBeGreaterThan(brightness(quiet) * 1.5)
   })
   it('tunes pipe resonances by length: longer headers sound lower', () => {

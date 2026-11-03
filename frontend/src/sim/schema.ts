@@ -21,8 +21,11 @@ import { z } from 'zod'
  * enrichment releases less heat into more gas and cools the charge. It
  * applies to every build (decision of 3 November 2026: no saved builds
  * needed to keep 1.8.0 results).
+ * 1.10.0: equilibrium dissociation of the burned gas (CO2, CO, H2O, H2,
+ * OH, H, O2, O) holds heat back while it is hot and returns it as it
+ * cools, so best power falls slightly rich of λ 1. Applies to every build.
  */
-export const MODEL_VERSION = 'eb-0d-1.9.0'
+export const MODEL_VERSION = 'eb-0d-1.10.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -34,6 +37,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.6.0',
   'eb-0d-1.7.0',
   'eb-0d-1.8.0',
+  'eb-0d-1.9.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({

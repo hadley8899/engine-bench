@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import type { EngineDefinition, Metres } from '../sim/schema'
 import type { Telemetry } from '../sim/core'
 import { pistonTravel, phaseName, wrap } from '../sim/physics'
@@ -47,7 +48,7 @@ export function EngineView({
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
     renderer.setClearColor(0x101a20, 0)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
+    renderer.toneMappingExposure = 0.95
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     host.appendChild(renderer.domElement)
@@ -69,9 +70,9 @@ export function EngineView({
       0.01 * Math.min(size, 1),
       10 * Math.max(size, 1),
     )
-    camera.position.set(0.56 * size, 0.48 * size, 0.61 * size)
+    camera.position.set(0.38 * size, 0.33 * size, 0.58 * size)
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 0.09 * size, 0)
+    controls.target.set(0, 0.105 * size, 0)
     const kept = view.current
     if (kept) {
       camera.position.copy(kept.position).multiplyScalar(size / kept.size)
@@ -83,8 +84,8 @@ export function EngineView({
     const pmrem = new THREE.PMREMGenerator(renderer)
     const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
     scene.environment = environment
-    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x1a242c, 0.9))
-    const key = new THREE.DirectionalLight(0xfff1dd, 2.6)
+    scene.add(new THREE.HemisphereLight(0xc9d7df, 0x10161a, 0.65))
+    const key = new THREE.DirectionalLight(0xfff5e8, 3.1)
     key.position.set(0.8 * size, 1.6 * size, 1.1 * size)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
@@ -98,65 +99,96 @@ export function EngineView({
       far: 6 * Math.max(size, 1),
     })
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0xff9a3c, 2.2)
+    const rim = new THREE.DirectionalLight(0x9ec9df, 1.8)
     rim.position.set(-1.2 * size, 0.6 * size, -1 * size)
     scene.add(rim)
-    const fill = new THREE.DirectionalLight(0x5fb8ff, 1.1)
+    const fill = new THREE.DirectionalLight(0x8bb6ce, 0.85)
     fill.position.set(-1 * size, 0.3 * size, 1 * size)
     scene.add(fill)
+    // Small deterministic grain map: local asset, no network or random rebuilds.
+    const grainPixels = new Uint8Array(64 * 64 * 4)
+    let grainSeed = 173
+    for (let i = 0; i < grainPixels.length; i += 4) {
+      grainSeed = (Math.imul(grainSeed, 1664525) + 1013904223) >>> 0
+      const value = 170 + (grainSeed >>> 26)
+      grainPixels.set([value, value, value, 255], i)
+    }
+    const castingGrain = new THREE.DataTexture(grainPixels, 64, 64)
+    castingGrain.wrapS = castingGrain.wrapT = THREE.RepeatWrapping
+    castingGrain.repeat.set(6, 6)
+    castingGrain.magFilter = THREE.LinearFilter
+    castingGrain.minFilter = THREE.LinearMipmapLinearFilter
+    castingGrain.generateMipmaps = true
+    castingGrain.needsUpdate = true
     const steel = new THREE.MeshStandardMaterial({
-      color: 0xdfe5ea,
+      color: 0xaeb7bd,
       metalness: 1,
-      roughness: 0.22,
+      roughness: 0.3,
     })
     const aluminium = new THREE.MeshStandardMaterial({
-      color: 0xeef1f4,
-      metalness: 0.85,
-      roughness: 0.32,
+      color: 0xb8bec0,
+      metalness: 0.88,
+      roughness: 0.36,
     })
     const forged = new THREE.MeshStandardMaterial({
-      color: 0x7d8b99,
-      metalness: 1,
-      roughness: 0.38,
+      color: 0x697175,
+      metalness: 0.9,
+      roughness: 0.48,
     })
     const brass = new THREE.MeshStandardMaterial({
-      color: 0xf0b041,
-      metalness: 1,
-      roughness: 0.25,
+      color: 0x9a7543,
+      metalness: 0.85,
+      roughness: 0.38,
     })
     const paint = new THREE.MeshPhysicalMaterial({
-      color: 0xd8262e,
-      metalness: 0.2,
-      roughness: 0.35,
-      clearcoat: 1,
-      clearcoatRoughness: 0.15,
+      color: 0x6e161b,
+      metalness: 0.3,
+      roughness: 0.3,
+      clearcoat: 0.75,
+      clearcoatRoughness: 0.22,
     })
     const casting = new THREE.MeshStandardMaterial({
-      color: 0x24323d,
-      metalness: 0.55,
-      roughness: 0.55,
+      color: 0x252b2e,
+      metalness: 0.62,
+      roughness: 0.86,
+      roughnessMap: castingGrain,
+      bumpMap: castingGrain,
+      bumpScale: engine.bore * 0.002,
+    })
+    const darkMetal = new THREE.MeshStandardMaterial({
+      color: 0x15191b,
+      metalness: 0.68,
+      roughness: 0.58,
+    })
+    const standPaint = new THREE.MeshStandardMaterial({
+      color: 0x30383d,
+      metalness: 0.7,
+      roughness: 0.42,
     })
     const ceramic = new THREE.MeshStandardMaterial({
       color: 0xf4f1ea,
       roughness: 0.3,
     })
     const cylinderMat = new THREE.MeshPhysicalMaterial({
-      color: 0xa9dcff,
+      color: 0x91a5ad,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.075,
       side: THREE.DoubleSide,
       depthWrite: false,
-      metalness: 0.1,
-      roughness: 0.05,
+      metalness: 0.25,
+      roughness: 0.2,
     })
     const meshes: THREE.Mesh[] = []
     const pistons: THREE.Mesh[] = [],
-      rods: THREE.Mesh[] = [],
+      rods: THREE.Group[] = [],
       pins: THREE.Mesh[] = [],
       throws: THREE.Group[] = [],
       sparks: THREE.MeshStandardMaterial[] = [],
       chambers: THREE.Mesh[] = [],
-      valves: THREE.Mesh[][] = []
+      valves: THREE.Mesh[][] = [],
+      cams: THREE.Group[] = []
+    const valveSprings: THREE.Mesh[][] = []
+    const timingPulleys: { group: THREE.Group; ratio: number }[] = []
     function mesh(
       geometry: THREE.BufferGeometry,
       material: THREE.Material,
@@ -173,6 +205,8 @@ export function EngineView({
       meshes.push(m)
       return m
     }
+    const roundedBox = (x: number, y: number, z: number, radius: number) =>
+      new RoundedBoxGeometry(x, y, z, 3, radius)
     // Every part is sized from the bore so tiny and huge builds keep their look.
     const u = engine.bore
     const spacing = u * 1.18
@@ -188,39 +222,225 @@ export function EngineView({
     // Cutaway: the block, head and cam cover are drawn behind the bore centres.
     const blockTop = head + 0.05 * u
     mesh(
-      new THREE.BoxGeometry(width, blockTop - baseY, 0.12 * u),
+      roundedBox(width, blockTop - baseY, 0.18 * u, 0.045 * u),
       casting,
       0,
       (blockTop + baseY) / 2,
       backZ,
     )
+    // Solid rear half-bores leave the front open, with actual wall thickness
+    // and machined section faces rather than transparent floating sleeves.
+    const halfBore = (inner: number, outer: number, height: number) => {
+      const section = new THREE.Shape()
+      section.absarc(0, 0, outer, Math.PI, Math.PI * 2, false)
+      section.lineTo(inner, 0)
+      section.absarc(0, 0, inner, Math.PI * 2, Math.PI, true)
+      section.closePath()
+      const geometry = new THREE.ExtrudeGeometry(section, {
+        depth: height, bevelEnabled: false, curveSegments: 32,
+      })
+      geometry.rotateX(Math.PI / 2)
+      return geometry
+    }
+    const boreBottom = engine.rodLength - r - crown
+    for (let i = 0; i < 4; i++) {
+      const x = (i - 1.5) * spacing
+      mesh(halfBore(0.505 * u, 0.59 * u, head - boreBottom),
+        casting, x, head, 0)
+      mesh(halfBore(0.5 * u, 0.518 * u, head - boreBottom),
+        steel, x, head, 0)
+      mesh(halfBore(0.5 * u, 0.59 * u, 0.035 * u),
+        aluminium, x, head + 0.035 * u, 0)
+    }
+    // End bulkheads and a rear crankcase rail tie the casting together.
+    for (const x of [-width / 2 + 0.09 * u, width / 2 - 0.09 * u]) {
+      mesh(roundedBox(0.18 * u, blockTop - baseY, 0.72 * u, 0.025 * u),
+        casting, x, (blockTop + baseY) / 2, -0.36 * u)
+      mesh(roundedBox(0.19 * u, blockTop - baseY, 0.025 * u, 0.008 * u),
+        aluminium, x, (blockTop + baseY) / 2, 0.008 * u)
+    }
+    mesh(roundedBox(width, 0.25 * u, 0.3 * u, 0.04 * u),
+      casting, 0, baseY + 0.2 * u, -0.48 * u)
     const headHeight = 0.42 * u
     mesh(
-      new THREE.BoxGeometry(width, headHeight, 0.62 * u),
-      casting,
+      roundedBox(width, headHeight, 0.62 * u, 0.08 * u),
+      aluminium,
       0,
       head + 0.24 * u + headHeight / 2,
       -0.36 * u,
     )
-    const cover = mesh(
-      new THREE.CylinderGeometry(
-        0.42 * u,
-        0.42 * u,
-        width * 0.98,
-        40,
-        1,
-        false,
-        0,
-        Math.PI,
-      ),
-      paint,
+    // Retain only the rear cover half so the front cam and springs stay visible.
+    mesh(roundedBox(width * 0.98, 0.2 * u, 0.3 * u, 0.07 * u),
+      darkMetal, 0, head + 0.94 * u, -0.53 * u)
+    for (const z of [-0.61 * u, -0.49 * u])
+      mesh(roundedBox(width * 0.88, 0.035 * u, 0.025 * u, 0.01 * u),
+        aluminium, 0, head + 1.045 * u, z)
+    for (let i = 0; i < 5; i++)
+      mesh(new THREE.CylinderGeometry(0.038 * u, 0.038 * u, 0.04 * u, 6),
+        steel, (i - 2) * spacing, head + 1.05 * u, -0.65 * u)
+    mesh(new THREE.CylinderGeometry(0.13 * u, 0.13 * u, 0.08 * u, 24),
+      darkMetal, -width * 0.32, head + 1.07 * u, -0.51 * u)
+    mesh(roundedBox(0.19 * u, 0.035 * u, 0.045 * u, 0.01 * u),
+      forged, -width * 0.32, head + 1.12 * u, -0.51 * u)
+    // A stepped head casting and cover flange retain the open front valve view.
+    mesh(roundedBox(width * 1.01, 0.075 * u, 0.78 * u, 0.025 * u),
+      steel, 0, head + 0.27 * u, -0.35 * u)
+    mesh(roundedBox(width, 0.065 * u, 0.76 * u, 0.025 * u),
+      aluminium, 0, head + 0.67 * u, -0.35 * u)
+    for (let i = 0; i < 5; i++) {
+      const x = (i - 2) * spacing
+      for (const z of [-0.25 * u, 0.25 * u]) {
+        mesh(roundedBox(0.12 * u, 0.18 * u, 0.23 * u, 0.04 * u),
+          aluminium, x, head + 0.85 * u, z)
+        mesh(new THREE.CylinderGeometry(0.04 * u, 0.04 * u, 0.04 * u, 6),
+          steel, x, head + 0.96 * u, z)
+      }
+    }
+    // A cast sump and gasket line give the lower half a recognisable engine
+    // silhouette instead of reading as a rectangular display plinth.
+    mesh(
+      roundedBox(width * 0.93, 0.38 * u, 1.25 * u, 0.09 * u),
+      darkMetal,
       0,
-      head + 0.24 * u + headHeight,
-      -0.36 * u,
+      baseY - 0.14 * u,
+      0,
     )
-    cover.rotation.z = Math.PI / 2
-    cover.scale.set(1, 1, 0.75)
-    mesh(new THREE.BoxGeometry(width, 0.12 * u, 1.5 * u), casting, 0, baseY, 0)
+    mesh(
+      roundedBox(width, 0.07 * u, 1.38 * u, 0.025 * u),
+      aluminium,
+      0,
+      baseY + 0.05 * u,
+      0,
+    )
+    // Casting ribs, core plugs and head fasteners are inexpensive geometry,
+    // but add the scale cues missing from plain boxes.
+    for (let i = 0; i < 5; i++) {
+      const x = (i - 2) * spacing * 0.92
+      mesh(
+        roundedBox(0.055 * u, blockTop - baseY - 0.2 * u, 0.08 * u, 0.018 * u),
+        forged,
+        x,
+        (blockTop + baseY) / 2,
+        backZ + 0.1 * u,
+      )
+      mesh(
+        new THREE.CylinderGeometry(0.075 * u, 0.075 * u, 0.035 * u, 20),
+        forged,
+        x,
+        head + 0.22 * u,
+        0.015 * u,
+      ).rotation.x = Math.PI / 2
+    }
+    for (const z of [-0.25 * u, 0.25 * u]) {
+      const cam = new THREE.Group()
+      cam.position.set(0, head + 0.85 * u, z)
+      scene.add(cam)
+      cams.push(cam)
+      const shaft = mesh(
+        new THREE.CylinderGeometry(0.055 * u, 0.055 * u, width + 0.32 * u, 20),
+        forged,
+        0,
+        0,
+        0,
+        cam,
+      )
+      shaft.rotation.z = Math.PI / 2
+      for (let i = 0; i < 4; i++) {
+        // Sample the same opening window as the valve animation. The profile
+        // is an illustrative radial cam, not a manufactured cam design.
+        const offset = engine.firingOrder.indexOf((i + 1) as 1 | 2 | 3 | 4) * 180
+        const open = z < 0 ? 350 : 145
+        const close = z < 0 ? engine.intakeClose : 370
+        const profile = new THREE.Shape()
+        for (let j = 0; j <= 128; j++) {
+          const a = j / 128 * Math.PI * 2
+          const phase = ((a * 360 / Math.PI - offset) % 720 + 720) % 720
+          const lift = phase >= open && phase < close
+            ? 0.1 * u * Math.sin(Math.PI * (phase - open) / (close - open)) : 0
+          const radius = 0.12 * u + lift
+          const px = -radius * Math.sin(a), py = -radius * Math.cos(a)
+          if (j === 0) profile.moveTo(px, py)
+          else profile.lineTo(px, py)
+        }
+        profile.closePath()
+        const lobeGeometry = new THREE.ExtrudeGeometry(profile, {
+          depth: 0.085 * u, bevelEnabled: true, bevelSize: 0.006 * u,
+          bevelThickness: 0.006 * u, bevelSegments: 2, steps: 1,
+        })
+        lobeGeometry.translate(0, 0, -0.0425 * u)
+        lobeGeometry.rotateY(Math.PI / 2)
+        mesh(lobeGeometry, steel, (i - 1.5) * spacing, 0, 0, cam)
+      }
+    }
+    // Open timing end: two equal cam wheels, crank wheel at half their radius.
+    const timingX = -width / 2 - 0.16 * u
+    const timingWheels = [
+      { y: 0, z: 0, radius: 0.095 * u, ratio: 1 },
+      { y: head + 0.85 * u, z: -0.25 * u, radius: 0.19 * u, ratio: 0.5 },
+      { y: head + 0.85 * u, z: 0.25 * u, radius: 0.19 * u, ratio: 0.5 },
+    ]
+    for (const wheel of timingWheels) {
+      const group = new THREE.Group()
+      group.position.set(timingX, wheel.y, wheel.z)
+      scene.add(group)
+      timingPulleys.push({ group, ratio: wheel.ratio })
+      const rim = mesh(new THREE.TorusGeometry(wheel.radius - 0.018 * u, 0.018 * u, 8, 40),
+        steel, 0, 0, 0, group)
+      rim.rotation.y = Math.PI / 2
+      const hub = mesh(new THREE.CylinderGeometry(0.045 * u, 0.045 * u, 0.12 * u, 6),
+        steel, 0, 0, 0, group)
+      hub.rotation.z = Math.PI / 2
+      const toothCount = wheel.ratio === 1 ? 24 : 48
+      const teeth = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08 * u, 0.016 * u, 0.014 * u),
+        forged, toothCount)
+      const tooth = new THREE.Object3D()
+      for (let j = 0; j < toothCount; j++) {
+        const a = j * Math.PI * 2 / toothCount
+        tooth.position.set(0, Math.cos(a) * (wheel.radius - 0.008 * u), Math.sin(a) * (wheel.radius - 0.008 * u))
+        tooth.rotation.x = a
+        tooth.updateMatrix()
+        teeth.setMatrixAt(j, tooth.matrix)
+      }
+      teeth.castShadow = true
+      teeth.receiveShadow = true
+      group.add(teeth)
+      meshes.push(teeth)
+      for (let j = 0; j < 5; j++) {
+        const a = j * Math.PI * 2 / 5
+        const spoke = mesh(roundedBox(0.065 * u, wheel.radius * 0.75, 0.025 * u, 0.008 * u),
+          forged, 0, Math.cos(a) * wheel.radius * 0.5, Math.sin(a) * wheel.radius * 0.5, group)
+        spoke.rotation.x = a
+      }
+    }
+    // Convex envelope of the wheels: sampled contact arcs joined by straight
+    // tangent spans. A flat ribbon gives the belt real width, not a round hose.
+    const beltPoints: THREE.Vector2[] = []
+    for (let j = 0; j < 192; j++) {
+      const a = j * Math.PI * 2 / 192
+      const ny = Math.cos(a), nz = Math.sin(a)
+      const wheel = timingWheels.reduce((best, w) =>
+        w.y * ny + w.z * nz + w.radius > best.y * ny + best.z * nz + best.radius ? w : best)
+      beltPoints.push(new THREE.Vector2(wheel.y + ny * (wheel.radius + 0.008 * u),
+        wheel.z + nz * (wheel.radius + 0.008 * u)))
+    }
+    const beltVertices: number[] = []
+    for (let j = 0; j < beltPoints.length; j++) {
+      const a = beltPoints[j], b = beltPoints[(j + 1) % beltPoints.length]
+      for (const [x, point] of [
+        [-0.055 * u, a], [0.055 * u, a], [0.055 * u, b],
+        [-0.055 * u, a], [0.055 * u, b], [-0.055 * u, b],
+      ] as [number, THREE.Vector2][])
+        beltVertices.push(timingX + x, point.x, point.y)
+    }
+    const beltGeometry = new THREE.BufferGeometry()
+    beltGeometry.setAttribute('position', new THREE.Float32BufferAttribute(beltVertices, 3))
+    beltGeometry.computeVertexNormals()
+    mesh(beltGeometry, new THREE.MeshStandardMaterial({
+      color: 0x17191a, roughness: 0.95, side: THREE.DoubleSide,
+    }), 0, 0, 0)
+    const crankNose = mesh(new THREE.CylinderGeometry(0.055 * u, 0.055 * u, 0.32 * u, 20),
+      steel, -width / 2 - 0.08 * u, 0, 0)
+    crankNose.rotation.z = Math.PI / 2
     const crank = mesh(
       new THREE.CylinderGeometry(0.14 * u, 0.14 * u, width, 32),
       steel,
@@ -236,7 +456,15 @@ export function EngineView({
       pistonMetal.emissive.setHex(0xff3a10)
       pistonMetal.emissiveIntensity = 0
       const piston = mesh(
-        new THREE.CylinderGeometry(0.475 * u, 0.465 * u, pistonHeight, 40),
+        new THREE.LatheGeometry([
+          new THREE.Vector2(0, crown),
+          new THREE.Vector2(0.43 * u, crown),
+          new THREE.Vector2(0.475 * u, crown - 0.025 * u),
+          new THREE.Vector2(0.475 * u, crown - 0.23 * u),
+          new THREE.Vector2(0.40 * u, crown - 0.23 * u),
+          new THREE.Vector2(0.40 * u, crown - 0.075 * u),
+          new THREE.Vector2(0, crown - 0.075 * u),
+        ].reverse(), 48),
         pistonMetal,
         x,
         0.16,
@@ -254,6 +482,16 @@ export function EngineView({
         )
         ring.rotation.x = Math.PI / 2
       }
+      // Two relieved skirt panels expose the wrist pin and rod small end.
+      for (const start of [0.35, Math.PI + 0.35]) {
+        const skirt = mesh(new THREE.CylinderGeometry(
+          0.465 * u, 0.455 * u, 0.39 * u, 32, 1, true, start, Math.PI - 0.7,
+        ), pistonMetal, 0, -0.115 * u, 0, piston)
+        skirt.material.side = THREE.DoubleSide
+      }
+      const wrist = mesh(new THREE.CylinderGeometry(0.085 * u, 0.085 * u, 0.88 * u, 24),
+        steel, 0, 0, 0, piston)
+      wrist.rotation.z = Math.PI / 2
       pistons.push(piston)
       const sleeve = mesh(
         new THREE.CylinderGeometry(
@@ -273,24 +511,38 @@ export function EngineView({
       sleeve.userData.cylinder = i
       for (const y of [engine.rodLength - r, head])
         mesh(
-          new THREE.TorusGeometry(0.52 * u, 0.025 * u, 10, 48),
-          brass,
+          new THREE.TorusGeometry(0.52 * u, 0.018 * u, 10, 48),
+          steel,
           x,
           y,
           0,
         ).rotation.x = Math.PI / 2
-      rods.push(
-        mesh(
-          new THREE.CylinderGeometry(0.08 * u, 0.12 * u, 1, 16),
-          forged,
-          x,
-          0.08,
-          0,
-        ),
-      )
+      // Rigid I-section rod: its eyes and cap must not stretch during motion.
+      const rod = new THREE.Group()
+      scene.add(rod)
+      rods.push(rod)
+      const rodLength = engine.rodLength
+      mesh(roundedBox(0.09 * u, rodLength - 0.14 * u, 0.16 * u, 0.02 * u),
+        forged, 0, 0, 0, rod)
+      for (const z of [-0.095 * u, 0.095 * u])
+        mesh(roundedBox(0.16 * u, rodLength - 0.21 * u, 0.045 * u, 0.015 * u),
+          forged, 0, 0, z, rod)
+      for (const [y, radius, thickness] of [
+        [-rodLength / 2, 0.19 * u, 0.065 * u],
+        [rodLength / 2, 0.105 * u, 0.035 * u],
+      ]) {
+        const eye = mesh(new THREE.TorusGeometry(radius, thickness, 12, 32),
+          forged, 0, y, 0, rod)
+        eye.rotation.y = Math.PI / 2
+      }
+      mesh(roundedBox(0.19 * u, 0.09 * u, 0.44 * u, 0.025 * u),
+        steel, 0, -rodLength / 2 - 0.15 * u, 0, rod)
+      for (const z of [-0.19 * u, 0.19 * u])
+        mesh(new THREE.CylinderGeometry(0.045 * u, 0.045 * u, 0.08 * u, 6),
+          steel, 0, -rodLength / 2 - 0.21 * u, z, rod)
       const pin = mesh(
         new THREE.CylinderGeometry(0.15 * u, 0.15 * u, 0.32 * u, 24),
-        brass,
+        steel,
         x,
         0,
         r,
@@ -304,7 +556,7 @@ export function EngineView({
       throws.push(throwGroup)
       for (const side of [-1, 1])
         mesh(
-          new THREE.BoxGeometry(0.1 * u, r + 0.4 * u, 0.42 * u),
+          roundedBox(0.1 * u, r + 0.4 * u, 0.42 * u, 0.025 * u),
           steel,
           side * 0.21 * u,
           (r - 0.4 * u) / 2,
@@ -348,25 +600,44 @@ export function EngineView({
       gas.castShadow = false
       gas.userData.cylinder = i
       chambers.push(gas)
+      const springs: THREE.Mesh[] = []
       const pair = [-1, 1].map((v) => {
         const valve = mesh(
           new THREE.CylinderGeometry(0.17 * u, 0.12 * u, 0.05 * u, 24),
-          v < 0 ? steel : brass,
+          steel,
           x,
           head + 0.16 * u,
-          v * 0.24 * u,
+          v * 0.25 * u,
         )
         mesh(
-          new THREE.CylinderGeometry(0.03 * u, 0.03 * u, 0.4 * u, 8),
+          new THREE.CylinderGeometry(0.03 * u, 0.03 * u, 0.52 * u, 12),
           steel,
           0,
-          0.22 * u,
+          0.28 * u,
           0,
           valve,
         )
+        // Retainer and bucket follower move rigidly with the valve stem.
+        mesh(new THREE.CylinderGeometry(0.095 * u, 0.095 * u, 0.035 * u, 24),
+          steel, 0, 0.5 * u, 0, valve)
+        mesh(new THREE.CylinderGeometry(0.095 * u, 0.095 * u, 0.06 * u, 24),
+          forged, 0, 0.54 * u, 0, valve)
+        const springPoints: THREE.Vector3[] = []
+        for (let j = 0; j <= 96; j++) {
+          const t = j / 96, a = t * Math.PI * 12
+          springPoints.push(new THREE.Vector3(0.065 * u * Math.cos(a), t * 0.36 * u, 0.065 * u * Math.sin(a)))
+        }
+        // Scale the helix axially as it compresses; its seat stays on the head.
+        const spring = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPoints),
+          96, 0.012 * u, 6, false), steel, x, head + 0.3 * u, v * 0.25 * u)
+        spring.scale.y = 1
+        springs.push(spring)
+        mesh(new THREE.CylinderGeometry(0.1 * u, 0.1 * u, 0.025 * u, 24),
+          aluminium, x, head + 0.3 * u, v * 0.25 * u)
         return valve
       })
       valves.push(pair)
+      valveSprings.push(springs)
       mesh(
         new THREE.CylinderGeometry(0.07 * u, 0.07 * u, 0.5 * u, 12),
         ceramic,
@@ -389,7 +660,7 @@ export function EngineView({
       ).castShadow = false
       const bearing = mesh(
         new THREE.CylinderGeometry(0.26 * u, 0.26 * u, 0.16 * u, 32),
-        brass,
+        forged,
         x + spacing / 2,
         0,
         0,
@@ -398,8 +669,8 @@ export function EngineView({
     }
     for (const x of [-width / 2, width / 2]) {
       mesh(
-        new THREE.BoxGeometry(0.14 * u, r + 0.9 * u, 1.4 * u),
-        casting,
+        roundedBox(0.14 * u, r + 0.9 * u, 1.4 * u, 0.04 * u),
+        standPaint,
         x,
         baseY + (r + 0.9 * u) / 2,
         0,
@@ -407,7 +678,7 @@ export function EngineView({
       for (const z of [-0.6 * u, 0.6 * u])
         mesh(
           new THREE.CylinderGeometry(0.08 * u, 0.12 * u, baseY - groundY, 12),
-          paint,
+          standPaint,
           x,
           (baseY + groundY) / 2,
           z,
@@ -426,7 +697,7 @@ export function EngineView({
     ).rotation.z = Math.PI / 2
     mesh(
       new THREE.TorusGeometry(0.85 * u, 0.04 * u, 8, 64),
-      brass,
+      steel,
       0,
       0,
       0,
@@ -435,7 +706,7 @@ export function EngineView({
     // Timing mark makes rotation visible even at a glance.
     mesh(
       new THREE.BoxGeometry(0.18 * u, 0.3 * u, 0.08 * u),
-      paint,
+      darkMetal,
       0,
       0.62 * u,
       0,
@@ -625,6 +896,11 @@ export function EngineView({
     // carburettor or throttle body, injectors in the runners, or (direct
     // injection) injectors beside the spark plugs.
     const fuelSystem = engine.fuelSystem
+    const intakeMetal = new THREE.MeshStandardMaterial({
+      color: 0x69767c,
+      metalness: 0.78,
+      roughness: 0.5,
+    })
     const injectorTip = new THREE.MeshStandardMaterial({
       color: 0x3f8fd8,
       roughness: 0.4,
@@ -644,17 +920,24 @@ export function EngineView({
     else {
       const plenumY = head + 1.0 * u
       const plenumZ = -1.0 * u
-      for (let i = 0; i < 4; i++)
+      for (let i = 0; i < 4; i++) {
+        const x = (i - 1.5) * spacing
+        const runner = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(x, head + 0.2 * u, -0.38 * u),
+          new THREE.Vector3(x, head + 0.52 * u, -0.72 * u),
+          new THREE.Vector3(x, plenumY, plenumZ + 0.12 * u),
+        ])
         mesh(
-          new THREE.BoxGeometry(0.34 * u, 0.6 * u, 0.3 * u),
-          aluminium,
-          (i - 1.5) * spacing,
-          head + 0.62 * u,
-          -0.82 * u,
+          new THREE.TubeGeometry(runner, 20, 0.13 * u, 14, false),
+          intakeMetal,
+          0,
+          0,
+          0,
         )
+      }
       mesh(
-        new THREE.BoxGeometry(width * 0.85, 0.34 * u, 0.42 * u),
-        aluminium,
+        roundedBox(width * 0.85, 0.34 * u, 0.42 * u, 0.1 * u),
+        intakeMetal,
         0,
         plenumY,
         plenumZ,
@@ -696,11 +979,14 @@ export function EngineView({
     // afterfire; both come from telemetry.
     const exhaust = engine.exhaust
     const hotPipe = new THREE.MeshStandardMaterial({
-      color: 0x6b5d52,
-      metalness: 0.75,
-      roughness: 0.35,
+      color: 0x5d6263,
+      metalness: 0.88,
+      roughness: 0.42,
       emissive: 0xff4a12,
       emissiveIntensity: 0,
+    })
+    const weldMetal = new THREE.MeshStandardMaterial({
+      color: 0x71645b, metalness: 0.9, roughness: 0.48,
     })
     const flash = new THREE.MeshStandardMaterial({
       color: 0xffb347,
@@ -710,45 +996,98 @@ export function EngineView({
       opacity: 0,
       depthWrite: false,
     })
-    const pipeRadius = 0.11 * u
+    const innerFlash = new THREE.MeshBasicMaterial({
+      color: 0xffe4a3,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    const pipeRadius = 0.082 * u
     const tube = (points: THREE.Vector3[], radius = pipeRadius) => {
       const curve = new THREE.CatmullRomCurve3(points)
-      mesh(new THREE.TubeGeometry(curve, 24, radius, 12), hotPipe, 0, 0, 0)
+      mesh(new THREE.TubeGeometry(curve, 40, radius, 16), hotPipe, 0, 0, 0)
+      // Weld collars follow the local pipe tangent instead of floating rings.
+      for (const t of [0.06, 0.94]) {
+        const point = curve.getPoint(t)
+        const collar = mesh(new THREE.TorusGeometry(radius * 1.02, 0.009 * u, 6, 20),
+          weldMetal, point.x, point.y, point.z)
+        collar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), curve.getTangent(t).normalize())
+      }
     }
-    // Headers run across the top front of the head to a collector past the
-    // flywheel end, keeping the open cutaway clear; longer headers put the
-    // collector further out. The system then runs back along that side.
+    // Sweep the individual primaries forward and down into a collector. This
+    // keeps all four tubes readable instead of laying them across the cam cover.
     const portY = head + 0.18 * u
-    const frontZ = 0.95 * u
+    const frontZ = 0.82 * u
     const ports = [0, 1, 2, 3].map(
       (i) => new THREE.Vector3((i - 1.5) * spacing, portY, 0.4 * u),
     )
-    const bend = (p: THREE.Vector3) =>
-      new THREE.Vector3(p.x, portY + 0.14 * u, frontZ)
+    for (const port of ports) {
+      mesh(roundedBox(0.4 * u, 0.29 * u, 0.065 * u, 0.045 * u),
+        forged, port.x, port.y, port.z - 0.025 * u)
+      for (const side of [-1, 1]) {
+        const bolt = mesh(new THREE.CylinderGeometry(0.035 * u, 0.035 * u, 0.05 * u, 6),
+          steel, port.x + side * 0.15 * u, port.y, port.z + 0.025 * u)
+        bolt.rotation.x = Math.PI / 2
+      }
+    }
     const headerReach =
-      Math.min(3, Math.max(0.4, exhaust.headerLength / 0.5)) * 0.7 * u
+      Math.min(2.2, Math.max(0.5, exhaust.headerLength / 0.5)) * 0.28 * u
     const collector = new THREE.Vector3(
-      width / 2 + 0.9 * u + headerReach,
-      portY,
+      width / 2 + 0.48 * u + headerReach,
+      baseY + 0.62 * u,
       frontZ,
     )
     if (exhaust.collector === '4-2-1') {
       // Cylinders 1 and 4, and 2 and 3, pair up (180° apart in the firing order).
       const pairs = [
-        [0, 3, 0.18],
-        [1, 2, -0.18],
+        [0, 3, 0.13],
+        [1, 2, -0.13],
       ]
       for (const [a, b, lift] of pairs) {
         const merge = new THREE.Vector3(
-          (ports[b].x + collector.x) / 2,
-          portY + 0.14 * u + lift * u,
-          frontZ + 0.1 * u,
+          width / 2 + (0.02 + lift) * u,
+          portY + lift * u,
+          frontZ + lift * 0.5 * u,
         )
-        for (const i of [a, b]) tube([ports[i], bend(ports[i]), merge])
-        tube([merge, collector], pipeRadius * 1.25)
+        for (const i of [a, b])
+          tube([
+            ports[i],
+            new THREE.Vector3(ports[i].x, portY + 0.08 * u, 0.68 * u),
+            merge,
+          ])
+        tube([merge,
+          new THREE.Vector3(collector.x, merge.y - 0.18 * u, collector.z + lift * u),
+          collector], pipeRadius * 1.25)
       }
     } else
-      for (const port of ports) tube([port, bend(port), collector])
+      for (const [i, port] of ports.entries())
+        tube([
+          port,
+          new THREE.Vector3(port.x, portY + 0.08 * u, 0.68 * u),
+          new THREE.Vector3(
+            collector.x - (0.26 + i * 0.085) * u,
+            portY + (0.05 + i * 0.08) * u,
+            frontZ + (i - 1.5) * 0.035 * u,
+          ),
+          collector,
+        ])
+    const collectorCone = mesh(
+      new THREE.CylinderGeometry(
+        pipeRadius * 2.1,
+        pipeRadius * 1.3,
+        0.34 * u,
+        20,
+      ),
+      hotPipe,
+      collector.x,
+      collector.y - 0.16 * u,
+      collector.z,
+    )
+    collectorCone.rotation.z = 0
+    const clamp = mesh(new THREE.TorusGeometry(pipeRadius * 1.45, 0.025 * u, 8, 24),
+      steel, collector.x, collector.y - 0.3 * u, collector.z)
+    clamp.rotation.x = Math.PI / 2
     // Down past the flywheel, then back along the side: catalyst, silencer, tip.
     const runY = Math.max(groundY + 0.25 * u, baseY - 0.2 * u)
     const length = Math.min(
@@ -759,8 +1098,8 @@ export function EngineView({
     const endZ = frontZ - length
     tube(
       [
-        collector,
-        new THREE.Vector3(runX, (collector.y + runY) / 2, frontZ),
+        new THREE.Vector3(runX, collector.y - 0.3 * u, frontZ),
+        new THREE.Vector3(runX + 0.08 * u, (collector.y + runY) / 2, frontZ),
         new THREE.Vector3(runX, runY, frontZ - 0.3 * u),
         new THREE.Vector3(runX, runY, endZ),
       ],
@@ -770,7 +1109,7 @@ export function EngineView({
     if (exhaust.catalyst)
       mesh(
         new THREE.CylinderGeometry(0.3 * u, 0.3 * u, 0.7 * u, 24),
-        ceramic,
+        aluminium,
         runX,
         runY,
         along(0.2),
@@ -793,33 +1132,79 @@ export function EngineView({
       if (chambered) can.scale.set(1, 1, 0.7)
     }
     const tip = mesh(
-      new THREE.CylinderGeometry(pipeRadius * 1.6, pipeRadius * 1.3, 0.3 * u, 20),
+      new THREE.CylinderGeometry(pipeRadius * 1.6, pipeRadius * 1.3, 0.3 * u, 24, 1, true),
       steel,
       runX,
       runY,
       endZ,
     )
     tip.rotation.x = Math.PI / 2
+    const tipInterior = mesh(new THREE.CircleGeometry(pipeRadius * 1.22, 24),
+      darkMetal, runX, runY, endZ + 0.1 * u)
+    tipInterior.rotation.y = Math.PI
+    // Afterfire is a brief tapered flame, not a glowing ball. A few faint,
+    // deterministic puffs make the normal exhaust legible without turning a
+    // healthy petrol engine into a smoke machine.
     const fire = mesh(
-      new THREE.SphereGeometry(0.35 * u, 16, 12),
+      new THREE.ConeGeometry(0.16 * u, 0.62 * u, 18, 1, true),
       flash,
       runX,
       runY,
-      endZ - 0.35 * u,
+      endZ - 0.38 * u,
     )
+    fire.rotation.x = -Math.PI / 2
     fire.castShadow = false
+    const fireCore = mesh(
+      new THREE.ConeGeometry(0.07 * u, 0.38 * u, 14, 1, true),
+      innerFlash,
+      runX,
+      runY,
+      endZ - 0.22 * u,
+    )
+    fireCore.rotation.x = -Math.PI / 2
+    fireCore.castShadow = false
+    const smokePuffs: {
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+      offset: number
+    }[] = []
+    for (let i = 0; i < 6; i++) {
+      const material = new THREE.MeshBasicMaterial({
+        color: i % 2 ? 0x899398 : 0x727c81,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      const puff = mesh(
+        new THREE.IcosahedronGeometry(0.12 * u, 1),
+        material,
+        runX,
+        runY,
+        endZ - 0.18 * u,
+      )
+      puff.castShadow = false
+      smokePuffs.push({ mesh: puff, material, offset: i / 6 })
+    }
     const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(1.2 * Math.max(size, 1), 64),
-      new THREE.ShadowMaterial({ opacity: 0.35 }),
+      new THREE.CircleGeometry(1.18 * Math.max(size, 1), 64),
+      new THREE.ShadowMaterial({ transparent: true, opacity: 0.28 }),
     )
     floor.rotation.x = -Math.PI / 2
     floor.position.y = groundY + 0.001 * size
     floor.receiveShadow = true
     scene.add(floor)
     meshes.push(floor)
-    const grid = new THREE.GridHelper(1.6, 32, 0x3a7aa0, 0x22323d)
+    const grid = new THREE.GridHelper(1.6, 32, 0x315260, 0x202e34)
     grid.scale.setScalar(Math.max(size, 1))
     grid.position.y = groundY
+    const gridMaterials = Array.isArray(grid.material)
+      ? grid.material
+      : [grid.material]
+    for (const material of gridMaterials) {
+      material.transparent = true
+      material.opacity = 0.42
+    }
     scene.add(grid)
     const raycaster = new THREE.Raycaster()
     const click = (event: PointerEvent) => {
@@ -832,14 +1217,15 @@ export function EngineView({
         camera,
       )
       const hit = raycaster
-        .intersectObjects([...pistons, ...chambers])
+        .intersectObjects([...pistons, ...chambers], false)
         .find((h) => typeof h.object.userData.cylinder === 'number')
       if (hit) options.current.onSelect(hit.object.userData.cylinder)
     }
     renderer.domElement.addEventListener('pointerup', click)
     const resize = new ResizeObserver(() => {
       const w = host.clientWidth,
-        h = host.clientHeight
+        // Keep the cylinder controls outside the rendered scene at every zoom.
+        h = Math.max(1, host.clientHeight - 76)
       renderer.setSize(w, h)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
@@ -890,7 +1276,6 @@ export function EngineView({
           to = pistons[i].position
         rods[i].position.copy(from).add(to).multiplyScalar(0.5)
         const direction = to.clone().sub(from)
-        rods[i].scale.y = direction.length()
         rods[i].quaternion.setFromUnitVectors(up, direction.normalize())
         const degrees = (phase * 180) / Math.PI,
           colour = phaseColours[Math.floor(degrees / 180)]
@@ -939,17 +1324,47 @@ export function EngineView({
             ? lift * Math.sin((Math.PI * (degrees - 145)) / 225)
             : 0)
       }
+      for (let i = 0; i < 4; i++)
+        for (let v = 0; v < 2; v++)
+          valveSprings[i][v].scale.y = (valves[i][v].position.y + 0.5 * u - (head + 0.3 * u)) / (0.36 * u)
+      for (const pulley of timingPulleys) pulley.group.rotation.x = angle * pulley.ratio
       flywheel.rotation.x = angle
+      for (const cam of cams) cam.rotation.x = angle * 0.5
       if (t) {
         // Visible from about 400 °C, bright by 800 °C.
         hotPipe.emissiveIntensity = Math.min(
-          1.6,
-          Math.max(0, (t.exhaustWall - 673) / 250),
+          0.72,
+          Math.max(0, (t.exhaustWall - 723) / 430),
         )
         const pop = t.afterfire && !options.current.slow ? 1 : 0
-        flash.opacity += (pop * 0.85 - flash.opacity) * 0.5
-        flash.emissiveIntensity = flash.opacity * 4
-        fire.scale.setScalar(0.6 + flash.opacity)
+        const flameResponse = Math.min(1, dt * 22)
+        flash.opacity += (pop * 0.72 - flash.opacity) * flameResponse
+        innerFlash.opacity +=
+          (pop * 0.82 - innerFlash.opacity) * flameResponse
+        flash.emissiveIntensity = flash.opacity * 3.5
+        fire.scale.set(0.85 + flash.opacity * 0.25, 0.7 + flash.opacity, 0.85)
+        fireCore.scale.set(
+          0.8 + innerFlash.opacity * 0.2,
+          0.65 + innerFlash.opacity * 0.8,
+          0.8,
+        )
+        const smokeStrength = options.current.slow
+          ? 0
+          : t.rpm > 150
+            ? 0.035 + t.throttle * 0.035 + pop * 0.08
+            : 0
+        for (const puff of smokePuffs) {
+          const progress = (t.time * (0.42 + t.rpm / 28000) + puff.offset) % 1
+          puff.mesh.position.set(
+            runX + Math.sin((progress + puff.offset) * Math.PI * 2) * 0.07 * u,
+            runY + progress * 0.28 * u,
+            endZ - (0.16 + progress * 1.35) * u,
+          )
+          const puffScale = 0.55 + progress * 1.25
+          puff.mesh.scale.set(puffScale, puffScale * 0.78, puffScale * 1.35)
+          puff.material.opacity =
+            smokeStrength * Math.sin(Math.PI * progress) * (1 - progress * 0.45)
+        }
       }
       if (t && t.induction.kind !== 'none') {
         // Shown far slower than the real shaft so the rotation stays readable.
@@ -987,6 +1402,7 @@ export function EngineView({
         for (const mat of mats) mat.dispose()
       }
       grid.geometry.dispose()
+      castingGrain.dispose()
       environment.dispose()
       pmrem.dispose()
       renderer.dispose()

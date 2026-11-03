@@ -260,3 +260,52 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Playwright (browsers downloaded for 1.64.1, Chromium and Firefox): 40 passed, 6 failed, 2 storage cases skipped. Four of the failures ran while Node simulation scripts were loading the CPU; rerun alone, all four passed. Those include the new full-reset case (`tests/bench.spec.ts`) in Chromium. It was not rerun in Firefox, where it passed in the full run. The other two are the sign-in navigation test in both browsers. They fail because the local API was not running, so the sign-in page never shows its button. Backend tests were not run for the same reason; only the run schema's model-version list changed (re-exported with `npm run schemas`).
 - A reported restart problem on the deployed site (the 5.4 L "Workshop 1.8 • 9k" recipe: hold 5,000 RPM, ignition off, hold 0, ignition on) was not reproduced. It restarted in Node, in the built-in browser pane with this build and in Chrome on the deployed site. Turning ignition back on while the engine coasts refires it at about 940 RPM. Once it has stopped, the ignition alone does not crank it: Start engine or the held starter does, as the stall notice says.
 - Build passes. Lint passes with the one existing warning.
+
+## Model 1.10.0: dissociation and best-power mixture
+
+- Equilibrium constants: van 't Hoff fits to NIST-JANAF log Kf (CO2 C-095, CO C-093, H2O H-064, OH H-038, H H-001, O O-001) at 2,000 and 3,000 K reproduce the tables within 0.03 in log K from 1,500 to 3,500 K. The implied water–gas shift constant is 2.6 at 1,500 K, 3.5 at 1,740 K and 4.6 at 2,000 K, consistent with Heywood's 3.5.
+- Vitest: 114 passed. New tests in `src/sim/knock.test.ts`:
+  - hot stoichiometric gas holds more than 12% of its heat at 3,000 K and 60 bar, under 0.5% at 1,800 K, and less at higher pressure;
+  - lean gas dissociates less;
+  - a rich burn's table matches its frozen products at 1,740 K;
+  - at 4,500 RPM full load, λ 0.95 beats λ 1, λ 0.9 is within 0.5% of λ 1, and λ 0.8 and λ 1.1 are lower.
+- Two existing tests changed:
+  - The straight-pipe loudness margin is now 1.35× the silenced exhaust's RMS, from 1.4×. It measures 1.385× (about +2.8 dB), because λ 1 exhaust pulses are hotter.
+  - The 15-run bounded-sound test has a 40 s limit. It took about 22 s in a parallel run, over the 20 s default.
+- Starting builds, 1,500–6,200 RPM sweeps (capped below each limiter), 1.10.0 against 1.9.0:
+
+  | Build | λ 1 peak power | λ 0.85 peak power | λ 1 hottest EGT | λ 0.85 hottest EGT |
+  | --- | --- | --- | --- | --- |
+  | Road 2.0 | 106.3 kW (109.5) | 105.6 kW (106.2) | 947 °C (923) | 823 °C (820) |
+  | Sport 2.0 | 115.9 kW (118.9) | 114.9 kW (115.5) | 883 °C (859) | 763 °C (758) |
+  | Turbo hot hatch | 210.9 kW (216.3) | 208.6 kW (209.5) | 1,070 °C (1,047) | 937 °C (934) |
+  | Torquey long-stroke | 93.0 kW (95.7) | 92.2 kW (92.7) | 898 °C (875) | 780 °C (776) |
+  | Screaming 9k | 102.8 kW (105.1) | 101.7 kW (102.2) | 860 °C (836) | 740 °C (736) |
+
+- Cross-host agreement: a first version stopped its Newton temperature solve at 0.05 K. Chromium's maths library differs from Node's in the last bit, so that cut-off fell on different iterations and the hosts drifted apart: 7×10⁻⁵ RPM after 1 s, and one pressure-trace bin 2.4% out. Converging to 10⁻⁷ K restored agreement: Chromium's AudioWorklet and Worker match Node within 6×10⁻⁶ RPM and 7×10⁻⁷ trace error, and Firefox's within 10⁻⁵ RPM.
+- Cost (Node, standard benchmark, interleaved with the committed 1.9.0 on the same machine): running medians are about 10–20% higher (0.39–0.47 against 0.34–0.44 ms at 1,000–7,500 RPM, and 0.75–0.89 against 0.81–0.99 ms at 8,400 RPM), against a 2.67 ms budget. Cranking blocks still spike to 5–7 ms, as 1.9.0's did (5–6 ms, up to 14 ms on a noisy run). The tables of a fuel are built when a core first uses it, about 120–135 ms once per fuel and thread; a live change of fuel pauses the sound that long.
+
+
+### 3 November — cutaway geometry follow-up
+
+- Added solid rear half-bores, machined liners/deck faces and crankcase end walls; relieved piston skirts and wrist pins; rigid I-section rods with bearing eyes and caps; stepped head flanges and cam supports; closer default framing. Simulation and audio code were not changed by this pass.
+- `npm run build` passed. `npm run lint` passed with an existing `BenchPage.tsx:681` effect-cleanup ref warning. Build also reports missing `VITE_APP_NAME`, dependency annotation and bundle-size warnings.
+- Chromium guest workflow could not start: Vite failed with `listen EPERM: operation not permitted 0.0.0.0:5175`. No rendered visual, animation, mobile-fit or performance verification is claimed for this pass. Review those on the actual browser before calling the overhaul complete.
+
+### 3 November — materials, exhaust and control clearance
+
+- User accepted the preceding geometry pass, reporting that the initial framing overlapped the cylinder controls. The canvas now reserves a 76 px strip for those controls and the default camera is slightly further away.
+- Added a deterministic 64×64 casting grain texture (disposed on rebuild), distinct machined/forged finishes, steel rather than gold-coloured major internals, exhaust flanges/bolts, tangent-aligned weld collars, a tapered collector and open tailpipe. Header routing stays near the head until the block end. Removed the canvas CSS colour filter so the renderer controls material colours.
+- `npm run build`, `npm run lint` and `git diff --check` passed. Existing Vite environment/dependency/bundle warnings and the `BenchPage.tsx:681` ref-cleanup lint warning remain.
+- Rendered review and frame-time measurements remain pending; the previously confirmed local Vite port restriction prevents the browser workflow in this execution environment. No new browser-test pass is claimed.
+- Playwright, run from a separate checkout that had only these changes, because another session's in-progress 3D work in the shared checkout made the cylinder-inspect clicks time out. Result: 42 passed, 4 failed, 2 storage cases skipped.
+  - The sign-in navigation test fails in both browsers because the local API was not running.
+  - The live emergency-stop test (both browsers) and the loaded-stall restart (Firefox) failed in the full run but passed when run alone, in both browsers. In the failing runs the live pull either finished despite the stop (Chromium) or stalled at 5 points without aborting (Firefox). Possible causes include the slower AudioWorklet start while it builds the fuel's tables, but this was not investigated further: the user asked on 3 November 2026 for Vitest and Chromium checks to be enough.
+- Build and lint of `src/sim` pass.
+
+### 3 November — timing drive and valve gear
+
+- Added 24/48-tooth crank/cam pulleys (instanced teeth), a flat belt around their outer envelope, shaft connections, half-speed cam motion, firing-order-phased cam profiles, bucket followers, retainers and compressing helical springs. Added rear half-cover ribs, fasteners and oil cap while keeping the front mechanism open.
+- Visual event windows match `EngineCore`: intake 350° to `intakeClose`, exhaust 145–370°. Lift is illustrative (0.1 × bore), the sampled radial lobes are not manufacturing profiles, and the belt has no dynamic tension/slip simulation. Physics and audio were not changed.
+- Browser rendering and frame-time validation remain pending because of the previously confirmed local server port restriction. The earlier user acceptance applies to the preceding graphics passes, not this one.
+- Final `npm run build`, `npm run lint` and `git diff --check` passed. Existing build warnings and the `BenchPage.tsx:681` ref-cleanup warning remain; no browser-test pass is claimed.
