@@ -309,3 +309,11 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Visual event windows match `EngineCore`: intake 350° to `intakeClose`, exhaust 145–370°. Lift is illustrative (0.1 × bore), the sampled radial lobes are not manufacturing profiles, and the belt has no dynamic tension/slip simulation. Physics and audio were not changed.
 - Browser rendering and frame-time validation remain pending because of the previously confirmed local server port restriction. The earlier user acceptance applies to the preceding graphics passes, not this one.
 - Final `npm run build`, `npm run lint` and `git diff --check` passed. Existing build warnings and the `BenchPage.tsx:681` ref-cleanup warning remain; no browser-test pass is claimed.
+
+### 3 November — crank and exhaust clearance corrections
+
+- Replaced the through-shaft with separated main journals, moved counterweights to the throw cheeks, and cleared the big-end eye/cap/beam around the crankpin. Rod axial half-width is at most 0.095 × bore; cheek inner faces are at 0.16 × bore. Crankpin radius is 0.15 × bore and big-end eye inner radius is 0.16 × bore.
+- Relocated the turbo beyond the exhaust collector, away from the timing drive, and connected collector → turbine inlet → turbine outlet → downstream exhaust. Removed the old disconnected dummy downpipe.
+- Rounded polyline pipe curves replace overshooting splines. Sampled 401 points per primary at 40/86/150 mm bore for 4-1 and 4-2-1 layouts: minimum centre spacing between non-merging primaries was respectively 0.250 and 0.199 × bore, versus 0.164 × bore pipe diameter. This is a routing sanity check, not complete mesh collision or rendered validation; intended paired junctions were excluded.
+- Browser inspection remains pending under the previously recorded local-port restriction. The user’s reported intersections are not considered visually verified fixed until reviewed in the live browser.
+- Final build, lint and whitespace checks passed, retaining existing build warnings and the `BenchPage.tsx:681` lint warning. No simulation changes or new browser-test pass are claimed.

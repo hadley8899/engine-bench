@@ -441,14 +441,14 @@ export function EngineView({
     const crankNose = mesh(new THREE.CylinderGeometry(0.055 * u, 0.055 * u, 0.32 * u, 20),
       steel, -width / 2 - 0.08 * u, 0, 0)
     crankNose.rotation.z = Math.PI / 2
-    const crank = mesh(
-      new THREE.CylinderGeometry(0.14 * u, 0.14 * u, width, 32),
-      steel,
-      0,
-      0,
-      0,
-    )
-    crank.rotation.z = Math.PI / 2
+    // Main journals occupy only the gaps between throws. A continuous shaft
+    // through each throw would intersect the rod as it swings through BDC.
+    for (let i = 0; i < 5; i++) {
+      const journal = mesh(new THREE.CylinderGeometry(0.14 * u, 0.14 * u,
+        i === 0 || i === 4 ? 0.43 * u : spacing - 0.46 * u, 32),
+        steel, (i - 2) * spacing, 0, 0)
+      journal.rotation.z = Math.PI / 2
+    }
     for (let i = 0; i < 4; i++) {
       const x = (i - 1.5) * spacing
       // Each piston glows with its own estimated crown temperature.
@@ -522,13 +522,13 @@ export function EngineView({
       scene.add(rod)
       rods.push(rod)
       const rodLength = engine.rodLength
-      mesh(roundedBox(0.09 * u, rodLength - 0.14 * u, 0.16 * u, 0.02 * u),
-        forged, 0, 0, 0, rod)
+      mesh(roundedBox(0.09 * u, rodLength - 0.33 * u, 0.16 * u, 0.02 * u),
+        forged, 0, 0.035 * u, 0, rod)
       for (const z of [-0.095 * u, 0.095 * u])
-        mesh(roundedBox(0.16 * u, rodLength - 0.21 * u, 0.045 * u, 0.015 * u),
-          forged, 0, 0, z, rod)
+        mesh(roundedBox(0.16 * u, rodLength - 0.33 * u, 0.045 * u, 0.015 * u),
+          forged, 0, 0.035 * u, z, rod)
       for (const [y, radius, thickness] of [
-        [-rodLength / 2, 0.19 * u, 0.065 * u],
+        [-rodLength / 2, 0.215 * u, 0.055 * u],
         [rodLength / 2, 0.105 * u, 0.035 * u],
       ]) {
         const eye = mesh(new THREE.TorusGeometry(radius, thickness, 12, 32),
@@ -536,10 +536,10 @@ export function EngineView({
         eye.rotation.y = Math.PI / 2
       }
       mesh(roundedBox(0.19 * u, 0.09 * u, 0.44 * u, 0.025 * u),
-        steel, 0, -rodLength / 2 - 0.15 * u, 0, rod)
+        steel, 0, -rodLength / 2 - 0.24 * u, 0, rod)
       for (const z of [-0.19 * u, 0.19 * u])
         mesh(new THREE.CylinderGeometry(0.045 * u, 0.045 * u, 0.08 * u, 6),
-          steel, 0, -rodLength / 2 - 0.21 * u, z, rod)
+          steel, 0, -rodLength / 2 - 0.30 * u, z, rod)
       const pin = mesh(
         new THREE.CylinderGeometry(0.15 * u, 0.15 * u, 0.32 * u, 24),
         steel,
@@ -563,11 +563,12 @@ export function EngineView({
           0,
           throwGroup,
         )
+      for (const side of [-1, 1]) {
       const weight = mesh(
         new THREE.CylinderGeometry(
           r * 0.55 + 0.3 * u,
           r * 0.55 + 0.3 * u,
-          0.5 * u,
+          0.1 * u,
           32,
           1,
           false,
@@ -575,12 +576,13 @@ export function EngineView({
           Math.PI,
         ),
         forged,
-        0,
+        side * 0.21 * u,
         -0.1 * u,
         0,
         throwGroup,
       )
       weight.rotation.z = Math.PI / 2
+      }
       const gas = mesh(
         new THREE.CylinderGeometry(0.47 * u, 0.47 * u, 1, 32),
         new THREE.MeshStandardMaterial({
@@ -712,7 +714,21 @@ export function EngineView({
       0,
       flywheel,
     )
-    // Forced induction: drawn at the front (-x) of the block, sized from the bore.
+    // Shared attachment points keep the turbine and exhaust on one route.
+    const exhaust = engine.exhaust
+    const portY = head + 0.18 * u
+    const frontZ = 1.26 * u
+    const headerReach = Math.min(2.2, Math.max(0.5, exhaust.headerLength / 0.5)) * 0.28 * u
+    const collector = new THREE.Vector3(width / 2 + 0.6 * u + headerReach,
+      head - 0.85 * u, frontZ)
+    const turboScale = engine.induction.kind === 'turbo'
+      ? Math.max(0.6 * u, (engine.induction.compressorDiameter / 0.05) * 0.6 * u) : 0
+    const turboPosition = new THREE.Vector3(collector.x + 0.65 * u + turboScale,
+      collector.y - 0.7 * u, frontZ)
+    const turbineInlet = turboPosition.clone().add(new THREE.Vector3(-0.55 * turboScale, 0.3 * turboScale, -0.5 * turboScale))
+    const turbineOutlet = turboPosition.clone().add(new THREE.Vector3(0, 0, -1.05 * turboScale))
+    // Supercharger accessories retain their drive at the timing end; the turbo
+    // sits beyond the exhaust collector at the opposite end of the block.
     const induction = engine.induction
     const spinner = new THREE.Group()
     let hotHousing: THREE.MeshStandardMaterial | null = null
@@ -747,12 +763,9 @@ export function EngineView({
         emissiveIntensity: 0,
       })
       const turbo = new THREE.Group()
-      turbo.position.set(frontX - 0.75 * u, head * 0.75, -0.25 * u)
+      turbo.position.copy(turboPosition)
       scene.add(turbo)
-      const scale = Math.max(
-        0.6 * u,
-        (induction.compressorDiameter / 0.05) * 0.6 * u,
-      )
+      const scale = turboScale
       mesh(
         new THREE.TorusGeometry(0.55 * scale, 0.32 * scale, 16, 40),
         hotHousing,
@@ -804,15 +817,9 @@ export function EngineView({
           0,
           spinner,
         ).rotation.z = (b * Math.PI) / 7
-      // Downpipe to the floor side.
-      mesh(
-        new THREE.CylinderGeometry(0.2 * scale, 0.2 * scale, head * 0.6, 20),
-        hotHousing,
-        0,
-        -head * 0.35,
-        -0.5 * scale,
-        turbo,
-      )
+      // Turbine outlet points rearwards; the shared exhaust route attaches here.
+      mesh(new THREE.CylinderGeometry(0.2 * scale, 0.2 * scale, 0.55 * scale, 24, 1, true),
+        hotHousing, 0, 0, -0.8 * scale, turbo).rotation.x = Math.PI / 2
     } else if (induction.kind === 'centrifugal') {
       const y = 0.6 * head
       const z = 0.9 * u
@@ -977,7 +984,6 @@ export function EngineView({
     // headers sized by length, a 4-1 or 4-2-1 merge, catalyst, silencer and
     // tailpipe. It glows with the header wall temperature and flashes on
     // afterfire; both come from telemetry.
-    const exhaust = engine.exhaust
     const hotPipe = new THREE.MeshStandardMaterial({
       color: 0x5d6263,
       metalness: 0.88,
@@ -1005,8 +1011,22 @@ export function EngineView({
     })
     const pipeRadius = 0.082 * u
     const tube = (points: THREE.Vector3[], radius = pipeRadius) => {
-      const curve = new THREE.CatmullRomCurve3(points)
-      mesh(new THREE.TubeGeometry(curve, 40, radius, 16), hotPipe, 0, 0, 0)
+      // Rounded polyline stays within its routing corridor; unconstrained
+      // Catmull-Rom curves overshoot long runs and cross neighbouring pipes.
+      const curve = new THREE.CurvePath<THREE.Vector3>()
+      let previous = points[0]
+      for (let i = 1; i < points.length - 1; i++) {
+        const corner = points[i]
+        const bend = Math.min(0.18 * u,
+          corner.distanceTo(points[i - 1]) * 0.3, corner.distanceTo(points[i + 1]) * 0.3)
+        const entry = corner.clone().add(points[i - 1].clone().sub(corner).normalize().multiplyScalar(bend))
+        const exit = corner.clone().add(points[i + 1].clone().sub(corner).normalize().multiplyScalar(bend))
+        curve.add(new THREE.LineCurve3(previous, entry))
+        curve.add(new THREE.QuadraticBezierCurve3(entry, corner, exit))
+        previous = exit
+      }
+      curve.add(new THREE.LineCurve3(previous, points[points.length - 1]))
+      mesh(new THREE.TubeGeometry(curve, 64, radius, 16), hotPipe, 0, 0, 0)
       // Weld collars follow the local pipe tangent instead of floating rings.
       for (const t of [0.06, 0.94]) {
         const point = curve.getPoint(t)
@@ -1017,8 +1037,6 @@ export function EngineView({
     }
     // Sweep the individual primaries forward and down into a collector. This
     // keeps all four tubes readable instead of laying them across the cam cover.
-    const portY = head + 0.18 * u
-    const frontZ = 0.82 * u
     const ports = [0, 1, 2, 3].map(
       (i) => new THREE.Vector3((i - 1.5) * spacing, portY, 0.4 * u),
     )
@@ -1031,62 +1049,43 @@ export function EngineView({
         bolt.rotation.x = Math.PI / 2
       }
     }
-    const headerReach =
-      Math.min(2.2, Math.max(0.5, exhaust.headerLength / 0.5)) * 0.28 * u
-    const collector = new THREE.Vector3(
-      width / 2 + 0.48 * u + headerReach,
-      baseY + 0.62 * u,
-      frontZ,
-    )
+    // Each runner owns a separate depth lane. Leftmost ports take the
+    // furthest lane so later port stubs never cross an earlier runner.
+    const laneZ = (i: number) => frontZ + (1.5 - i) * 0.25 * u
+    const primary = (i: number, end: THREE.Vector3) => tube([
+      ports[i],
+      new THREE.Vector3(ports[i].x, portY, laneZ(i)),
+      new THREE.Vector3(collector.x - 0.35 * u, portY, laneZ(i)),
+      new THREE.Vector3(collector.x, collector.y + 0.9 * u, laneZ(i)),
+      end,
+    ])
     if (exhaust.collector === '4-2-1') {
-      // Cylinders 1 and 4, and 2 and 3, pair up (180° apart in the firing order).
-      const pairs = [
-        [0, 3, 0.13],
-        [1, 2, -0.13],
-      ]
-      for (const [a, b, lift] of pairs) {
-        const merge = new THREE.Vector3(
-          width / 2 + (0.02 + lift) * u,
-          portY + lift * u,
-          frontZ + lift * 0.5 * u,
-        )
-        for (const i of [a, b])
-          tube([
-            ports[i],
-            new THREE.Vector3(ports[i].x, portY + 0.08 * u, 0.68 * u),
-            merge,
-          ])
-        tube([merge,
-          new THREE.Vector3(collector.x, merge.y - 0.18 * u, collector.z + lift * u),
-          collector], pipeRadius * 1.25)
+      for (const [a, b, side] of [[0, 3, -1], [1, 2, 1]]) {
+        const merge = new THREE.Vector3(collector.x + side * 0.25 * u,
+          collector.y + 0.42 * u, frontZ)
+        primary(a, merge)
+        primary(b, merge)
+        tube([merge, new THREE.Vector3(merge.x, collector.y, frontZ)], pipeRadius * 1.3)
       }
-    } else
-      for (const [i, port] of ports.entries())
-        tube([
-          port,
-          new THREE.Vector3(port.x, portY + 0.08 * u, 0.68 * u),
-          new THREE.Vector3(
-            collector.x - (0.26 + i * 0.085) * u,
-            portY + (0.05 + i * 0.08) * u,
-            frontZ + (i - 1.5) * 0.035 * u,
-          ),
-          collector,
-        ])
+    } else {
+      for (let i = 0; i < 4; i++)
+        primary(i, new THREE.Vector3(collector.x, collector.y, laneZ(i)))
+    }
     const collectorCone = mesh(
       new THREE.CylinderGeometry(
-        pipeRadius * 2.1,
+        0.5 * u,
         pipeRadius * 1.3,
-        0.34 * u,
+        0.55 * u,
         20,
       ),
       hotPipe,
       collector.x,
-      collector.y - 0.16 * u,
+      collector.y - 0.275 * u,
       collector.z,
     )
     collectorCone.rotation.z = 0
     const clamp = mesh(new THREE.TorusGeometry(pipeRadius * 1.45, 0.025 * u, 8, 24),
-      steel, collector.x, collector.y - 0.3 * u, collector.z)
+      steel, collector.x, collector.y - 0.55 * u, collector.z)
     clamp.rotation.x = Math.PI / 2
     // Down past the flywheel, then back along the side: catalyst, silencer, tip.
     const runY = Math.max(groundY + 0.25 * u, baseY - 0.2 * u)
@@ -1094,18 +1093,27 @@ export function EngineView({
       2.2 * u * 3,
       Math.max(1.6 * u, (exhaust.tailpipeLength / 2.5) * 4.4 * u),
     )
-    const runX = collector.x
-    const endZ = frontZ - length
+    const turbocharged = induction.kind === 'turbo'
+    const collectorExit = new THREE.Vector3(collector.x, collector.y - 0.55 * u, frontZ)
+    if (turbocharged) tube([
+      collectorExit,
+      new THREE.Vector3(collector.x + 0.2 * u, collectorExit.y - 0.15 * u, frontZ),
+      turbineInlet,
+    ], pipeRadius * 1.3)
+    const exhaustExit = turbocharged ? turbineOutlet : collectorExit
+    const runX = exhaustExit.x
+    const runStartZ = exhaustExit.z
+    const endZ = runStartZ - length
     tube(
       [
-        new THREE.Vector3(runX, collector.y - 0.3 * u, frontZ),
-        new THREE.Vector3(runX + 0.08 * u, (collector.y + runY) / 2, frontZ),
-        new THREE.Vector3(runX, runY, frontZ - 0.3 * u),
+        exhaustExit,
+        new THREE.Vector3(runX, exhaustExit.y - 0.25 * u, runStartZ - 0.25 * u),
+        new THREE.Vector3(runX, runY, runStartZ - 0.45 * u),
         new THREE.Vector3(runX, runY, endZ),
       ],
       pipeRadius * 1.3,
     )
-    const along = (share: number) => frontZ - 0.3 * u - share * (length - 0.3 * u)
+    const along = (share: number) => runStartZ - 0.45 * u - share * (length - 0.45 * u)
     if (exhaust.catalyst)
       mesh(
         new THREE.CylinderGeometry(0.3 * u, 0.3 * u, 0.7 * u, 24),
