@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openMode, openSection } from './layout'
 import type { Page } from '@playwright/test'
 
 // Stage 5: sound controls, limiter cut, quick fixes, road load and shortcuts.
@@ -20,11 +21,13 @@ test('a spark-cut limiter and straight pipe afterfire; a fuel cut shows LIMITER 
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
+  await openSection(page, 'Exhaust')
   await choose(page, 'Silencer', 'Straight-through (no silencer)')
   await page.getByRole('switch', { name: 'Catalytic converter' }).uncheck()
   await choose(page, 'Rev limiter cuts', 'Spark (ignition cut)')
   await expect(page.getByText('Fuel keeps flowing unburned')).toBeVisible()
   await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
+  await openMode(page, 'Bench')
   await startEngine(page)
   await page.getByRole('heading', { level: 1 }).click()
   await page.keyboard.down('Space')
@@ -35,6 +38,7 @@ test('a spark-cut limiter and straight pipe afterfire; a fuel cut shows LIMITER 
   await expect(page.getByTestId('afterfire')).toBeVisible({ timeout: 20000 })
   await page.keyboard.up('Space')
 
+  await openSection(page, 'Exhaust')
   await choose(page, 'Rev limiter cuts', 'Fuel (injection stops)')
   await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
   await startEngine(page)
@@ -52,6 +56,7 @@ test('a quick test leaves the engine idling, then protects the baseline', async 
 }) => {
   await page.goto('/')
   await startEngine(page)
+  await openMode(page, 'Dyno')
   await page.getByLabel('End RPM', { exact: true }).fill('2500')
   await page.getByRole('button', { name: 'Quick test', exact: true }).click()
   await expect(page.getByTestId('run-summary')).toContainText('COMPLETE')
@@ -120,11 +125,13 @@ test('shortcuts, listening position and units are discoverable and remembered', 
     'Engine bay',
   )
   // Typing in a field must not trigger shortcuts.
+  await openSection(page, 'Starting build')
   await page.getByLabel('Build name').fill('vvv')
   await expect(page.getByRole('combobox', { name: /Listen from/ })).toHaveText(
     'Engine bay',
   )
   await choose(page, 'Power', 'hp')
+  await openMode(page, 'Bench')
   await expect(page.locator('.stats-strip').first()).toContainText('hp')
   await page.reload()
   await expect(page.getByRole('combobox', { name: /Listen from/ })).toHaveText(
@@ -140,6 +147,7 @@ test('every starting build loads and runs on the bench', async ({
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
+  await openSection(page, 'Starting build')
   for (const name of ['Turbo hot hatch', 'Torquey long-stroke', 'Screaming 9k']) {
     await page.getByRole('button', { name, exact: true }).click()
     await startEngine(page)

@@ -404,3 +404,10 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Added Overview, Timing, Crank and conditional Turbo view buttons. Overview bounds exclude transient gas overlays and the floor; camera fitting accounts for aspect ratio. Manual orbit cancels automatic fitting and its position remains preserved across rebuilds. A 112 px strip separates camera/cylinder controls from the canvas.
 - The Chromium narrow-layout workflow was attempted but its Vite web server could not start. Browser appearance, camera interactions, pipe collisions, narrow-layout fit and frame cost remain unverified. No physics/audio/schema changes were made.
 - Final production build, lint and whitespace checks passed. Existing build warnings and the `BenchPage.tsx:681` cleanup-ref warning remain.
+
+## Stage 9 UI revision, first pass (4 November)
+
+- Layout only: no simulation, schema or result changes. The bench page moved from one long page (about 8,800 px tall at 1024 px wide; right-hand pane about 6,600 px) to a sticky command bar, Bench/Workshop/Maps/Dyno/Library tabs and a Drive panel beside every tab. Measured at 1440 × 900 in Chromium: Bench, Workshop (every section), Maps and Library about 1,100 px tall; Dyno about 2,100 px.
+- 375 px wide (mobile emulation): no horizontal overflow; the command bar wraps and the Drive panel follows the main content.
+- Chromium (bench, stage 5 and stage 6 specs, 28 tests): 27 pass. Tests open the tab or workshop section before each step through `tests/layout.ts`. The remaining failure is the sign-in navigation step in the pull test, which also fails on the previous commit when no API is running locally. The 3D cutaway mounts only on the Bench tab; its look was not reviewed (no WebGL in the automated browser).
+- Not yet done: the control audit, a single place for every warning (stall, limiter and starter alerts stay in the Drive panel), keyboard and gamepad rechecks, and the first-use check with an unfamiliar user.

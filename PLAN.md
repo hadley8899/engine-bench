@@ -4,15 +4,15 @@ Updated: 4 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 10's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0). Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0). Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
-3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 10.
+3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
 4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
-Next come two-stroke engines (Stage 9), then other layouts (Stage 10) and the famous engines that need them. A UI revision (Stage 11) follows once those features are in place (user decision, 3 November 2026), then fidelity and release readiness (Stage 12). The 3D overhaul (Stage 13) is now the last stage (user decision, 4 November 2026).
+Next is the UI revision (Stage 9), brought forward by the user on 4 November 2026. Then come two-stroke engines (Stage 10), other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
 
 ## Product direction
 
@@ -82,7 +82,7 @@ The shell checks above describe the extraction verification, not verification of
 
 ## Engine configuration
 
-Start with a four-stroke petrol inline-four. Two-stroke engines with editable ports and exhaust shapes were requested by the user on 1 November 2026 (Stage 9; design in `docs/TWO_STROKE.md`). They now follow the tuning and real-engine stages. Expand to inline-six, V6, V8 and boxer layouts after that.
+Start with a four-stroke petrol inline-four. Two-stroke engines with editable ports and exhaust shapes were requested by the user on 1 November 2026 (Stage 10; design in `docs/TWO_STROKE.md`). They now follow the tuning and real-engine stages. Expand to inline-six, V6, V8 and boxer layouts after that.
 
 - Geometry: cylinder count/layout, bore, stroke, connecting-rod length and compression ratio.
 - Timing: firing order, crank phasing, valve timing/lift and ignition timing, introduced as their simulation support becomes available.
@@ -222,7 +222,7 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 - [x] Add fuel systems (model 1.4.0): carburettor (venturi metering by volume, restriction, accelerator pump), throttle-body, port and direct injection, with x–τ wall-film transport, transient correction, overrun cut, evaporative charge cooling and misfire limits. Requested by the user with the period variety engines have used.
 - [x] Add opt-in Live updates that apply valid edits to the running engine.
 
-The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 12 and layouts to Stage 10.
+The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 12 and layouts to Stage 11.
 
 ### 5. Sound and bench feel — complete
 
@@ -302,7 +302,7 @@ The user wants famous engines they recognise, starting with the 2.0 TFSI from th
 - [x] Source a documented VW EA113 2.0 TFSI (AXX/BWA, Golf Mk5 GTI) preset: geometry, compression, valve timing, turbocharger, direct injection and published torque and power. Identify inferred and calibrated inputs explicitly. Requires Stage 6 knock and maps. Done 4 November 2026 from VW SSP 337; provenance in `docs/PRESETS.md`. Valve timing is not published beyond 42° of intake cam phasing, so it is inferred. Decision: the boost target is calibrated to 0.6 bar, because the model makes about 20% more torque than the real engine at its 0.9 bar; this is recorded as a known model deviation.
 - [x] Compare each preset with a sourced reference torque curve and operating range; record deviations. The AXX matches SSP 337's curve within 7 Nm from 2,000 to 6,500 RPM (+22 and −15 Nm at 1,000 and 1,500 RPM), and `src/sim/presets.test.ts` holds it there.
 - [x] Then add further well-known inline-fours with contrasting characters, for example the Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Done 4 November 2026. Model 1.12.0 adds an optional two-stage cam so the K20A's VTEC changeover reproduces Honda's published curve. Decision: the Evo, SR20 and 4A-GE are calibrated to their rated points because no manufacturer curves were found; `docs/PRESETS.md` says so for each. SR20 VTC and 4A-GE T-VIS are not represented.
-- [ ] After the matching layouts exist (Stage 10), add famous engines that need them, for example the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20/EJ25 (boxer) and a GM LS V8.
+- [ ] After the matching layouts exist (Stage 11), add famous engines that need them, for example the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20/EJ25 (boxer) and a GM LS V8.
 - [x] Add a stock-or-modified view: for a preset, show which settings and parts differ from the stock engine. A build that keeps a preset's name lists its changes from that preset in the workshop.
 
 Acceptance: each released preset has provenance and model limitations, reproduces its sourced curve within a recorded deviation, and runs through the editor, animation, audio, dyno and persistence. The interface never calls a preset an exact replica.
@@ -331,7 +331,22 @@ Parts and limits:
 
 Acceptance: earlier builds' results are unchanged. More duration moves torque up the rev range, and more overlap roughens idle and helps a tuned top end. Phasing broadens the torque curve. Presets with variable timing match their sourced curves at least as well as before. A big cam with stock springs floats valves sooner, and contact failures are repeatable.
 
-### 9. Two-stroke engines
+### 9. UI revision
+
+Requested by the user on 3 November 2026: the interface has become hard to understand, and the bench controls pane on the right is very long. Brought forward ahead of two-stroke engines by the user on 4 November 2026, because the long controls pane made the bench hard to use. Agreed layout: a fixed command bar (build, status, pending edits, apply, stop), mode tabs (Bench, Workshop, Maps, Dyno, Library), a drive panel that stays visible in every mode, bench telemetry in sub-tabs, and a workshop that shows one section at a time with markers for sections changed from the starting build. New feature stages add their controls into this structure.
+
+First pass done 4 November 2026. The page was about 8,800 px tall at 1024 px wide, with the right-hand pane at about 6,600 px (the workshop alone about 5,200 px). It now has a sticky command bar, Bench/Workshop/Maps/Dyno/Library tabs, a Drive panel that stays beside every tab, telemetry sub-tabs (engine data, cylinders and stress, traces) and a workshop that shows one of nine sections at a time, with an amber dot for unapplied edits and a ring for sections changed from the starting build. Most tabs now fit in about 1,100 px at 1440 × 900. A failure switches to the bench's Cylinders and stress tab and shows in the status chip. This is a layout change only; the controls, their effects and the model are unchanged.
+
+- [ ] Audit every control, readout and notice on the bench, workshop, maps and library: what it does, how often it is used and which tasks need it. Use that audit to drive the new structure.
+- [x] Split the bench controls pane into task-based areas, for example drive (start, ignition, throttle, load), dyno test, test-cell conditions, sound and display. Keep the controls needed every run visible and move the rest behind clear tabs or sections.
+- [x] Reorganise the engine workshop into understandable groups with progressive disclosure: everyday settings first, detailed parameters on demand. Show at a glance what differs from the starting build.
+- [ ] Make status consistent: one place for engine state, warnings and notices, with stall, limiter, knock, fuel-limit and (later) failure messages saying what to do next.
+- [ ] Recheck narrow and mobile layouts, keyboard and gamepad use, and accessible names for every control.
+- [ ] Repeat the one-minute first-use check with an unfamiliar user, which is still open from Phase 2.
+
+Acceptance: a new user can start an engine, make a change, run a test and compare it without help. Every existing workflow keeps working, and browser tests cover the new layout in Chromium and Firefox.
+
+### 10. Two-stroke engines
 
 Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 November 2026. The design proposal, open questions and verification approach are in `docs/TWO_STROKE.md`.
 
@@ -344,24 +359,11 @@ Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 Nov
 
 Acceptance: port timing is derived from geometry and validated; mass and energy balance across crankcase, cylinder and pipe; supported trends hold (pipe length moves the torque peak, exhaust-port height moves and narrows the band, a tuned chamber beats a straight pipe at its tuned speed); the two-stroke works through the editor, animation, audio, dyno and persistence; four-stroke results are unchanged.
 
-### 10. Additional layouts
+### 11. Additional layouts
 
 - [ ] Add inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Prioritise meaningful variety over a large list of near-identical presets.
 
 Acceptance: each released layout works through configuration, animation, audio, dyno and persistence.
-
-### 11. UI revision
-
-Requested by the user on 3 November 2026: the interface has become hard to understand, and the bench controls pane on the right is very long. Scheduled once the feature stages are in place, so the layout is designed around the finished set of controls, not revised again for each new one. Bring it forward if the bench becomes hard to use for the work in between.
-
-- [ ] Audit every control, readout and notice on the bench, workshop, maps and library: what it does, how often it is used and which tasks need it. Use that audit to drive the new structure.
-- [ ] Split the bench controls pane into task-based areas, for example drive (start, ignition, throttle, load), dyno test, test-cell conditions, sound and display. Keep the controls needed every run visible and move the rest behind clear tabs or sections.
-- [ ] Reorganise the engine workshop into understandable groups with progressive disclosure: everyday settings first, detailed parameters on demand. Show at a glance what differs from the starting build.
-- [ ] Make status consistent: one place for engine state, warnings and notices, with stall, limiter, knock, fuel-limit and (later) failure messages saying what to do next.
-- [ ] Recheck narrow and mobile layouts, keyboard and gamepad use, and accessible names for every control.
-- [ ] Repeat the one-minute first-use check with an unfamiliar user, which is still open from Phase 2.
-
-Acceptance: a new user can start an engine, make a change, run a test and compare it without help. Every existing workflow keeps working, and browser tests cover the new layout in Chromium and Firefox.
 
 ### 12. Fidelity and release readiness
 

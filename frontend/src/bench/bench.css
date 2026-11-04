@@ -5,7 +5,7 @@
   font-family: 'Saira', sans-serif;
 }
 .bench-header {
-  height: 88px;
+  height: 60px;
   padding: 0 max(24px, calc((100vw - 1500px) / 2));
   border-bottom: 1px solid #27343c;
   display: flex;
@@ -102,7 +102,7 @@
   align-items: start;
 }
 .bench-stage,
-.bench-sidebar {
+.drive-panel {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -430,7 +430,7 @@
   }
 }
 @media (max-width: 1100px) {
-  .bench-grid {
+  .bench-layout {
     grid-template-columns: minmax(0, 1fr) 320px;
   }
   .control-sliders {
@@ -453,11 +453,11 @@
   }
 }
 @media (max-width: 850px) {
-  .bench-grid,
+  .bench-layout,
   .dyno-grid {
     grid-template-columns: 1fr;
   }
-  .bench-sidebar {
+  .drive-panel {
     display: grid;
     grid-template-columns: 1fr 1fr;
     align-items: start;
@@ -488,7 +488,7 @@
   }
 }
 @media (max-width: 580px) {
-  .bench-sidebar {
+  .drive-panel {
     grid-template-columns: 1fr;
   }
   .bench-title {
@@ -671,7 +671,7 @@
   font-size: 34px;
   margin: 6px 0;
 }
-.bench-sidebar .control-sliders {
+.drive-panel .control-sliders {
   grid-template-columns: 1fr;
   gap: 6px;
   margin-top: 16px;
@@ -965,3 +965,168 @@
   color: #f2b96f;
 }
 .camera-presets button:disabled { opacity: 0.5; cursor: default; }
+
+/* Stage 9: command bar, modes, drive panel and workshop sections. */
+.bench-app [hidden] {
+  display: none !important;
+}
+.command-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px max(24px, calc((100vw - 1500px) / 2));
+  background: #101a21;
+  border-bottom: 1px solid #27343c;
+}
+.command-build {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.bench-app .command-build h1 {
+  margin: 0;
+  line-height: 1.3;
+  font-family: 'Saira Condensed', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.command-spacer {
+  flex: 1;
+}
+.command-bar .live-toggle {
+  margin: 0;
+}
+.bench-app main {
+  padding-top: 12px;
+}
+.mode-tabs {
+  border-bottom: 1px solid #27343c;
+  margin-bottom: 18px;
+}
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.mark.pending {
+  background: #f0b66c;
+}
+.mark.modified {
+  border: 1.5px solid #7fe0ff;
+}
+.mark.failed {
+  background: #ff5c7c;
+}
+.mark-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #91a4ae;
+  font-size: 11px;
+}
+.bench-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+.bench-main,
+.bench-main > section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.drive-panel {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+}
+.telemetry-tabs {
+  margin: 8px 16px 0;
+  border-bottom: 1px solid #27343c;
+}
+.workshop-layout.workshop-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  align-items: start;
+}
+.section-tabs {
+  position: sticky;
+  top: 72px;
+}
+.section-tabs .MuiTab-root {
+  align-items: flex-start;
+  text-align: left;
+  min-height: 40px;
+}
+.workshop-panel > div:not(.panel-heading) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.workshop-footer {
+  border-top: 1px solid #27343c;
+  margin-top: 20px;
+  padding-top: 8px;
+}
+.dyno-section {
+  margin-top: 0;
+}
+@media (max-width: 1100px) {
+  .bench-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+@media (max-width: 900px) {
+  .bench-layout,
+  .workshop-layout.workshop-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .drive-panel,
+  .section-tabs {
+    position: static;
+    max-height: none;
+  }
+  .command-bar {
+    padding: 8px 16px;
+    position: static;
+  }
+  .command-spacer {
+    display: none;
+  }
+}
+.drive-panel .listen-row {
+  grid-template-columns: 1fr 1fr;
+}
+.drive-panel .listen-row > :first-child {
+  grid-column: 1 / -1;
+}
+.section-tabs .MuiTabs-indicator {
+  display: none;
+}
+.section-tabs.MuiTabs-vertical .MuiTab-root {
+  border-left: 2px solid transparent;
+}
+.section-tabs.MuiTabs-vertical .MuiTab-root.Mui-selected {
+  border-left-color: #f0b66c;
+}
+.section-tabs:not(.MuiTabs-vertical) .MuiTab-root.Mui-selected {
+  box-shadow: inset 0 -2px #f0b66c;
+}

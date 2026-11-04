@@ -1,6 +1,6 @@
 # Two-stroke engines — design note
 
-Status: proposal, not implemented. Requested by the user on 1 November 2026; on 2 November 2026 it moved behind bench usability, tuning and limits, real-engine presets and camshafts (PLAN.md Stage 9): build two-stroke engines and experiment with ports and exhaust shapes. This note records the intended model, editor and order of work so the design can be reviewed before code changes. Update it as decisions are made; move implemented behaviour into `docs/SIMULATION.md`.
+Status: proposal, not implemented. Requested by the user on 1 November 2026; on 2 November 2026 it moved behind bench usability, tuning and limits, real-engine presets and camshafts (PLAN.md Stage 10): build two-stroke engines and experiment with ports and exhaust shapes. This note records the intended model, editor and order of work so the design can be reviewed before code changes. Update it as decisions are made; move implemented behaviour into `docs/SIMULATION.md`.
 
 ## Why it is a different engine, not a new preset
 
@@ -10,7 +10,7 @@ A crankcase-scavenged two-stroke fires every revolution and has no valvetrain. T
 2. **Scavenging.** Incoming charge pushes burned gas out while the exhaust port is still open. Some of the fresh charge mixes with the burned gas, and some is lost straight out of the exhaust.
 3. **Exhaust pressure waves.** A tuned expansion chamber returns a suction wave that helps empty the cylinder, then a reflected pressure wave that pushes escaping charge back in before the port closes. This is the main reason two-strokes are tuned, and it needs a one-dimensional gas-dynamics pipe model. The current core has only lumped volumes.
 
-This remains the first contrasting layout and sound, ahead of the other layouts in Stage 10. A two-stroke single differs more in sound, motion and tuning than an inline-six would.
+This remains the first contrasting layout and sound, ahead of the other layouts in Stage 11. A two-stroke single differs more in sound, motion and tuning than an inline-six would.
 
 ## What the user would configure
 

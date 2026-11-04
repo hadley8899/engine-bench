@@ -13,8 +13,11 @@ import {
   Slider,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   ThemeProvider,
+  useMediaQuery,
 } from '@mui/material'
 import { Link } from 'react-router'
 import { ZodError } from 'zod'
@@ -78,6 +81,15 @@ import { describeExhaust, exhaustErrors } from './exhaustFields'
 import { Gauges } from './Gauges'
 import { RoadControls } from './RoadControls'
 import { useShortcuts } from './shortcuts'
+import {
+  changedSections,
+  loadLayout,
+  mapsChanged,
+  persistLayout,
+  SECTIONS,
+  VIEWS,
+} from './layout'
+import type { LayoutState, Section, View } from './layout'
 import type { ShortcutAction } from './shortcuts'
 import { ShortcutHelp } from './ShortcutHelp'
 import { PullSummary } from './PullSummary'
@@ -546,6 +558,22 @@ export function BenchPage() {
   const [slow, setSlow] = useState(false)
   const [overlays, setOverlays] = useState(true)
   const [advanced, setAdvanced] = useState(false)
+  const [layout, setLayout] = useState(loadLayout)
+  const changeLayout = useCallback((change: Partial<LayoutState>) => {
+    setLayout((l) => {
+      const next = { ...l, ...change }
+      persistLayout(next)
+      return next
+    })
+  }, [])
+  const wide = useMediaQuery('(min-width: 900px)')
+  // A failure stops the engine: show what broke.
+  const failureTitle = telemetry.stress.failure?.title
+  const [shownFailure, setShownFailure] = useState(failureTitle)
+  if (failureTitle !== shownFailure) {
+    setShownFailure(failureTitle)
+    if (failureTitle) changeLayout({ view: 'bench', telemetry: 'cylinders' })
+  }
   const [liveUpdates, setLiveUpdates] = useState(loadLiveUpdates)
   /** The build before the current run of live edits, for Restore previous build. */
   const liveOrigin = useRef<EngineDefinition | null>(null)
@@ -1300,441 +1328,1201 @@ export function BenchPage() {
     }
   })
 
+  const pending = changedSections(draft, experiment.engine)
+  const mapsPending = mapsChanged(draft, experiment.engine)
+  const conditionsPending =
+    JSON.stringify(conditions) !== JSON.stringify(experiment.conditions)
+  const pendingCount =
+    pending.size + (mapsPending ? 1 : 0) + (conditionsPending ? 1 : 0)
+  const base = [...starterBuilds, ...realEngines].find(
+    (b) => b.engine.name === draft.name,
+  )
+  const modifiedFromBase = base
+    ? changedSections(draft, base.engine)
+    : new Set<Section>()
+  const failure = telemetry.stress.failure
+  const status: {
+    label: string
+    color: 'default' | 'success' | 'warning' | 'error' | 'info'
+  } = failure
+    ? { label: `FAILED · ${failure.title}`, color: 'error' }
+    : calculating
+      ? { label: 'CALCULATING', color: 'info' }
+      : running && mode === 'live'
+        ? { label: 'LIVE PULL', color: 'info' }
+        : running && mode === 'audition'
+          ? { label: 'AUDITION', color: 'info' }
+          : running && telemetry.starterStalled
+            ? { label: 'STARTER STALLED', color: 'warning' }
+            : running && telemetry.rpm < 100 && telemetry.time > 1.2
+              ? { label: 'STALLED', color: 'warning' }
+              : running
+                ? { label: 'RUNNING', color: 'success' }
+                : { label: 'READY TO START', color: 'default' }
+
   return (
     <ThemeProvider theme={theme}>
       <div className="bench-app">
         <header className="bench-header">
-          <Link to="/" className="bench-wordmark">
-            <span className="brand-mark">EB</span>
-            <span>
-              ENGINE BENCH<small>THE VIRTUAL ENGINE WORKSHOP</small>
-            </span>
-          </Link>
-          <div className="header-right">
-            <Chip size="small" label="LOCAL SIMULATION" variant="outlined" />
-            {user ? (
-              <Button component={Link} to="/settings">
-                Account settings
-              </Button>
-            ) : (
-              <Button component={Link} to="/login">
-                Sign in
-              </Button>
-            )}
-          </div>
-        </header>
-        <main>
-          <div className="bench-title">
-            <div>
-              <div className="eyebrow">WORKSPACE / TEST CELL 01</div>
-              <h1>
-                Build it. Hear it. <em>Find its limits.</em>
-              </h1>
-              <p>
-                A working engine on your bench. Every change is another
-                experiment.
-              </p>
+          <header className="bench-header">
+            <Link to="/" className="bench-wordmark">
+              <span className="brand-mark">EB</span>
+              <span>
+                ENGINE BENCH<small>THE VIRTUAL ENGINE WORKSHOP</small>
+              </span>
+            </Link>
+            <div className="header-right">
+              <Chip size="small" label="LOCAL SIMULATION" variant="outlined" />
+              {user ? (
+                <Button component={Link} to="/settings">
+                  Account settings
+                </Button>
+              ) : (
+                <Button component={Link} to="/login">
+                  Sign in
+                </Button>
+              )}
             </div>
-            <Stack alignItems="flex-end" spacing={1}>
-              <Chip
-                label={
-                  calculating
-                    ? 'CALCULATING'
-                    : running
-                      ? 'ENGINE RUNNING'
-                      : 'READY TO START'
-                }
-                color={running || calculating ? 'success' : 'default'}
-              />
-              <Button
-                variant="contained"
-                size="large"
-                disabled={
-                  (running && telemetry.rpm > 100) || activeTest || busy
-                }
-                onClick={() => void start()}
-              >
-                Start engine
-              </Button>
-            </Stack>
+          </header>
+        </header>
+        <div className="command-bar" data-testid="command-bar">
+          <div className="command-build">
+            <h1>{viewEngine.name}</h1>
+            <span className="engine-spec">
+              {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
+              <b>·</b> 1–3–4–2 <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
+              {viewEngine.induction.kind !== 'none' &&
+                ` · ${inductionLabels[viewEngine.induction.kind]}`}
+            </span>
           </div>
+          <Chip
+            size="small"
+            data-testid="engine-status"
+            label={status.label}
+            color={status.color}
+            onClick={
+              telemetry.stress.failure
+                ? () => changeLayout({ view: 'bench', telemetry: 'cylinders' })
+                : undefined
+            }
+          />
+          {dirty && (
+            <Chip
+              size="small"
+              variant="outlined"
+              color={invalid ? 'error' : 'warning'}
+              data-testid="pending-edits"
+              label={
+                invalid
+                  ? 'Edits out of range'
+                  : liveUpdates
+                    ? 'Applying edits'
+                    : `${pendingCount} unapplied ${pendingCount === 1 ? 'change' : 'changes'}`
+              }
+              onClick={() => changeLayout({ view: 'workshop' })}
+            />
+          )}
+          <span className="command-spacer" />
+          <FormControlLabel
+            className="live-toggle"
+            control={
+              <Switch
+                checked={liveUpdates}
+                onChange={(e) => {
+                  liveOrigin.current = null
+                  setLiveUpdates(e.target.checked)
+                  persistLiveUpdates(e.target.checked)
+                }}
+              />
+            }
+            label="Live updates"
+          />
+          <Button
+            variant={dirty ? 'contained' : 'outlined'}
+            disabled={(!dirty && !liveUpdates) || invalid || activeTest}
+            onClick={apply}
+          >
+            Stop & rebuild engine
+          </Button>
+          <Button
+            variant="contained"
+            disabled={(running && telemetry.rpm > 100) || activeTest || busy}
+            onClick={() => void start()}
+          >
+            Start engine
+          </Button>
+          <Button variant="outlined" color="error" onClick={() => stop()}>
+            Emergency stop
+          </Button>
+        </div>
+        <main>
           {error && (
             <Alert severity="error" onClose={() => setError('')}>
               {error}
             </Alert>
           )}
-          <div className="bench-grid">
-            <section className="bench-stage">
-              <Paper className="stage-panel" variant="outlined">
-                <div className="panel-heading">
-                  <div>
-                    <span className="eyebrow">ON THE STAND</span>
-                    <h2>{viewEngine.name}</h2>
-                  </div>
-                  <span className="engine-spec">
-                    {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
-                    <b>·</b> 1–3–4–2
+          <Tabs
+            className="mode-tabs"
+            value={layout.view}
+            variant="scrollable"
+            scrollButtons={false}
+            aria-label="Bench modes"
+            onChange={(_, view: View) => changeLayout({ view })}
+          >
+            {VIEWS.map((v) => (
+              <Tab
+                key={v.key}
+                value={v.key}
+                label={
+                  <span className="tab-label">
+                    {v.label}
+                    {((v.key === 'workshop' && pending.size > 0) ||
+                      (v.key === 'maps' && mapsPending)) && (
+                      <i className="mark pending" aria-label="unapplied changes" />
+                    )}
                   </span>
-                </div>
-                <EngineView
-                  engine={viewEngine}
-                  telemetry={telemetryRef}
-                  slow={slow}
-                  overlays={overlays}
-                  selected={selected}
-                  onSelect={setSelected}
-                />
-                <div className="view-options">
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        size="small"
-                        checked={overlays}
-                        onChange={(_, v) => setOverlays(v)}
+                }
+              />
+            ))}
+          </Tabs>
+          <div className="bench-layout">
+            <div className="bench-main">
+              <section hidden={layout.view !== 'bench'} className="bench-stage">
+                <Paper className="stage-panel" variant="outlined">
+                  {layout.view === 'bench' ? (
+                    <>
+                      <EngineView
+                        engine={viewEngine}
+                        telemetry={telemetryRef}
+                        slow={slow}
+                        overlays={overlays}
+                        selected={selected}
+                        onSelect={setSelected}
                       />
-                    }
-                    label="Show cycle colours"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        size="small"
-                        checked={slow}
-                        onChange={(_, v) => {
-                          setSlow(v)
-                          audio.current?.setVolume(v ? 0 : volume)
-                        }}
-                      />
-                    }
-                    label="Slow-motion inspection"
-                  />
-                </div>
-                <div className="stats-strip">
-                  <div>
-                    <small>ENGINE SPEED</small>
-                    <strong data-testid="rpm">
-                      {Math.round(telemetry.rpm).toLocaleString()}
-                      <span> RPM</span>
-                    </strong>
-                  </div>
-                  <div>
-                    <small>BRAKE TORQUE</small>
-                    <strong>
-                      {formatFixed(fromNm(telemetry.torque, prefs.torque), 1)}
-                      <span> {prefs.torque}</span>
-                    </strong>
-                  </div>
-                  <div>
-                    <small>CRANK POWER</small>
-                    <strong>
-                      {formatFixed(fromKw(telemetry.power, prefs.power), 1)}
-                      <span> {prefs.power}</span>
-                    </strong>
-                  </div>
-                  <div>
-                    <small>COOLANT</small>
-                    <strong>
-                      {(telemetry.coolant - 273.15).toFixed(0)}
-                      <span> °C</span>
-                    </strong>
-                  </div>
-                </div>
-                <div className="stats-strip boost-strip" data-testid="fuel">
-                  <div>
-                    <small>MIXTURE</small>
-                    <strong>
-                      λ{' '}
-                      {fuelCut ? '—' : telemetry.fuel.lambda.toFixed(2)}
-                    </strong>
-                  </div>
-                  <div>
-                    <small>AIR–FUEL</small>
-                    <strong>
-                      {fuelCut ? (
-                        '—'
-                      ) : (
-                        <>
-                          {(
-                            telemetry.fuel.lambda *
-                            FUELS[telemetry.knock.fuel].stoichiometric
-                          ).toFixed(1)}
-                          <span>:1</span>
-                        </>
-                      )}
-                    </strong>
-                  </div>
-                  <div>
-                    <small>FUEL FLOW</small>
-                    <strong>
-                      {((telemetry.fuel.fuelFlow * 3600) / 0.74).toFixed(1)}
-                      <span> L/h</span>
-                    </strong>
-                  </div>
-                  <div>
-                    <small>FUEL STATUS</small>
-                    <strong className="boost-status">
-                      {telemetry.fuel.overrunCut && (
-                        <em className="boost-flag">OVERRUN CUT</em>
-                      )}
-                      {limiterVisible && (
-                        <em className="boost-flag warn">
-                          {experiment.engine.limiterCut === 'spark' ||
-                          experiment.engine.fuelSystem.kind === 'carburettor'
-                            ? 'SPARK CUT'
-                            : 'LIMITER CUT'}
-                        </em>
-                      )}
-                      {telemetry.fuel.fuelLimited && (
-                        <em className="boost-flag warn" data-testid="fuel-limited">
-                          FUEL LIMITED
-                        </em>
-                      )}
-                      {telemetry.fuel.misfire && (
-                        <em className="boost-flag warn">MISFIRE</em>
-                      )}
-                      {telemetry.afterfire && (
-                        <em className="boost-flag pop" data-testid="afterfire">
-                          AFTERFIRE
-                        </em>
-                      )}
-                      {!fuelCut &&
-                        !limiterVisible &&
-                        !telemetry.fuel.fuelLimited &&
-                        !telemetry.fuel.misfire &&
-                        !telemetry.afterfire &&
-                        (telemetry.fuel.lambda > 1.1 ? (
-                          <em className="boost-flag warn">LEAN</em>
-                        ) : telemetry.fuel.lambda < 0.8 ? (
-                          <em className="boost-flag warn">RICH</em>
-                        ) : (
-                          <span>Normal</span>
-                        ))}
-                    </strong>
-                  </div>
-                </div>
-                <div className="stats-strip boost-strip" data-testid="ecu">
-                  <div>
-                    <small>
-                      TIMING{telemetry.ecu.maps ? ' · MAP' : ''}
-                    </small>
-                    <strong>
-                      {formatFixed(
-                        telemetry.ecu.advance -
-                          telemetry.knock.retard.reduce((a, b) => a + b, 0) / 4,
-                        1,
-                      )}
-                      <span>° BTDC</span>
-                    </strong>
-                  </div>
-                  <div>
-                    <small>
-                      TARGET λ{telemetry.ecu.maps ? ' · MAP' : ''}
-                    </small>
-                    <strong>{telemetry.ecu.lambda.toFixed(2)}</strong>
-                  </div>
-                  <div>
-                    <small>INJECTOR DUTY</small>
-                    <strong>
-                      {telemetry.fuel.injectorDuty === null ? (
-                        '—'
-                      ) : (
-                        <>
-                          {Math.round(telemetry.fuel.injectorDuty * 100)}
-                          <span> %</span>
-                        </>
-                      )}
-                    </strong>
-                  </div>
-                  <div>
-                    <small>FUEL PUMP</small>
-                    <strong>
-                      {telemetry.fuel.pumpUse === null ? (
-                        '—'
-                      ) : (
-                        <>
-                          {Math.round(telemetry.fuel.pumpUse * 100)}
-                          <span> %</span>
-                        </>
-                      )}
-                    </strong>
-                  </div>
-                </div>
-                {(viewEngine.cams || viewEngine.camSwitch) && (
-                  <div className="stats-strip boost-strip" data-testid="cam-strip">
+                      <div className="view-options">
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={overlays}
+                              onChange={(_, v) => setOverlays(v)}
+                            />
+                          }
+                          label="Show cycle colours"
+                        />
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={slow}
+                              onChange={(_, v) => {
+                                setSlow(v)
+                                audio.current?.setVolume(v ? 0 : volume)
+                              }}
+                            />
+                          }
+                          label="Slow-motion inspection"
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                  <div className="stats-strip">
                     <div>
-                      <small>CAM PROFILE</small>
-                      <strong>
-                        {telemetry.ecu.cam === 'high' ? (
-                          <em className="boost-flag pop" data-testid="high-cam">
-                            HIGH CAM
-                          </em>
-                        ) : telemetry.ecu.cam === 'low' ? (
-                          'Low'
-                        ) : (
-                          'Single'
-                        )}
+                      <small>ENGINE SPEED</small>
+                      <strong data-testid="rpm">
+                        {Math.round(telemetry.rpm).toLocaleString()}
+                        <span> RPM</span>
                       </strong>
                     </div>
                     <div>
-                      <small>INTAKE CAM</small>
+                      <small>BRAKE TORQUE</small>
                       <strong>
-                        {formatFixed(telemetry.ecu.camPhase?.intake ?? 0, 0)}
-                        <span>° adv</span>
+                        {formatFixed(fromNm(telemetry.torque, prefs.torque), 1)}
+                        <span> {prefs.torque}</span>
                       </strong>
                     </div>
                     <div>
-                      <small>EXHAUST CAM</small>
+                      <small>CRANK POWER</small>
                       <strong>
-                        {formatFixed(telemetry.ecu.camPhase?.exhaust ?? 0, 0)}
-                        <span>° adv</span>
+                        {formatFixed(fromKw(telemetry.power, prefs.power), 1)}
+                        <span> {prefs.power}</span>
                       </strong>
                     </div>
                     <div>
-                      <small>OVERLAP</small>
+                      <small>COOLANT</small>
                       <strong>
-                        {Math.round(
-                          overlap(
-                            valveEvents(
-                              viewEngine,
-                              telemetry.ecu.cam === 'high',
-                              telemetry.ecu.camPhase?.intake ?? 0,
-                              telemetry.ecu.camPhase?.exhaust ?? 0,
-                            ),
-                          ),
-                        )}
-                        <span>°</span>
-                      </strong>
-                    </div>
-                  </div>
-                )}
-                <KnockStrip
-                  knock={telemetry.knock}
-                  temperatures={telemetry.temperatures}
-                />
-                <StressPanel
-                  stress={telemetry.stress}
-                  indestructible={indestructible}
-                  onIndestructible={changeIndestructible}
-                  rebuildDisabled={mode !== 'manual' && running}
-                  onRebuild={() => {
-                    stop('Rebuilt after a failure')
-                    setNotice(
-                      'Engine rebuilt with new parts from the last build. Press Start to run it.',
-                    )
-                  }}
-                />
-                {telemetry.induction.kind !== 'none' && (
-                  <div className="stats-strip boost-strip" data-testid="boost">
-                    <div>
-                      <small>BOOST</small>
-                      <strong>
-                        {formatFixed(telemetry.induction.boost / 1e5, 2)}
-                        <span> bar</span>
-                      </strong>
-                    </div>
-                    <div>
-                      <small>
-                        {telemetry.induction.kind === 'turbo'
-                          ? 'TURBO SPEED'
-                          : 'BLOWER SPEED'}
-                      </small>
-                      <strong>
-                        {Math.round(
-                          telemetry.induction.shaftRpm / 1000,
-                        ).toLocaleString()}
-                        <span>k RPM</span>
-                      </strong>
-                    </div>
-                    <div>
-                      <small>CHARGE AIR</small>
-                      <strong>
-                        {(
-                          telemetry.induction.chargeTemperature - 273.15
-                        ).toFixed(0)}
+                        {(telemetry.coolant - 273.15).toFixed(0)}
                         <span> °C</span>
                       </strong>
                     </div>
-                    <div>
-                      <small>
-                        {telemetry.induction.kind === 'turbo'
-                          ? 'WASTEGATE · BACK PRESSURE'
-                          : 'STATUS'}
-                      </small>
-                      <strong className="boost-status">
-                        {telemetry.induction.kind === 'turbo' && (
-                          <>
-                            {Math.round(telemetry.induction.wastegate * 100)}
-                            <span>% · </span>
-                            {formatFixed(
-                              telemetry.induction.exhaustBackPressure / 1e5,
-                              2,
-                            )}
-                            <span> bar </span>
-                          </>
-                        )}
-                        {telemetry.induction.venting && (
-                          <em className="boost-flag">
-                            {telemetry.induction.kind === 'roots'
-                              ? 'BYPASS'
-                              : 'BLOW-OFF'}
-                          </em>
-                        )}
-                        {telemetry.induction.surge && (
-                          <em className="boost-flag warn">SURGE</em>
-                        )}
-                        {telemetry.induction.kind !== 'turbo' &&
-                          !telemetry.induction.venting &&
-                          !telemetry.induction.surge && <span>Normal</span>}
-                      </strong>
-                    </div>
                   </div>
+                  {layout.view === 'bench' && (
+                    <Tabs
+                      className="telemetry-tabs"
+                      value={layout.telemetry}
+                      variant="scrollable"
+                      scrollButtons={false}
+                      aria-label="Telemetry"
+                      onChange={(_, telemetry: LayoutState['telemetry']) =>
+                        changeLayout({ telemetry })
+                      }
+                    >
+                      <Tab value="engine" label="Engine data" />
+                      <Tab
+                        value="cylinders"
+                        label={
+                          <span className="tab-label">
+                            Cylinders and stress
+                            {telemetry.stress.failure && (
+                              <i className="mark failed" aria-label="failure" />
+                            )}
+                          </span>
+                        }
+                      />
+                      <Tab value="traces" label="Traces" />
+                    </Tabs>
+                  )}
+                  <div hidden={layout.telemetry !== 'engine'}>
+                    {telemetry.induction.kind !== 'none' && (
+                      <div className="stats-strip boost-strip" data-testid="boost">
+                        <div>
+                          <small>BOOST</small>
+                          <strong>
+                            {formatFixed(telemetry.induction.boost / 1e5, 2)}
+                            <span> bar</span>
+                          </strong>
+                        </div>
+                        <div>
+                          <small>
+                            {telemetry.induction.kind === 'turbo'
+                              ? 'TURBO SPEED'
+                              : 'BLOWER SPEED'}
+                          </small>
+                          <strong>
+                            {Math.round(
+                              telemetry.induction.shaftRpm / 1000,
+                            ).toLocaleString()}
+                            <span>k RPM</span>
+                          </strong>
+                        </div>
+                        <div>
+                          <small>CHARGE AIR</small>
+                          <strong>
+                            {(
+                              telemetry.induction.chargeTemperature - 273.15
+                            ).toFixed(0)}
+                            <span> °C</span>
+                          </strong>
+                        </div>
+                        <div>
+                          <small>
+                            {telemetry.induction.kind === 'turbo'
+                              ? 'WASTEGATE · BACK PRESSURE'
+                              : 'STATUS'}
+                          </small>
+                          <strong className="boost-status">
+                            {telemetry.induction.kind === 'turbo' && (
+                              <>
+                                {Math.round(telemetry.induction.wastegate * 100)}
+                                <span>% · </span>
+                                {formatFixed(
+                                  telemetry.induction.exhaustBackPressure / 1e5,
+                                  2,
+                                )}
+                                <span> bar </span>
+                              </>
+                            )}
+                            {telemetry.induction.venting && (
+                              <em className="boost-flag">
+                                {telemetry.induction.kind === 'roots'
+                                  ? 'BYPASS'
+                                  : 'BLOW-OFF'}
+                              </em>
+                            )}
+                            {telemetry.induction.surge && (
+                              <em className="boost-flag warn">SURGE</em>
+                            )}
+                            {telemetry.induction.kind !== 'turbo' &&
+                              !telemetry.induction.venting &&
+                              !telemetry.induction.surge && <span>Normal</span>}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                    <div className="stats-strip boost-strip" data-testid="fuel">
+                      <div>
+                        <small>MIXTURE</small>
+                        <strong>
+                          λ{' '}
+                          {fuelCut ? '—' : telemetry.fuel.lambda.toFixed(2)}
+                        </strong>
+                      </div>
+                      <div>
+                        <small>AIR–FUEL</small>
+                        <strong>
+                          {fuelCut ? (
+                            '—'
+                          ) : (
+                            <>
+                              {(
+                                telemetry.fuel.lambda *
+                                FUELS[telemetry.knock.fuel].stoichiometric
+                              ).toFixed(1)}
+                              <span>:1</span>
+                            </>
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <small>FUEL FLOW</small>
+                        <strong>
+                          {((telemetry.fuel.fuelFlow * 3600) / 0.74).toFixed(1)}
+                          <span> L/h</span>
+                        </strong>
+                      </div>
+                      <div>
+                        <small>FUEL STATUS</small>
+                        <strong className="boost-status">
+                          {telemetry.fuel.overrunCut && (
+                            <em className="boost-flag">OVERRUN CUT</em>
+                          )}
+                          {limiterVisible && (
+                            <em className="boost-flag warn">
+                              {experiment.engine.limiterCut === 'spark' ||
+                              experiment.engine.fuelSystem.kind === 'carburettor'
+                                ? 'SPARK CUT'
+                                : 'LIMITER CUT'}
+                            </em>
+                          )}
+                          {telemetry.fuel.fuelLimited && (
+                            <em className="boost-flag warn" data-testid="fuel-limited">
+                              FUEL LIMITED
+                            </em>
+                          )}
+                          {telemetry.fuel.misfire && (
+                            <em className="boost-flag warn">MISFIRE</em>
+                          )}
+                          {telemetry.afterfire && (
+                            <em className="boost-flag pop" data-testid="afterfire">
+                              AFTERFIRE
+                            </em>
+                          )}
+                          {!fuelCut &&
+                            !limiterVisible &&
+                            !telemetry.fuel.fuelLimited &&
+                            !telemetry.fuel.misfire &&
+                            !telemetry.afterfire &&
+                            (telemetry.fuel.lambda > 1.1 ? (
+                              <em className="boost-flag warn">LEAN</em>
+                            ) : telemetry.fuel.lambda < 0.8 ? (
+                              <em className="boost-flag warn">RICH</em>
+                            ) : (
+                              <span>Normal</span>
+                            ))}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="stats-strip boost-strip" data-testid="ecu">
+                      <div>
+                        <small>
+                          TIMING{telemetry.ecu.maps ? ' · MAP' : ''}
+                        </small>
+                        <strong>
+                          {formatFixed(
+                            telemetry.ecu.advance -
+                              telemetry.knock.retard.reduce((a, b) => a + b, 0) / 4,
+                            1,
+                          )}
+                          <span>° BTDC</span>
+                        </strong>
+                      </div>
+                      <div>
+                        <small>
+                          TARGET λ{telemetry.ecu.maps ? ' · MAP' : ''}
+                        </small>
+                        <strong>{telemetry.ecu.lambda.toFixed(2)}</strong>
+                      </div>
+                      <div>
+                        <small>INJECTOR DUTY</small>
+                        <strong>
+                          {telemetry.fuel.injectorDuty === null ? (
+                            '—'
+                          ) : (
+                            <>
+                              {Math.round(telemetry.fuel.injectorDuty * 100)}
+                              <span> %</span>
+                            </>
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <small>FUEL PUMP</small>
+                        <strong>
+                          {telemetry.fuel.pumpUse === null ? (
+                            '—'
+                          ) : (
+                            <>
+                              {Math.round(telemetry.fuel.pumpUse * 100)}
+                              <span> %</span>
+                            </>
+                          )}
+                        </strong>
+                      </div>
+                    </div>
+                    {(viewEngine.cams || viewEngine.camSwitch) && (
+                      <div className="stats-strip boost-strip" data-testid="cam-strip">
+                        <div>
+                          <small>CAM PROFILE</small>
+                          <strong>
+                            {telemetry.ecu.cam === 'high' ? (
+                              <em className="boost-flag pop" data-testid="high-cam">
+                                HIGH CAM
+                              </em>
+                            ) : telemetry.ecu.cam === 'low' ? (
+                              'Low'
+                            ) : (
+                              'Single'
+                            )}
+                          </strong>
+                        </div>
+                        <div>
+                          <small>INTAKE CAM</small>
+                          <strong>
+                            {formatFixed(telemetry.ecu.camPhase?.intake ?? 0, 0)}
+                            <span>° adv</span>
+                          </strong>
+                        </div>
+                        <div>
+                          <small>EXHAUST CAM</small>
+                          <strong>
+                            {formatFixed(telemetry.ecu.camPhase?.exhaust ?? 0, 0)}
+                            <span>° adv</span>
+                          </strong>
+                        </div>
+                        <div>
+                          <small>OVERLAP</small>
+                          <strong>
+                            {Math.round(
+                              overlap(
+                                valveEvents(
+                                  viewEngine,
+                                  telemetry.ecu.cam === 'high',
+                                  telemetry.ecu.camPhase?.intake ?? 0,
+                                  telemetry.ecu.camPhase?.exhaust ?? 0,
+                                ),
+                              ),
+                            )}
+                            <span>°</span>
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div hidden={layout.telemetry !== 'cylinders'}>
+                    <KnockStrip
+                      knock={telemetry.knock}
+                      temperatures={telemetry.temperatures}
+                    />
+                    <StressPanel
+                      stress={telemetry.stress}
+                      indestructible={indestructible}
+                      onIndestructible={changeIndestructible}
+                      rebuildDisabled={mode !== 'manual' && running}
+                      onRebuild={() => {
+                        stop('Rebuilt after a failure')
+                        setNotice(
+                          'Engine rebuilt with new parts from the last build. Press Start to run it.',
+                        )
+                      }}
+                    />
+                  </div>
+                </Paper>
+                <Paper
+                  className="chart-panel"
+                  variant="outlined"
+                  hidden={layout.telemetry !== 'traces'}
+                >
+                  <Chart
+                    title="Live engine speed"
+                    labels={historyLabels}
+                    data={history}
+                  />
+                  <Chart
+                    title={`Cylinder ${selected + 1} pressure · latest cycle`}
+                    labels={pressureLabels}
+                    data={trace}
+                  />
+                </Paper>
+              </section>
+              <section
+                hidden={layout.view !== 'workshop'}
+                className="workshop-layout"
+              >
+                {layout.view === 'workshop' && (
+                  <Tabs
+                    className="section-tabs"
+                    orientation={wide ? 'vertical' : 'horizontal'}
+                    variant="scrollable"
+                    scrollButtons={false}
+                    value={layout.section}
+                    aria-label="Workshop sections"
+                    onChange={(_, section: Section) => changeLayout({ section })}
+                  >
+                    {SECTIONS.map((s) => (
+                      <Tab
+                        key={s.key}
+                        value={s.key}
+                        label={
+                          <span className="tab-label">
+                            {s.label}
+                            {(s.key === 'conditions' ? conditionsPending : pending.has(s.key)) && (
+                              <i className="mark pending" aria-label="unapplied changes" />
+                            )}
+                            {modifiedFromBase.has(s.key) && (
+                              <i className="mark modified" aria-label="changed from the starting build" />
+                            )}
+                          </span>
+                        }
+                      />
+                    ))}
+                  </Tabs>
                 )}
-              </Paper>
-              {draft.management && (
+                <Paper className="editor-panel workshop-panel" variant="outlined">
+                  <div className="panel-heading">
+                    <h2>{SECTIONS.find((s) => s.key === layout.section)!.label}</h2>
+                    <span className="mark-legend">
+                      <i className="mark pending" /> unapplied
+                      {base && (
+                        <>
+                          {' '}
+                          <i className="mark modified" /> changed from{' '}
+                          {base.label}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <div hidden={layout.section !== 'build'}>
+                    <div className="preset-buttons">
+                      {starterBuilds.map((b) => (
+                        <Button
+                          key={b.label}
+                          variant="outlined"
+                          size="small"
+                          title={b.description}
+                          disabled={activeTest}
+                          onClick={() => loadBuild(b.engine, experiment.conditions)}
+                        >
+                          {b.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="preset-buttons" data-testid="real-engines">
+                      {realEngines.map((b) => (
+                        <Button
+                          key={b.label}
+                          variant="outlined"
+                          size="small"
+                          color="warning"
+                          title={`${b.description} Rated ${b.rated}.`}
+                          disabled={activeTest}
+                          onClick={() => loadBuild(b.engine, experiment.conditions)}
+                        >
+                          {b.label}
+                        </Button>
+                      ))}
+                    </div>
+                    {realPreset ? (
+                      <div className="helper-text" data-testid="real-engine-note">
+                        <p>
+                          {realPreset.description} Rated{' '}
+                          {realPreset.rated}. An approximation calibrated to
+                          published figures, not an exact replica; it is not a
+                          prediction of what a real engine would survive.
+                        </p>
+                        {stockChanges.length === 0 ? (
+                          <p>
+                            <strong>Stock.</strong>
+                          </p>
+                        ) : (
+                          <p data-testid="stock-changes">
+                            <strong>Modified from stock:</strong>{' '}
+                            {stockChanges.join('; ')}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="helper-text">
+                        {starterBuilds.find((b) => b.engine.name === draft.name)
+                          ?.description ?? 'Your own build.'}{' '}
+                        The first row are fictional starting points; famous engines
+                        below them are calibrated approximations of real ones.
+                      </p>
+                    )}
+                    <TextField
+                      size="small"
+                      label="Build name"
+                      fullWidth
+                      value={draft.name}
+                      error={!!draftErrors.name}
+                      helperText={draftErrors.name}
+                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                    />
+                    <Button
+                      fullWidth
+                      disabled={!experiment.previous || activeTest}
+                      onClick={() =>
+                        experiment.previous &&
+                        loadBuild(experiment.previous, experiment.conditions)
+                      }
+                    >
+                      Restore previous build
+                    </Button>
+                  </div>
+                  <div hidden={layout.section !== 'basics'}>
+                    <div className="field-grid">
+                      {numericFields
+                        .filter((f, i) => advanced || i < 5 || draftErrors[f.key])
+                        .map((f) => {
+                          // With maps on, timing and mixture come from the tables.
+                          const mapped =
+                            !!draft.management &&
+                            (f.key === 'ignitionAdvance' || f.key === 'lambda')
+                          return (
+                          <NumberField
+                            key={f.key}
+                            size="small"
+                            label={`${f.label} (${f.unit})`}
+                            disabled={mapped}
+                            error={!!draftErrors[f.key]}
+                            helperText={
+                              draftErrors[f.key] ??
+                              (mapped ? 'Set by the engine maps' : rangeText(f))
+                            }
+                            value={Number(draft[f.key]) * f.scale}
+                            title={f.help}
+                            slotProps={{
+                              htmlInput: { min: f.min, max: f.max, step: f.step },
+                            }}
+                            onValueChange={(v) =>
+                              setDraft((d) => ({ ...d, [f.key]: v / f.scale }))
+                            }
+                          />
+                          )
+                        })}
+                    </div>
+                    {draftUndersized.length > 0 && (
+                      <div className="cranking-note warn">
+                        The {draftUndersized.join(', ')}{' '}
+                        {draftUndersized.length > 1 ? 'are' : 'is'} very small for
+                        this size. Big engines need bigger valves to breathe and a
+                        heavier rotating assembly to idle smoothly.{' '}
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setDraft((d) => ({ ...d, ...scaledProportions(d) }))
+                          }
+                        >
+                          Scale to this size
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      size="small"
+                      className="advanced-toggle"
+                      aria-expanded={advanced}
+                      onClick={() => setAdvanced((v) => !v)}
+                    >
+                      {advanced
+                        ? 'Hide advanced parameters'
+                        : `Show ${numericFields.length - 5} advanced parameters (valves, runners, timing, mixture, inertia, limits)`}
+                    </Button>
+                    <p className="derived-capacity">
+                      Derived capacity{' '}
+                      <strong>
+                        {Number.isFinite(displacement(draft))
+                          ? `${(displacement(draft) * 1e6).toFixed(0)} cc`
+                          : '—'}
+                      </strong>
+                    </p>
+                    {draftCranking !== null && (
+                      <p
+                        className={
+                          draft.starterTorque < draftCranking
+                            ? 'cranking-note warn'
+                            : 'cranking-note'
+                        }
+                      >
+                        Turning over slowly needs about{' '}
+                        {Math.ceil(draftCranking / 10) * 10} Nm.
+                        {draft.starterTorque < draftCranking &&
+                          ' The starter is weaker than that, so starting relies on flywheel momentum and may stall.'}
+                      </p>
+                    )}
+                  </div>
+                  <div hidden={layout.section !== 'fuel'}>
+                    <FuelSystemEditor
+                      value={draft.fuelSystem}
+                      disabled={activeTest}
+                      onChange={(update) =>
+                        setDraft((d) => ({
+                          ...d,
+                          fuelSystem: update(d.fuelSystem),
+                        }))
+                      }
+                    />
+                    <FuelSupplyEditor
+                      value={draft.fuelSupply}
+                      fuelSystem={draft.fuelSystem.kind}
+                      disabled={activeTest}
+                      onChange={(update) =>
+                        setDraft((d) => ({ ...d, fuelSupply: update(d.fuelSupply) }))
+                      }
+                    />
+                  </div>
+                  <div hidden={layout.section !== 'cams'}>
+                    <CamEditor
+                      engine={draft}
+                      disabled={activeTest}
+                      onChange={(update) => setDraft((d) => update(d))}
+                    />
+                  </div>
+                  <div hidden={layout.section !== 'combustion'}>
+                    <CombustionEditor
+                      value={draft.combustion}
+                      disabled={activeTest}
+                      onChange={(update) =>
+                        setDraft((d) => ({
+                          ...d,
+                          combustion: update(d.combustion),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div hidden={layout.section !== 'induction'}>
+                    <InductionEditor
+                      value={draft.induction}
+                      disabled={activeTest}
+                      boostMapped={!!draft.management}
+                      onChange={(update) =>
+                        setDraft((d) => ({ ...d, induction: update(d.induction) }))
+                      }
+                    />
+                  </div>
+                  <div hidden={layout.section !== 'exhaust'}>
+                    <ExhaustEditor
+                      value={draft.exhaust}
+                      disabled={activeTest}
+                      onChange={(update) =>
+                        setDraft((d) => ({ ...d, exhaust: update(d.exhaust) }))
+                      }
+                    />
+                    <TextField
+                      select
+                      size="small"
+                      fullWidth
+                      label="Rev limiter cuts"
+                      value={
+                        draft.fuelSystem.kind === 'carburettor'
+                          ? 'spark'
+                          : draft.limiterCut
+                      }
+                      disabled={activeTest || draft.fuelSystem.kind === 'carburettor'}
+                      helperText={
+                        draft.fuelSystem.kind === 'carburettor'
+                          ? 'A carburettor cannot stop its fuel, so the limiter cuts the spark.'
+                          : draft.limiterCut === 'spark'
+                            ? 'Fuel keeps flowing unburned: pops and bangs in a hot exhaust.'
+                            : 'Injection stops: quiet and clean.'
+                      }
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          limiterCut: e.target.value as 'fuel' | 'spark',
+                        }))
+                      }
+                    >
+                      <MenuItem value="fuel">Fuel (injection stops)</MenuItem>
+                      <MenuItem value="spark">Spark (ignition cut)</MenuItem>
+                    </TextField>
+                  </div>
+                  <div hidden={layout.section !== 'parts'}>
+                    <PartsEditor
+                      engine={draft}
+                      disabled={activeTest}
+                      onChange={(update) => setDraft((d) => update(d))}
+                    />
+                  </div>
+                  <div hidden={layout.section !== 'conditions'}>
+                    <div className="field-grid">
+                      {conditionFields.map((f) => (
+                        <NumberField
+                          key={f.key}
+                          size="small"
+                          label={`${f.label} (${f.unit})`}
+                          error={!!envErrors[f.key]}
+                          helperText={envErrors[f.key] ?? rangeText(f)}
+                          value={conditions[f.key] * f.scale + f.offset}
+                          slotProps={{
+                            htmlInput: { min: f.min, max: f.max, step: f.step },
+                          }}
+                          onValueChange={(v) =>
+                            setConditions((c) => ({
+                              ...c,
+                              [f.key]: (v - f.offset) / f.scale,
+                            }))
+                          }
+                        />
+                      ))}
+                    </div>
+                    <p className="helper-text">
+                      O₂ is dry-air volume fraction; humidity displaces dry air.
+                      Fixed fuelling means extra oxygen only helps when fuel is
+                      available. Knock and oil-pressure failures are not modelled.
+                    </p>
+                    <Stack direction="row" spacing={1}>
+                      <Button onClick={() => setConditions(normalConditions)}>
+                        Normal air
+                      </Button>
+                    </Stack>
+                  </div>
+                  <div className="workshop-footer">
+                    <p className="cranking-note">
+                      {liveUpdates
+                        ? 'Valid edits apply to the engine as you make them, without stopping it: speed, throttle and load carry over. Stop & rebuild still resets everything.'
+                        : 'Off: edits wait for Stop & rebuild, which stops and resets the engine.'}
+                    </p>
+                    {invalidNote}
+                    {dirty && !invalid && (
+                      <p className="pending-note">
+                        {!liveUpdates
+                          ? 'Unapplied changes. Rebuild to update physics, sound and geometry together.'
+                          : liveBlocked
+                            ? 'Live updates wait until the automatic test or audition ends.'
+                            : 'Applying to the engine…'}
+                      </p>
+                    )}
+                  </div>
+                </Paper>
+              </section>
+              <section hidden={layout.view !== 'maps'}>
                 <Paper className="editor-panel map-panel" variant="outlined">
                   <div className="panel-heading">
                     <h2>Engine maps</h2>
                   </div>
-                  <MapEditor
+                  <MapToggle
                     engine={draft}
                     disabled={activeTest}
-                    live={
-                      running && experiment.engine.management
-                        ? { ...telemetry.ecu, rpm: telemetry.rpm }
-                        : null
-                    }
-                    onChange={(update) =>
-                      setDraft((d) => ({
-                        ...d,
-                        management: update(d.management),
-                      }))
+                    onChange={(management) =>
+                      setDraft((d) => ({ ...d, management }))
                     }
                   />
-                  {dirty && !liveUpdates && (
-                    <p className="cranking-note warn">
-                      Edits reach the engine when you rebuild it, or straight
-                      away with Live updates on.
-                    </p>
+                  {draft.management && (
+                    <>
+                      <MapEditor
+                        engine={draft}
+                        disabled={activeTest}
+                        live={
+                          running && experiment.engine.management
+                            ? { ...telemetry.ecu, rpm: telemetry.rpm }
+                            : null
+                        }
+                        onChange={(update) =>
+                          setDraft((d) => ({
+                            ...d,
+                            management: update(d.management),
+                          }))
+                        }
+                      />
+                      {dirty && !liveUpdates && (
+                        <p className="cranking-note warn">
+                          Edits reach the engine when you rebuild it, or straight
+                          away with Live updates on.
+                        </p>
+                      )}
+                    </>
                   )}
                 </Paper>
-              )}
-              <Paper className="chart-panel" variant="outlined">
-                <Chart
-                  title="Live engine speed"
-                  labels={historyLabels}
-                  data={history}
+              </section>
+              <section hidden={layout.view !== 'dyno'} className="dyno-section">
+                <div className="dyno-grid">
+                  <div className="dyno-grid">
+                    <Paper className="editor-panel" variant="outlined">
+                      <h3>Test procedure</h3>
+                      <div className="field-grid">
+                        <TextField
+                          select
+                          size="small"
+                          label="Procedure"
+                          value={procedure.kind}
+                          onChange={(e) =>
+                            setProcedure({
+                              ...procedure,
+                              kind: e.target.value as Procedure['kind'],
+                            })
+                          }
+                        >
+                          <MenuItem value="sweep">Continuous sweep</MenuItem>
+                          <MenuItem value="steps">Steady-state steps</MenuItem>
+                        </TextField>
+                        <TextField
+                          select
+                          size="small"
+                          label="Capture in"
+                          disabled={activeTest}
+                          value={slot}
+                          onChange={(e) => setSlot(e.target.value as typeof slot)}
+                        >
+                          <MenuItem value="baseline">Baseline</MenuItem>
+                          <MenuItem value="modified">Modified</MenuItem>
+                        </TextField>
+                        {(
+                          [
+                            'startRpm',
+                            'endRpm',
+                            'rate',
+                            'stepRpm',
+                            'holdSeconds',
+                          ] as const
+                        )
+                          .filter((k) =>
+                            procedure.kind === 'steps'
+                              ? k !== 'rate'
+                              : !['stepRpm', 'holdSeconds'].includes(k),
+                          )
+                          .map((k) => (
+                            <NumberField
+                              key={k}
+                              size="small"
+                              label={
+                                {
+                                  startRpm: 'Start RPM',
+                                  endRpm: 'End RPM',
+                                  rate: 'Sweep RPM / second',
+                                  stepRpm: 'Step RPM',
+                                  holdSeconds: 'Minimum settling seconds',
+                                }[k]
+                              }
+                              value={procedure[k]}
+                              onValueChange={(v) =>
+                                setProcedure((p) => ({ ...p, [k]: v }))
+                              }
+                            />
+                          ))}
+                      </div>
+                      <Stack direction="row" spacing={1} mt={2}>
+                        <Button
+                          variant="contained"
+                          disabled={dynoBlocked}
+                          onClick={() => requestTest('live')}
+                        >
+                          Live pull
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          disabled={dynoBlocked}
+                          onClick={() => requestTest('quick')}
+                        >
+                          Quick test
+                        </Button>
+                      </Stack>
+                      {dynoReason && !busy && (
+                        <p className="pending-note" data-testid="dyno-blocked">
+                          {dynoReason}
+                        </p>
+                      )}
+                      <p className="helper-text">
+                        Automatic tests own throttle and RPM. Quick tests calculate
+                        silently; they are not playback. Stop retains incomplete
+                        samples.
+                      </p>
+                      {displayed && (
+                        <PullSummary
+                          run={displayed}
+                          baseline={baseline}
+                          power={prefs.power}
+                          torque={prefs.torque}
+                          band={band}
+                          onBand={setBand}
+                        />
+                      )}
+                    </Paper>
+                    <Paper className="chart-panel" variant="outlined">
+                      <Chart
+                        title="Brake torque comparison"
+                        markPeaks
+                        labels={curveLabels}
+                        data={curves}
+                        height={205}
+                      />
+                      <Chart
+                        title="Crank power comparison"
+                        markPeaks
+                        labels={powerLabels}
+                        data={powers}
+                        height={205}
+                      />
+                      <div className="comparison-notes">
+                        <h3>What changed?</h3>
+                        {describeChanges(
+                          baseline,
+                          modified?.engine ?? experiment.engine,
+                          modified?.conditions ?? experiment.conditions,
+                        ).map((c) => (
+                          <p key={c}>{c}</p>
+                        ))}
+                        <Button
+                          disabled={!baseline || activeTest}
+                          onClick={() =>
+                            baseline &&
+                            configure(baseline.engine, baseline.conditions)
+                          }
+                        >
+                          Restore baseline engine & conditions
+                        </Button>
+                      </div>
+                    </Paper>
+                  </div>
+                </div>
+                <Paper className="editor-panel push-panel" variant="outlined">
+                  <h3>Push it</h3>
+                  <PushPanel
+                    engine={experiment.engine}
+                    settings={pushSettings}
+                    onSettings={setPushSettings}
+                    result={push}
+                    busy={calculating}
+                    blocked={pushBlocked}
+                    onRun={runPush}
+                    onStop={() => {
+                      worker.current?.postMessage({
+                        type: 'stop',
+                        reason: 'Push stopped',
+                      })
+                    }}
+                  />
+                </Paper>
+                <div className="extras-grid">
+                  <Paper className="editor-panel" variant="outlined">
+                    <div className="eyebrow">HEAR THE DIFFERENCE</div>
+                    <h3>Compare at the same operating point</h3>
+                    <NumberField
+                      label="Comparison RPM"
+                      size="small"
+                      value={auditionRpm}
+                      clamp={[1000, 6000]}
+                      slotProps={{ htmlInput: { min: 1000, max: 6000, step: 100 } }}
+                      onValueChange={setAuditionRpm}
+                    />
+                    <Stack direction="row" spacing={1} mt={2}>
+                      <Button
+                        disabled={!baseline || activeTest || busy}
+                        onClick={() => void audition(baseline, 'Baseline')}
+                      >
+                        Hear baseline
+                      </Button>
+                      <Button
+                        disabled={!modified || activeTest || busy}
+                        onClick={() => void audition(modified, 'Modified')}
+                      >
+                        Hear modified
+                      </Button>
+                    </Stack>
+                    <p className="helper-text">
+                      Both use full throttle at the chosen RPM. This is a fresh
+                      simulation of the snapshot, not a recording of its test.
+                    </p>
+                  </Paper>
+                  <Paper className="editor-panel" variant="outlined">
+                    <div className="eyebrow">TRY AN EXPERIMENT</div>
+                    <h3>Give your next build a purpose</h3>
+                    <TextField
+                      select
+                      fullWidth
+                      size="small"
+                      label="Guided experiment"
+                      value={challenge}
+                      onChange={(e) => setChallenge(e.target.value)}
+                    >
+                      {[
+                        'Explore freely',
+                        'Find more mid-range torque',
+                        'A change in the weather',
+                        'Find the useful rev range',
+                      ].map((c) => (
+                        <MenuItem key={c} value={c}>
+                          {c}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <p>
+                      {challenge === 'Find more mid-range torque'
+                        ? 'Keep bore and stroke fixed. Capture a baseline, change compression or intake area, then compare torque from 2500–4000 RPM. Can you gain mid-range torque without losing power elsewhere?'
+                        : challenge === 'A change in the weather'
+                          ? 'Capture normal air as a baseline. Change only room temperature to 35°C, rebuild and repeat the exact procedure. Compare the whole curve; keep fuel and oxygen settings unchanged.'
+                          : challenge === 'Find the useful rev range'
+                            ? 'Run a sweep below both limits. Find where power peaks and begins to fall. Raising the electronic limiter does not raise mechanical capability.'
+                            : 'No unlocks, scores or required order. Follow your curiosity; every experiment can be reversed.'}
+                    </p>
+                  </Paper>
+                </div>
+              </section>
+              <section hidden={layout.view !== 'library'}>
+                <SavedLibrary
+                  engine={experiment.engine}
+                  conditions={experiment.conditions}
+                  baseline={baseline}
+                  modified={modified}
+                  locked={running || busy}
+                  dirty={dirty}
+                  onLoadBuild={configure}
+                  onLoadRun={(value, target) => {
+                    setExperiment((previous) => ({ ...previous, [target]: value }))
+                    setRun(value)
+                  }}
+                  onRerun={async (value) => {
+                    configure(value.engine, value.conditions)
+                    setProcedure(value.procedure)
+                    setSlot('modified')
+                    await test('quick', value, 'modified')
+                  }}
+                  onWorkspaceChange={() => stop('Workspace changed')}
                 />
-                <Chart
-                  title={`Cylinder ${selected + 1} pressure · latest cycle`}
-                  labels={pressureLabels}
-                  data={trace}
-                />
-              </Paper>
-            </section>
-            <aside className="bench-sidebar">
+                <div className="extras-grid">
+                  <Paper className="editor-panel" variant="outlined">
+                    <div className="eyebrow">KEEP YOUR EXPERIMENT</div>
+                    <h3>A build worth coming back to</h3>
+                    <Stack spacing={1}>
+                      <Button variant="outlined" onClick={download}>
+                        Download build recipe
+                      </Button>
+                      <Button onClick={() => fileInput.current?.click()}>
+                        Import build recipe
+                      </Button>
+                      <input
+                        ref={fileInput}
+                        hidden
+                        type="file"
+                        accept="application/json,.json"
+                        aria-label="Import recipe file"
+                        onChange={(e) => void importRecipe(e.target.files?.[0])}
+                      />
+                      <Button component={Link} to={user ? '/settings' : '/login'}>
+                        {user ? 'Account settings' : 'Sign in — keep this experiment'}
+                      </Button>
+                    </Stack>
+                    <p className="helper-text">
+                      Guest builds and comparisons survive navigation and reloads in
+                      this tab. Recipes are portable; sign in to use the server
+                      library above.
+                    </p>
+                  </Paper>
+                </div>
+              </section>
+            </div>
+            <aside className="drive-panel" aria-label="Drive">
               <Paper className="control-panel" variant="outlined">
                 <div className="panel-heading">
-                  <h2>Bench controls</h2>
+                  <h2>Drive</h2>
                   <Button
                     size="small"
                     className="shortcut-link"
@@ -1748,31 +2536,6 @@ export function BenchPage() {
                   revLimit={viewEngine.revLimit}
                   mechanicalLimit={viewEngine.mechanicalLimit}
                 />
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    onClick={() => stop()}
-                  >
-                    Emergency stop
-                  </Button>
-                  <Button
-                    disabled={activeTest}
-                    title="Stop and rebuild the current build"
-                    onClick={() =>
-                      configure(experiment.engine, experiment.conditions)
-                    }
-                  >
-                    Reset bench
-                  </Button>
-                  <Button
-                    color="warning"
-                    title="Back to the Road build with fresh audio and simulation"
-                    onClick={() => setConfirmReset(true)}
-                  >
-                    Full reset
-                  </Button>
-                </Stack>
                 <div className="control-sliders">
                   <div>
                     <label id="throttle-label">
@@ -1823,53 +2586,6 @@ export function BenchPage() {
                       }}
                     />
                   </div>
-                </div>
-                <div className="listen-row">
-                  <TextField
-                    select
-                    size="small"
-                    label="Listen from (V)"
-                    value={prefs.listener}
-                    onChange={(e) =>
-                      updatePrefs({ listener: e.target.value as Listener })
-                    }
-                  >
-                    {LISTENERS.map((l) => (
-                      <MenuItem key={l} value={l}>
-                        {listenerLabels[l]}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    select
-                    size="small"
-                    label="Power"
-                    value={prefs.power}
-                    onChange={(e) =>
-                      updatePrefs({ power: e.target.value as PowerUnit })
-                    }
-                  >
-                    {POWER_UNITS.map((u) => (
-                      <MenuItem key={u} value={u}>
-                        {u}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    select
-                    size="small"
-                    label="Torque"
-                    value={prefs.torque}
-                    onChange={(e) =>
-                      updatePrefs({ torque: e.target.value as TorqueUnit })
-                    }
-                  >
-                    {TORQUE_UNITS.map((u) => (
-                      <MenuItem key={u} value={u}>
-                        {u}
-                      </MenuItem>
-                    ))}
-                  </TextField>
                 </div>
                 <Stack direction="row" spacing={2} alignItems="center" mb={2}>
                   <FormControlLabel
@@ -1990,629 +2706,73 @@ export function BenchPage() {
                 <p className="bench-notice" role="status">
                   {notice}
                 </p>
-              </Paper>
-              <Paper className="editor-panel" variant="outlined">
-                <div className="panel-heading">
-                  <h2>Engine workshop</h2>
-                  <Chip
+                <div className="listen-row">
+                  <TextField
+                    select
                     size="small"
-                    label={
-                      `CUSTOM I4 · ${fuelShortLabels[draft.fuelSystem.kind]}` +
-                      (draft.induction.kind === 'none'
-                        ? ''
-                        : ` · ${inductionLabels[draft.induction.kind].toUpperCase()}`)
-                    }
-                  />
-                </div>
-                <div className="preset-buttons">
-                  {starterBuilds.map((b) => (
-                    <Button
-                      key={b.label}
-                      variant="outlined"
-                      size="small"
-                      title={b.description}
-                      disabled={activeTest}
-                      onClick={() => loadBuild(b.engine, experiment.conditions)}
-                    >
-                      {b.label}
-                    </Button>
-                  ))}
-                </div>
-                <div className="preset-buttons" data-testid="real-engines">
-                  {realEngines.map((b) => (
-                    <Button
-                      key={b.label}
-                      variant="outlined"
-                      size="small"
-                      color="warning"
-                      title={`${b.description} Rated ${b.rated}.`}
-                      disabled={activeTest}
-                      onClick={() => loadBuild(b.engine, experiment.conditions)}
-                    >
-                      {b.label}
-                    </Button>
-                  ))}
-                </div>
-                {realPreset ? (
-                  <div className="helper-text" data-testid="real-engine-note">
-                    <p>
-                      {realPreset.description} Rated{' '}
-                      {realPreset.rated}. An approximation calibrated to
-                      published figures, not an exact replica; it is not a
-                      prediction of what a real engine would survive.
-                    </p>
-                    {stockChanges.length === 0 ? (
-                      <p>
-                        <strong>Stock.</strong>
-                      </p>
-                    ) : (
-                      <p data-testid="stock-changes">
-                        <strong>Modified from stock:</strong>{' '}
-                        {stockChanges.join('; ')}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="helper-text">
-                    {starterBuilds.find((b) => b.engine.name === draft.name)
-                      ?.description ?? 'Your own build.'}{' '}
-                    The first row are fictional starting points; famous engines
-                    below them are calibrated approximations of real ones.
-                  </p>
-                )}
-                <TextField
-                  size="small"
-                  label="Build name"
-                  fullWidth
-                  value={draft.name}
-                  error={!!draftErrors.name}
-                  helperText={draftErrors.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                />
-                <div className="field-grid">
-                  {numericFields
-                    .filter((f, i) => advanced || i < 5 || draftErrors[f.key])
-                    .map((f) => {
-                      // With maps on, timing and mixture come from the tables.
-                      const mapped =
-                        !!draft.management &&
-                        (f.key === 'ignitionAdvance' || f.key === 'lambda')
-                      return (
-                      <NumberField
-                        key={f.key}
-                        size="small"
-                        label={`${f.label} (${f.unit})`}
-                        disabled={mapped}
-                        error={!!draftErrors[f.key]}
-                        helperText={
-                          draftErrors[f.key] ??
-                          (mapped ? 'Set by the engine maps' : rangeText(f))
-                        }
-                        value={Number(draft[f.key]) * f.scale}
-                        title={f.help}
-                        slotProps={{
-                          htmlInput: { min: f.min, max: f.max, step: f.step },
-                        }}
-                        onValueChange={(v) =>
-                          setDraft((d) => ({ ...d, [f.key]: v / f.scale }))
-                        }
-                      />
-                      )
-                    })}
-                </div>
-                {draftUndersized.length > 0 && (
-                  <div className="cranking-note warn">
-                    The {draftUndersized.join(', ')}{' '}
-                    {draftUndersized.length > 1 ? 'are' : 'is'} very small for
-                    this size. Big engines need bigger valves to breathe and a
-                    heavier rotating assembly to idle smoothly.{' '}
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setDraft((d) => ({ ...d, ...scaledProportions(d) }))
-                      }
-                    >
-                      Scale to this size
-                    </Button>
-                  </div>
-                )}
-                <Button
-                  size="small"
-                  className="advanced-toggle"
-                  aria-expanded={advanced}
-                  onClick={() => setAdvanced((v) => !v)}
-                >
-                  {advanced
-                    ? 'Hide advanced parameters'
-                    : `Show ${numericFields.length - 5} advanced parameters (valves, runners, timing, mixture, inertia, limits)`}
-                </Button>
-                <h3 className="workshop-subheading">Fuel system</h3>
-                <FuelSystemEditor
-                  value={draft.fuelSystem}
-                  disabled={activeTest}
-                  onChange={(update) =>
-                    setDraft((d) => ({
-                      ...d,
-                      fuelSystem: update(d.fuelSystem),
-                    }))
-                  }
-                />
-                <FuelSupplyEditor
-                  value={draft.fuelSupply}
-                  fuelSystem={draft.fuelSystem.kind}
-                  disabled={activeTest}
-                  onChange={(update) =>
-                    setDraft((d) => ({ ...d, fuelSupply: update(d.fuelSupply) }))
-                  }
-                />
-                <h3 className="workshop-subheading">Camshaft</h3>
-                <CamEditor
-                  engine={draft}
-                  disabled={activeTest}
-                  onChange={(update) => setDraft((d) => update(d))}
-                />
-                <h3 className="workshop-subheading">Combustion & knock</h3>
-                <CombustionEditor
-                  value={draft.combustion}
-                  disabled={activeTest}
-                  onChange={(update) =>
-                    setDraft((d) => ({
-                      ...d,
-                      combustion: update(d.combustion),
-                    }))
-                  }
-                />
-                <h3 className="workshop-subheading">Parts & limits</h3>
-                <PartsEditor
-                  engine={draft}
-                  disabled={activeTest}
-                  onChange={(update) => setDraft((d) => update(d))}
-                />
-                <h3 className="workshop-subheading">Engine management</h3>
-                <MapToggle
-                  engine={draft}
-                  disabled={activeTest}
-                  onChange={(management) =>
-                    setDraft((d) => ({ ...d, management }))
-                  }
-                />
-                <h3 className="workshop-subheading">Forced induction</h3>
-                <InductionEditor
-                  value={draft.induction}
-                  disabled={activeTest}
-                  boostMapped={!!draft.management}
-                  onChange={(update) =>
-                    setDraft((d) => ({ ...d, induction: update(d.induction) }))
-                  }
-                />
-                <h3 className="workshop-subheading">Exhaust & limiter</h3>
-                <ExhaustEditor
-                  value={draft.exhaust}
-                  disabled={activeTest}
-                  onChange={(update) =>
-                    setDraft((d) => ({ ...d, exhaust: update(d.exhaust) }))
-                  }
-                />
-                <TextField
-                  select
-                  size="small"
-                  fullWidth
-                  label="Rev limiter cuts"
-                  value={
-                    draft.fuelSystem.kind === 'carburettor'
-                      ? 'spark'
-                      : draft.limiterCut
-                  }
-                  disabled={activeTest || draft.fuelSystem.kind === 'carburettor'}
-                  helperText={
-                    draft.fuelSystem.kind === 'carburettor'
-                      ? 'A carburettor cannot stop its fuel, so the limiter cuts the spark.'
-                      : draft.limiterCut === 'spark'
-                        ? 'Fuel keeps flowing unburned: pops and bangs in a hot exhaust.'
-                        : 'Injection stops: quiet and clean.'
-                  }
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      limiterCut: e.target.value as 'fuel' | 'spark',
-                    }))
-                  }
-                >
-                  <MenuItem value="fuel">Fuel (injection stops)</MenuItem>
-                  <MenuItem value="spark">Spark (ignition cut)</MenuItem>
-                </TextField>
-                <p className="derived-capacity">
-                  Derived capacity{' '}
-                  <strong>
-                    {Number.isFinite(displacement(draft))
-                      ? `${(displacement(draft) * 1e6).toFixed(0)} cc`
-                      : '—'}
-                  </strong>
-                </p>
-                {draftCranking !== null && (
-                  <p
-                    className={
-                      draft.starterTorque < draftCranking
-                        ? 'cranking-note warn'
-                        : 'cranking-note'
+                    label="Listen from (V)"
+                    value={prefs.listener}
+                    onChange={(e) =>
+                      updatePrefs({ listener: e.target.value as Listener })
                     }
                   >
-                    Turning over slowly needs about{' '}
-                    {Math.ceil(draftCranking / 10) * 10} Nm.
-                    {draft.starterTorque < draftCranking &&
-                      ' The starter is weaker than that, so starting relies on flywheel momentum and may stall.'}
-                  </p>
-                )}
-                <FormControlLabel
-                  className="live-toggle"
-                  control={
-                    <Switch
-                      checked={liveUpdates}
-                      onChange={(e) => {
-                        liveOrigin.current = null
-                        setLiveUpdates(e.target.checked)
-                        persistLiveUpdates(e.target.checked)
-                      }}
-                    />
-                  }
-                  label="Live updates"
-                />
-                <p className="cranking-note">
-                  {liveUpdates
-                    ? 'Valid edits apply to the engine as you make them, without stopping it: speed, throttle and load carry over. Stop & rebuild still resets everything.'
-                    : 'Off: edits wait for Stop & rebuild, which stops and resets the engine.'}
-                </p>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  disabled={(!dirty && !liveUpdates) || invalid || activeTest}
-                  onClick={apply}
-                >
-                  Stop & rebuild engine
-                </Button>
-                {invalidNote}
-                {dirty && !invalid && (
-                  <p className="pending-note">
-                    {!liveUpdates
-                      ? 'Unapplied changes. Rebuild to update physics, sound and geometry together.'
-                      : liveBlocked
-                        ? 'Live updates wait until the automatic test or audition ends.'
-                        : 'Applying to the engine…'}
-                  </p>
-                )}
-                <Button
-                  fullWidth
-                  disabled={!experiment.previous || activeTest}
-                  onClick={() =>
-                    experiment.previous &&
-                    loadBuild(experiment.previous, experiment.conditions)
-                  }
-                >
-                  Restore previous build
-                </Button>
-              </Paper>
-              <Paper className="editor-panel" variant="outlined">
-                <div className="panel-heading">
-                  <h2>Test cell</h2>
-                  <span className="eyebrow">AMBIENT CONDITIONS</span>
+                    {LISTENERS.map((l) => (
+                      <MenuItem key={l} value={l}>
+                        {listenerLabels[l]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    size="small"
+                    label="Power"
+                    value={prefs.power}
+                    onChange={(e) =>
+                      updatePrefs({ power: e.target.value as PowerUnit })
+                    }
+                  >
+                    {POWER_UNITS.map((u) => (
+                      <MenuItem key={u} value={u}>
+                        {u}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    size="small"
+                    label="Torque"
+                    value={prefs.torque}
+                    onChange={(e) =>
+                      updatePrefs({ torque: e.target.value as TorqueUnit })
+                    }
+                  >
+                    {TORQUE_UNITS.map((u) => (
+                      <MenuItem key={u} value={u}>
+                        {u}
+                      </MenuItem>
+                    ))}
+                  </TextField>
                 </div>
-                <div className="field-grid">
-                  {conditionFields.map((f) => (
-                    <NumberField
-                      key={f.key}
-                      size="small"
-                      label={`${f.label} (${f.unit})`}
-                      error={!!envErrors[f.key]}
-                      helperText={envErrors[f.key] ?? rangeText(f)}
-                      value={conditions[f.key] * f.scale + f.offset}
-                      slotProps={{
-                        htmlInput: { min: f.min, max: f.max, step: f.step },
-                      }}
-                      onValueChange={(v) =>
-                        setConditions((c) => ({
-                          ...c,
-                          [f.key]: (v - f.offset) / f.scale,
-                        }))
-                      }
-                    />
-                  ))}
-                </div>
-                <p className="helper-text">
-                  O₂ is dry-air volume fraction; humidity displaces dry air.
-                  Fixed fuelling means extra oxygen only helps when fuel is
-                  available. Knock and oil-pressure failures are not modelled.
-                </p>
-                <Stack direction="row" spacing={1}>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   <Button
-                    disabled={activeTest || !dirty || invalid}
-                    onClick={apply}
+                    disabled={activeTest}
+                    title="Stop and rebuild the current build"
+                    onClick={() =>
+                      configure(experiment.engine, experiment.conditions)
+                    }
                   >
-                    Apply & reset
+                    Reset bench
                   </Button>
-                  <Button onClick={() => setConditions(normalConditions)}>
-                    Normal air
+                  <Button
+                    color="warning"
+                    title="Back to the Road build with fresh audio and simulation"
+                    onClick={() => setConfirmReset(true)}
+                  >
+                    Full reset
                   </Button>
                 </Stack>
-                {invalidNote}
               </Paper>
             </aside>
-          </div>
-          <section className="dyno-section">
-            <div className="section-title">
-              <div className="eyebrow">MEASURE THE DIFFERENCE</div>
-              <h2>The dyno room</h2>
-              <p>
-                Watch a pull unfold, or calculate a quick curve. Same engine.
-                Same procedure.
-              </p>
-            </div>
-            <div className="dyno-grid">
-              <Paper className="editor-panel" variant="outlined">
-                <h3>Test procedure</h3>
-                <div className="field-grid">
-                  <TextField
-                    select
-                    size="small"
-                    label="Procedure"
-                    value={procedure.kind}
-                    onChange={(e) =>
-                      setProcedure({
-                        ...procedure,
-                        kind: e.target.value as Procedure['kind'],
-                      })
-                    }
-                  >
-                    <MenuItem value="sweep">Continuous sweep</MenuItem>
-                    <MenuItem value="steps">Steady-state steps</MenuItem>
-                  </TextField>
-                  <TextField
-                    select
-                    size="small"
-                    label="Capture in"
-                    disabled={activeTest}
-                    value={slot}
-                    onChange={(e) => setSlot(e.target.value as typeof slot)}
-                  >
-                    <MenuItem value="baseline">Baseline</MenuItem>
-                    <MenuItem value="modified">Modified</MenuItem>
-                  </TextField>
-                  {(
-                    [
-                      'startRpm',
-                      'endRpm',
-                      'rate',
-                      'stepRpm',
-                      'holdSeconds',
-                    ] as const
-                  )
-                    .filter((k) =>
-                      procedure.kind === 'steps'
-                        ? k !== 'rate'
-                        : !['stepRpm', 'holdSeconds'].includes(k),
-                    )
-                    .map((k) => (
-                      <NumberField
-                        key={k}
-                        size="small"
-                        label={
-                          {
-                            startRpm: 'Start RPM',
-                            endRpm: 'End RPM',
-                            rate: 'Sweep RPM / second',
-                            stepRpm: 'Step RPM',
-                            holdSeconds: 'Minimum settling seconds',
-                          }[k]
-                        }
-                        value={procedure[k]}
-                        onValueChange={(v) =>
-                          setProcedure((p) => ({ ...p, [k]: v }))
-                        }
-                      />
-                    ))}
-                </div>
-                <Stack direction="row" spacing={1} mt={2}>
-                  <Button
-                    variant="contained"
-                    disabled={dynoBlocked}
-                    onClick={() => requestTest('live')}
-                  >
-                    Live pull
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    disabled={dynoBlocked}
-                    onClick={() => requestTest('quick')}
-                  >
-                    Quick test
-                  </Button>
-                </Stack>
-                {dynoReason && !busy && (
-                  <p className="pending-note" data-testid="dyno-blocked">
-                    {dynoReason}
-                  </p>
-                )}
-                <p className="helper-text">
-                  Automatic tests own throttle and RPM. Quick tests calculate
-                  silently; they are not playback. Stop retains incomplete
-                  samples.
-                </p>
-                {displayed && (
-                  <PullSummary
-                    run={displayed}
-                    baseline={baseline}
-                    power={prefs.power}
-                    torque={prefs.torque}
-                    band={band}
-                    onBand={setBand}
-                  />
-                )}
-              </Paper>
-              <Paper className="chart-panel" variant="outlined">
-                <Chart
-                  title="Brake torque comparison"
-                  markPeaks
-                  labels={curveLabels}
-                  data={curves}
-                  height={205}
-                />
-                <Chart
-                  title="Crank power comparison"
-                  markPeaks
-                  labels={powerLabels}
-                  data={powers}
-                  height={205}
-                />
-                <div className="comparison-notes">
-                  <h3>What changed?</h3>
-                  {describeChanges(
-                    baseline,
-                    modified?.engine ?? experiment.engine,
-                    modified?.conditions ?? experiment.conditions,
-                  ).map((c) => (
-                    <p key={c}>{c}</p>
-                  ))}
-                  <Button
-                    disabled={!baseline || activeTest}
-                    onClick={() =>
-                      baseline &&
-                      configure(baseline.engine, baseline.conditions)
-                    }
-                  >
-                    Restore baseline engine & conditions
-                  </Button>
-                </div>
-              </Paper>
-            </div>
-            <Paper className="editor-panel push-panel" variant="outlined">
-              <h3>Push it</h3>
-              <PushPanel
-                engine={experiment.engine}
-                settings={pushSettings}
-                onSettings={setPushSettings}
-                result={push}
-                busy={calculating}
-                blocked={pushBlocked}
-                onRun={runPush}
-                onStop={() => {
-                  worker.current?.postMessage({
-                    type: 'stop',
-                    reason: 'Push stopped',
-                  })
-                }}
-              />
-            </Paper>
-          </section>
-          <SavedLibrary
-            engine={experiment.engine}
-            conditions={experiment.conditions}
-            baseline={baseline}
-            modified={modified}
-            locked={running || busy}
-            dirty={dirty}
-            onLoadBuild={configure}
-            onLoadRun={(value, target) => {
-              setExperiment((previous) => ({ ...previous, [target]: value }))
-              setRun(value)
-            }}
-            onRerun={async (value) => {
-              configure(value.engine, value.conditions)
-              setProcedure(value.procedure)
-              setSlot('modified')
-              await test('quick', value, 'modified')
-            }}
-            onWorkspaceChange={() => stop('Workspace changed')}
-          />
-          <div className="extras-grid">
-            <Paper className="editor-panel" variant="outlined">
-              <div className="eyebrow">HEAR THE DIFFERENCE</div>
-              <h3>Compare at the same operating point</h3>
-              <NumberField
-                label="Comparison RPM"
-                size="small"
-                value={auditionRpm}
-                clamp={[1000, 6000]}
-                slotProps={{ htmlInput: { min: 1000, max: 6000, step: 100 } }}
-                onValueChange={setAuditionRpm}
-              />
-              <Stack direction="row" spacing={1} mt={2}>
-                <Button
-                  disabled={!baseline || activeTest || busy}
-                  onClick={() => void audition(baseline, 'Baseline')}
-                >
-                  Hear baseline
-                </Button>
-                <Button
-                  disabled={!modified || activeTest || busy}
-                  onClick={() => void audition(modified, 'Modified')}
-                >
-                  Hear modified
-                </Button>
-              </Stack>
-              <p className="helper-text">
-                Both use full throttle at the chosen RPM. This is a fresh
-                simulation of the snapshot, not a recording of its test.
-              </p>
-            </Paper>
-            <Paper className="editor-panel" variant="outlined">
-              <div className="eyebrow">TRY AN EXPERIMENT</div>
-              <h3>Give your next build a purpose</h3>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Guided experiment"
-                value={challenge}
-                onChange={(e) => setChallenge(e.target.value)}
-              >
-                {[
-                  'Explore freely',
-                  'Find more mid-range torque',
-                  'A change in the weather',
-                  'Find the useful rev range',
-                ].map((c) => (
-                  <MenuItem key={c} value={c}>
-                    {c}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <p>
-                {challenge === 'Find more mid-range torque'
-                  ? 'Keep bore and stroke fixed. Capture a baseline, change compression or intake area, then compare torque from 2500–4000 RPM. Can you gain mid-range torque without losing power elsewhere?'
-                  : challenge === 'A change in the weather'
-                    ? 'Capture normal air as a baseline. Change only room temperature to 35°C, rebuild and repeat the exact procedure. Compare the whole curve; keep fuel and oxygen settings unchanged.'
-                    : challenge === 'Find the useful rev range'
-                      ? 'Run a sweep below both limits. Find where power peaks and begins to fall. Raising the electronic limiter does not raise mechanical capability.'
-                      : 'No unlocks, scores or required order. Follow your curiosity; every experiment can be reversed.'}
-              </p>
-            </Paper>
-            <Paper className="editor-panel" variant="outlined">
-              <div className="eyebrow">KEEP YOUR EXPERIMENT</div>
-              <h3>A build worth coming back to</h3>
-              <Stack spacing={1}>
-                <Button variant="outlined" onClick={download}>
-                  Download build recipe
-                </Button>
-                <Button onClick={() => fileInput.current?.click()}>
-                  Import build recipe
-                </Button>
-                <input
-                  ref={fileInput}
-                  hidden
-                  type="file"
-                  accept="application/json,.json"
-                  aria-label="Import recipe file"
-                  onChange={(e) => void importRecipe(e.target.files?.[0])}
-                />
-                <Button component={Link} to={user ? '/settings' : '/login'}>
-                  {user ? 'Account settings' : 'Sign in — keep this experiment'}
-                </Button>
-              </Stack>
-              <p className="helper-text">
-                Guest builds and comparisons survive navigation and reloads in
-                this tab. Recipes are portable; sign in to use the server
-                library above.
-              </p>
-            </Paper>
           </div>
           <footer className="bench-footer">
             <span>
@@ -2697,4 +2857,5 @@ export function BenchPage() {
       </div>
     </ThemeProvider>
   )
+
 }

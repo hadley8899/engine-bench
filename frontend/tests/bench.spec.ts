@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openMode, openSection, openTelemetry } from './layout'
 import type { Telemetry } from '../src/sim/core'
 import { EngineCore } from '../src/sim/core'
 import { DynoTest } from '../src/sim/dyno'
@@ -51,6 +52,7 @@ test('quick and live pulls match and baseline survives a rebuild, navigation and
   page,
 }) => {
   await page.goto('/')
+  await openMode(page, 'Dyno')
   await page.getByLabel('End RPM', { exact: true }).fill('2500')
   await page.getByRole('button', { name: 'Quick test', exact: true }).click()
   await expect(page.getByTestId('run-summary')).toContainText('COMPLETE')
@@ -93,19 +95,24 @@ test('quick and live pulls match and baseline survives a rebuild, navigation and
     for (const key of ['rpm', 'torque', 'power', 'time', 'absorbedTorque'])
       expect(sample[key]).toBeCloseTo(baseline.samples[i][key], 7)
   })
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('88')
   await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
   await expect(page.getByText('2092 cc')).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+  await page.waitForURL('**/login')
   await expect(
     page.getByRole('button', { name: 'Sign in', exact: true }),
   ).toBeVisible()
   await page.goBack()
   await page.reload()
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('88')
+  await openMode(page, 'Dyno')
   await page
     .getByRole('button', { name: 'Restore baseline engine & conditions' })
     .click()
+  await openSection(page, 'Geometry')
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('86')
   const saved = await page.evaluate(
     () =>
@@ -119,6 +126,7 @@ test('invalid input is rejected and a live emergency stop retains incomplete dat
   page,
 }) => {
   await page.goto('/')
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('400')
   await expect(
     page.getByRole('button', { name: 'Stop & rebuild engine' }),
@@ -129,7 +137,9 @@ test('invalid input is rejected and a live emergency stop retains incomplete dat
       .getByText("Can't rebuild until these fields are in range: Bore.")
       .first(),
   ).toBeVisible()
+  await openSection(page, 'Starting build')
   await page.getByRole('button', { name: 'Road 2.0', exact: true }).click()
+  await openMode(page, 'Dyno')
   await page.getByRole('button', { name: 'Live pull', exact: true }).click()
   await expect(page.getByTestId('run-summary')).toContainText('RUNNING')
   await page.getByRole('button', { name: 'Emergency stop' }).click()
@@ -147,6 +157,7 @@ test('recipe downloads/imports and portable input validation work', async ({
   page,
 }) => {
   await page.goto('/')
+  await openMode(page, 'Library')
   const pending = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download build recipe' }).click()
   const download = await pending
@@ -350,6 +361,7 @@ test('a sustained limiter has a stable status and inspection/pressure controls w
   await page
     .getByRole('button', { name: 'Inspect cylinder 3', exact: true })
     .click()
+  await openTelemetry(page, 'Traces')
   await expect(
     page.getByRole('img', { name: 'Cylinder 3 pressure · latest cycle' }),
   ).toBeVisible()
@@ -359,6 +371,7 @@ test('steady-state quick tests settle, and unapplied edits survive authenticatio
   page,
 }) => {
   await page.goto('/')
+  await openMode(page, 'Dyno')
   await page.getByRole('combobox', { name: /^Procedure/ }).click()
   await page
     .getByRole('option', { name: 'Steady-state steps', exact: true })
@@ -372,15 +385,18 @@ test('steady-state quick tests settle, and unapplied edits survive authenticatio
   expect(
     state.baseline.samples.map((s: { rpm: number }) => Math.round(s.rpm)),
   ).toEqual([1500, 2000, 2500])
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('89')
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+  await page.waitForURL('**/login')
   await expect(
     page.getByRole('button', { name: 'Sign in', exact: true }),
   ).toBeVisible()
   await page.goBack()
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('89')
   await expect(
-    page.getByText('Unapplied changes.', { exact: false }),
+    page.getByTestId('pending-edits'),
   ).toBeVisible()
 })
 
@@ -457,6 +473,7 @@ test('restoring a previous build leaves new edits rebuildable and testable', asy
     if (m.type() === 'error') errors.push(m.text())
   })
   await page.goto('/')
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('88')
   await page
     .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
@@ -467,12 +484,15 @@ test('restoring a previous build leaves new edits rebuildable and testable', asy
       Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
     )
     .toBeGreaterThan(600)
+  await openSection(page, 'Starting build')
   await page
     .getByRole('button', { name: 'Restore previous build', exact: true })
     .click()
+  await openSection(page, 'Geometry')
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('86')
   await expect(page.getByTestId('rpm')).toContainText('0 RPM')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('90')
+  await openSection(page, 'Test cell')
   await page.getByLabel('Room temperature (°C)', { exact: true }).fill('30')
   await expect(
     page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }),
@@ -480,7 +500,9 @@ test('restoring a previous build leaves new edits rebuildable and testable', asy
   await page
     .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
     .click()
+  await openSection(page, 'Geometry')
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('90')
+  await openMode(page, 'Dyno')
   await page.getByLabel('End RPM', { exact: true }).fill('2500')
   await page.getByRole('button', { name: 'Quick test', exact: true }).click()
   await expect(page.getByTestId('run-summary')).toContainText('COMPLETE')
@@ -498,6 +520,7 @@ test('a turbo build rebuilds, spools under throttle and shows boost', async ({
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
+  await openSection(page, 'Forced induction')
   await page.getByRole('combobox', { name: 'Induction' }).click()
   await page.getByRole('option', { name: 'Turbocharger' }).click()
   await expect(page.getByLabel(/Boost target/)).toHaveValue('0.8')
@@ -514,6 +537,7 @@ test('a turbo build rebuilds, spools under throttle and shows boost', async ({
       Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
     )
     .toBeGreaterThan(500)
+  await openMode(page, 'Bench')
   const boost = page.getByTestId('boost')
   await expect(boost).toContainText('TURBO SPEED')
   await page.getByRole('heading', { level: 1 }).click()
@@ -534,6 +558,7 @@ test('a carburettor build validates its venturi and runs with mixture shown', as
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
+  await openSection(page, 'Fuel system')
   await page.getByRole('combobox', { name: 'Fuel system' }).click()
   await page.getByRole('option', { name: 'Carburettor' }).click()
   await expect(page.getByLabel(/Venturi \(choke\)/)).toHaveValue('32')
@@ -543,8 +568,8 @@ test('a carburettor build validates its venturi and runs with mixture shown', as
     page.getByRole('button', { name: 'Stop & rebuild engine' }),
   ).toBeDisabled()
   await page.getByLabel(/Venturi \(choke\)/).fill('30')
-  await expect(page.getByText('CUSTOM I4 · CARB')).toBeVisible()
   await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
+  await expect(page.getByTestId('command-bar')).toContainText('CARB')
   await page.getByRole('button', { name: 'Start engine', exact: true }).click()
   await expect
     .poll(async () =>
@@ -573,6 +598,7 @@ test('live updates apply edits to the running engine without stopping it', async
   const rpm = async () =>
     Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
   await expect.poll(rpm).toBeGreaterThan(500)
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('92')
   // Applied without a rebuild: the stand shows the new capacity while running.
   await expect(page.getByText('2.29 L')).toBeVisible()
@@ -585,8 +611,10 @@ test('live updates apply edits to the running engine without stopping it', async
   expect(await rpm()).toBeGreaterThan(500)
   // Restore returns to the build before the live edits, still running.
   await page.getByLabel('Bore (mm)', { exact: true }).fill('92')
+  await openSection(page, 'Starting build')
   await page.getByRole('button', { name: 'Restore previous build' }).click()
   await expect(page.getByText('2.00 L')).toBeVisible()
+  await openSection(page, 'Geometry')
   await expect(page.getByLabel('Bore (mm)', { exact: true })).toHaveValue('86')
   expect(await rpm()).toBeGreaterThan(500)
   // The preference persists across a reload.
@@ -601,6 +629,7 @@ test('full reset returns a persisted edited build to a running Road engine', asy
   const rpm = async () =>
     Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
   await page.goto('/')
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('88')
   await page
     .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
@@ -628,14 +657,19 @@ test('an overboosted unprotected engine fails, explains why and rebuilds', async
   page,
 }) => {
   await page.goto('/')
+  await openSection(page, 'Starting build')
   await page.getByRole('button', { name: 'Turbo hot hatch' }).click()
+  await openSection(page, 'Combustion')
   await page.getByLabel('ECU knock control').uncheck()
+  await openSection(page, 'Forced induction')
   await page.getByLabel('Boost target (bar)').fill('1.6')
+  await openSection(page, 'Parts')
   await page.getByLabel('Pistons').click()
   await page.getByRole('option', { name: 'Cast' }).click()
   await page
     .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
     .click()
+  await openTelemetry(page, 'Cylinders')
   await expect(page.getByTestId('stress-turboSpeed')).toBeVisible()
   await page.getByRole('button', { name: 'Start engine' }).click()
   await expect
@@ -661,6 +695,7 @@ test('push it raises timing in the worker and reports each step', async ({
   page,
 }) => {
   await page.goto('/')
+  await openMode(page, 'Dyno')
   const push = page.getByTestId('push')
   await push.getByLabel('Engine speed (RPM)').fill('3000')
   await push.getByLabel('Seconds per step').fill('0.8')
@@ -679,14 +714,17 @@ test('the Golf GTI preset loads as stock, shows its edits and runs', async ({
   page,
 }) => {
   await page.goto('/')
+  await openSection(page, 'Starting build')
   await page.getByRole('button', { name: 'VW Golf GTI Mk5 2.0 TFSI' }).click()
   const note = page.getByTestId('real-engine-note')
   await expect(note).toContainText('280 Nm at 1,800–4,700 RPM')
   await expect(note).toContainText('Stock.')
+  await openSection(page, 'Forced induction')
   await expect(page.getByLabel('Boost target (bar)')).toBeVisible()
   await expect(
     page.getByText('Not used: the boost map sets the target while maps are on'),
   ).toBeVisible()
+  await openSection(page, 'Parts')
   await page.getByLabel('Pistons').click()
   await page.getByRole('option', { name: 'Forged' }).click()
   await expect(page.getByTestId('stock-changes')).toContainText(
@@ -707,9 +745,12 @@ test('the K20A preset switches to its VTEC high cam when revved', async ({
   page,
 }) => {
   await page.goto('/')
+  await openSection(page, 'Starting build')
   await page.getByRole('button', { name: 'Honda Civic Type R FD2 K20A' }).click()
   await expect(page.getByTestId('real-engine-note')).toContainText('Stock.')
+  await openSection(page, 'Camshaft')
   await expect(page.getByLabel('Switch speed (RPM)')).toHaveValue('5200')
+  await openMode(page, 'Bench')
   await page.getByRole('button', { name: 'Start engine' }).click()
   const rpm = async () =>
     Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
@@ -725,6 +766,7 @@ test('cam profiles convert exactly, take a race grade and phase from the maps', 
   page,
 }) => {
   await page.goto('/')
+  await openSection(page, 'Camshaft')
   const editor = page.getByTestId('cam-editor')
   await editor.getByTestId('use-cam-profiles').click()
   await expect(page.getByTestId('cam-summary')).toContainText(
@@ -737,6 +779,7 @@ test('cam profiles convert exactly, take a race grade and phase from the maps', 
     'Duration 290° intake, 285° exhaust',
   )
   await editor.getByLabel('Variable cam timing (phasers)').check()
+  await openMode(page, 'Maps')
   await expect(page.getByRole('tab', { name: 'Intake cam' })).toBeVisible()
   await page
     .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
@@ -747,6 +790,7 @@ test('cam profiles convert exactly, take a race grade and phase from the maps', 
       Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
     )
     .toBeGreaterThan(500)
+  await openMode(page, 'Bench')
   await expect(page.getByTestId('cam-strip')).toContainText('OVERLAP')
   await page.getByTestId('cam-strip').screenshot({ path: 'test-results/cam-strip.png' })
   await page.locator('.bench-stage').screenshot({ path: 'test-results/cam-cutaway.png' })
