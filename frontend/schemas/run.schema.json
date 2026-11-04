@@ -934,6 +934,60 @@
         ],
         "additionalProperties": false
       }
+    },
+    "rundown": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rpm": {
+            "type": "number",
+            "minimum": 0
+          },
+          "torque": {
+            "type": "number"
+          },
+          "power": {
+            "type": "number"
+          },
+          "absorbedTorque": {
+            "type": "number"
+          },
+          "knock": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "retard": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 90
+          },
+          "egt": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4000
+          },
+          "stress": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "time",
+          "rpm",
+          "torque",
+          "power",
+          "absorbedTorque"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

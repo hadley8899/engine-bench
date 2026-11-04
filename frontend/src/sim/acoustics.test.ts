@@ -166,6 +166,11 @@ describe('engine sound', () => {
     // Cutting fuel leaves only the intake film to escape unburned.
     expect(fuel.count).toBeLessThan(spark.count / 2)
     expect(pops(roadEngine, { throttle: 0.3, holdRpm: 3000 }).count).toBe(0)
+    // Rich running leaves fuel but no oxygen in the exhaust: no afterfire,
+    // however hot the pipe.
+    const rich = pops({ ...roadEngine, lambda: 0.85 }, { throttle: 1, holdRpm: 4000 })
+    expect(rich.wall).toBeGreaterThan(600)
+    expect(rich.count).toBe(0)
   })
   it('a blow-off valve vents for tenths of a second and falls in pitch', () => {
     const turbo = {

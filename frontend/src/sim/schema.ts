@@ -497,6 +497,12 @@ export const runSchema = z.strictObject({
   reason: z.string().max(1000),
   warnings: z.array(z.string().max(1000)).max(100),
   samples: z.array(sampleSchema).max(5000),
+  /**
+   * Closed-throttle run-down after a completed pull, from the end speed
+   * down (engine braking, so torque is negative). Runs recorded before
+   * run-downs existed have none.
+   */
+  rundown: z.array(sampleSchema).max(1000).optional(),
 })
 export type Run = z.infer<typeof runSchema>
 export type Sample = z.infer<typeof sampleSchema>

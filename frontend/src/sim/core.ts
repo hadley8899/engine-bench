@@ -156,6 +156,8 @@ interface Cylinder {
   runner: number
   /** Flammable fuel left unburned by a misfire or cut spark, kg; leaves with the exhaust. */
   unburned: number
+  /** Oxygen left unused, as the fuel it could burn, kg; leaves with the exhaust. */
+  spareAir: number
   /** Spark angle (rad) and burn duration (deg) of the current burn. */
   spark: number
   duration: number
@@ -381,6 +383,7 @@ export class EngineCore {
         volume: g.volume,
         runner: 0,
         unburned: 0,
+        spareAir: 0,
         spark: CYCLE - (engine.ignitionAdvance * Math.PI) / 180,
         duration: engine.burnDuration,
         sparked: false,
@@ -467,6 +470,7 @@ export class EngineCore {
       cyl.fuel = old.fuel * scale
       cyl.heat = old.heat * scale
       cyl.unburned = old.unburned * scale
+      cyl.spareAir = old.spareAir * scale
       cyl.burned = old.burned * scale
       cyl.burnedHeat = old.burnedHeat * scale
       cyl.burnFresh = old.burnFresh * scale
@@ -609,6 +613,7 @@ export class EngineCore {
     let portEnergy = 0
     let portMass = 0
     let unburned = 0
+    let spareAir = 0
     let valveSeats = 0
     let intakeMass = 0
     let freshMass = 0
@@ -758,6 +763,8 @@ export class EngineCore {
             const kept = 1 - dm / cyl.mass
             unburned += cyl.unburned * (1 - kept)
             cyl.unburned *= kept
+            spareAir += cyl.spareAir * (1 - kept)
+            cyl.spareAir *= kept
             cyl.fresh *= kept
             cyl.fuel *= kept
             cyl.burned *= kept
@@ -832,6 +839,11 @@ export class EngineCore {
             fires && ignites
               ? (cyl.fuel - burnable) * 0.3
               : cyl.fuel * flammable
+          // Afterfire also needs oxygen: an unlit charge passes all of its
+          // air, a lean burn its surplus, and a rich burn none (sound only).
+          const oxidiser = (cyl.fresh * this.oxygen) / this.grade.oxygen
+          cyl.spareAir +=
+            fires && ignites ? Math.max(0, oxidiser - burnable) : oxidiser
           if (
             fires &&
             cyl.fresh > 0 &&
@@ -984,6 +996,7 @@ export class EngineCore {
       input.pressureSum = pressureSum
       input.valveSeats = valveSeats
       input.unburned = unburned / this.chargeFuel
+      input.air = spareAir / this.chargeFuel
       input.rpm = rpm
       input.induction = induction.config.kind
       input.shaftHz = induction.shaftHz

@@ -38,6 +38,11 @@ export class AcousticInput {
   valveSeats = 0
   /** Fuel leaving the ports unburned this step, as a share of a full charge. */
   unburned = 0
+  /**
+   * Unused oxygen leaving the ports this step, as the fuel it could burn
+   * (same scale as unburned): air from cut, misfiring or lean cylinders.
+   */
+  air = 0
   rpm = 0
   /** Compressor or blower: 'none' for a naturally aspirated engine. */
   induction: 'none' | 'turbo' | 'centrifugal' | 'roots' = 'none'
@@ -269,6 +274,7 @@ export class Acoustics {
   private pressure1 = 0
   private pressure2 = 0
   private unburned = 0
+  private air = 0
   private pop = 0
   private popAge = 1
   private whinePhase = 0
@@ -358,6 +364,7 @@ export class Acoustics {
     this.pressure1 = previous.pressure1
     this.pressure2 = previous.pressure2
     this.unburned = previous.unburned
+    this.air = previous.air
     this.pop = previous.pop
     this.popAge = previous.popAge
     this.whinePhase = previous.whinePhase
@@ -411,18 +418,23 @@ export class Acoustics {
   /** Port pulses and afterfire through header, collector, catalyst, silencer and tailpipe. */
   private exhaustPath(input: AcousticInput) {
     let source = input.exhaust
-    // Unburned fuel collects in the exhaust and leaves with the flow
-    // (about 0.1 s). A hot wall or the next firing's flame can light it.
+    // Unburned fuel and spare oxygen collect in the exhaust and leave with
+    // the flow (about 0.1 s). A hot wall or the next firing's flame can
+    // light the fuel that has oxygen to burn with: fuel from rich running
+    // meets oxygen-free exhaust and stays quiet.
     this.unburned = this.unburned * (1 - DT / 0.1) + input.unburned
-    if (this.unburned > 0.02 && this.wallTemperature > AFTERFIRE_TEMPERATURE) {
+    this.air = this.air * (1 - DT / 0.1) + input.air
+    const burnable = Math.min(this.unburned, this.air)
+    if (burnable > 0.02 && this.wallTemperature > AFTERFIRE_TEMPERATURE) {
       const heat = Math.min(1, (this.wallTemperature - AFTERFIRE_TEMPERATURE) / 300)
       const flame = input.portTemperature > 1100 ? 8 : 1
       const rate = 25 * heat * flame
       if (this.white() + 0.5 < rate * DT) {
-        this.pop = Math.min(1.6, 0.9 * Math.sqrt(this.unburned))
+        this.pop = Math.min(1.6, 0.9 * Math.sqrt(burnable))
         this.popAge = 0
         this.afterfires++
-        this.unburned = 0
+        this.unburned -= burnable
+        this.air -= burnable
       }
     }
     if (this.pop > 1e-4) {

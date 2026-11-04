@@ -320,6 +320,20 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
   - a push step that fails before its measurement window now reports the boost at the failure instead of 0.
 - Build passes; lint passes with the existing warning.
 
+## Dyno run-down and afterfire oxygen (4 November)
+
+- Run-down (user request: a pull ended in an abrupt stop). Road and Golf 1,500–6,200 RPM sweeps now end with 27 run-down samples: a brief lift-off transient, then engine braking of about −54 Nm near 5,500 RPM falling to −22 to −30 Nm at 1,500 RPM. Released afterwards, both engines idle at 910–920 RPM. New `core.test.ts` cases check that the run-down falls monotonically with negative torque, that the run validates, that the engine then idles, and that an emergency stop during the run-down keeps the completed pull.
+- Afterfire (user report: constant afterfire on the Golf in sixth gear at full throttle). Afterfires per second, before → after the oxygen rule:
+  - Golf at full throttle and 5,400 RPM (λ 0.88): 89 → 0;
+  - Golf at λ 0.8: 78 → 0;
+  - hot hatch at full throttle and 5,000 RPM (λ 1): 34 → 0;
+  - 9k spark-cut limiter: 30 → 31;
+  - Golf with ignition cut at 5,000 RPM: 15 → 20;
+  - 9k lift-off with overrun cut off: 0.5 → 0.
+
+  `acoustics.test.ts` now also checks that a hot λ 0.85 exhaust does not afterfire. Sound only: no physics result changed.
+- Vitest: 137 passed. Chromium full bench suite: 16 of 19 passed. The run-down's sign-in test fails at the sign-in step only (local API not running), after its live and quick pulls pass. The over-boost and Golf cases failed under full-suite load and passed when rerun alone.
+
 ### 3 November — cutaway geometry follow-up
 
 - Added solid rear half-bores, machined liners/deck faces and crankcase end walls; relieved piston skirts and wrist pins; rigid I-section rods with bearing eyes and caps; stepped head flanges and cam supports; closer default framing. Simulation and audio code were not changed by this pass.

@@ -344,6 +344,40 @@ describe('dyno procedures', () => {
     done.abort('Stopped replay')
     expect(done.run.status).toBe('complete')
   })
+  it('runs down on a closed throttle after the pull, then idles', () => {
+    const test = new DynoTest(roadEngine, normalConditions, {
+      ...defaultProcedure,
+      endRpm: 4000,
+    })
+    const run = complete(test)
+    expect(run.status).toBe('complete')
+    const rundown = run.rundown!
+    expect(rundown.length).toBeGreaterThan(10)
+    // Recorded falling from the end speed to the start speed, braking.
+    expect(rundown[0].rpm).toBeGreaterThan(3500)
+    expect(rundown.at(-1)!.rpm).toBeLessThan(1700)
+    for (let i = 1; i < rundown.length; i++)
+      expect(rundown[i].rpm).toBeLessThan(rundown[i - 1].rpm)
+    expect(rundown.slice(2).every((s) => s.torque < 0)).toBe(true)
+    // The pull's peak is unaffected by the run-down.
+    expect(Math.max(...run.samples.map((s) => s.rpm))).toBeGreaterThan(3800)
+    expect(runSchema.safeParse(run).success).toBe(true)
+    // Released, the engine keeps running at idle rather than stopping.
+    for (let i = 0; i < 48000 * 3; i++) test.core.step()
+    expect(test.core.telemetry().rpm).toBeGreaterThan(600)
+    expect(test.core.telemetry().rpm).toBeLessThan(1400)
+  })
+  it('an emergency stop during the run-down keeps the completed pull', () => {
+    const test = new DynoTest(roadEngine, normalConditions, {
+      ...defaultProcedure,
+      endRpm: 3000,
+    })
+    while (!test.run.rundown!.length) test.advance(480)
+    test.abort('Emergency stop')
+    expect(test.run.status).toBe('complete')
+    expect(test.run.reason).toBe('Run-down stopped: Emergency stop')
+    expect(test.run.samples.length).toBeGreaterThan(5)
+  })
 })
 
 describe('supported environmental and configuration envelope', () => {

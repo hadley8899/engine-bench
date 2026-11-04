@@ -3,7 +3,17 @@ import { defaultProcedure, MODEL_VERSION, validateProcedure } from './schema'
 import type { Conditions, EngineDefinition, Procedure, Run } from './schema'
 import { omegaToRpm } from './physics'
 
-/** A prescribed-speed dyno. Torque is measured from cylinder pressure minus friction. */
+/** Run-down after the pull: closed throttle, dyno-controlled deceleration, RPM/s. */
+const RUNDOWN_RATE = 1200
+/** The run-down ends here, or at the start speed if that is higher. */
+const RUNDOWN_FLOOR = 1000
+
+/**
+ * A prescribed-speed dyno. Torque is measured from cylinder pressure minus
+ * friction. After the pull the throttle closes and the dyno brings the
+ * engine down to the start speed; that overrun is recorded separately as
+ * the run-down (engine braking), then the engine is released to idle.
+ */
 export class DynoTest {
   readonly core: EngineCore
   readonly run: Run
@@ -20,6 +30,9 @@ export class DynoTest {
   private lastMean: number | null = null
   private stableWindows = 0
   private warmup = 0.8
+  /** Frame at which the run-down began, or null during the pull. */
+  private rundownFrame: number | null = null
+  private rundownTop = 0
   constructor(
     engine: EngineDefinition,
     conditions: Conditions,
@@ -51,10 +64,17 @@ export class DynoTest {
         ? ['Indestructible mode: parts were stressed but could not fail.']
         : [],
       samples: [],
+      rundown: [],
     }
   }
   abort(reason: string) {
     if (this.run.status !== 'running') return
+    // The pull itself finished; only the run-down is cut short.
+    if (this.rundownFrame !== null) {
+      this.record()
+      this.finish(`Run-down stopped: ${reason}`)
+      return
+    }
     if (this.count > 0) this.record()
     this.run.status = 'aborted'
     this.run.reason = reason
@@ -69,7 +89,9 @@ export class DynoTest {
     if (!this.count) return
     const rpm = this.sumRpm / this.count
     const torque = this.sumTorque / this.count
-    this.run.samples.push({
+    const target =
+      this.rundownFrame === null ? this.run.samples : this.run.rundown!
+    target.push({
       time: this.core.time,
       rpm,
       torque,
@@ -91,8 +113,53 @@ export class DynoTest {
     this.stress = 0
     this.core.knockPeak = 0
   }
+  /** Close the throttle and start bringing the engine down. */
+  private beginRundown() {
+    this.record()
+    this.rundownFrame = this.frame
+    this.rundownTop = omegaToRpm(this.core.omega)
+    this.lastBin = this.frame / 48000
+    this.core.setControls({ throttle: 0 })
+  }
+  /** Complete the run and release the engine to idle. */
+  private finish(reason = '') {
+    this.run.status = 'complete'
+    this.run.reason = reason
+    this.core.setControls({ throttle: 0, holdRpm: null, load: 0 })
+  }
+  private tickRundown() {
+    const time = this.frame / 48000
+    const elapsed = (this.frame - this.rundownFrame!) / 48000
+    const floor = Math.max(RUNDOWN_FLOOR, this.run.procedure.startRpm)
+    const target = this.rundownTop - elapsed * RUNDOWN_RATE
+    if (target <= floor) {
+      this.record()
+      this.finish()
+      return 0
+    }
+    this.core.controls.holdRpm = target
+    let audio: number
+    try {
+      audio = this.core.step()
+    } catch (error) {
+      this.abort(error instanceof Error ? error.message : 'Numerical error')
+      return 0
+    }
+    this.frame++
+    this.sumTorque += this.core.torque
+    this.sumAbsorbed += this.core.absorbedTorque
+    this.sumRpm += omegaToRpm(this.core.omega)
+    this.sumRetard += this.core.meanRetard()
+    this.count++
+    if (time - this.lastBin >= 0.15) {
+      this.record()
+      this.lastBin = time
+    }
+    return audio
+  }
   tick() {
     if (this.run.status !== 'running') return 0
+    if (this.rundownFrame !== null) return this.tickRundown()
     const p = this.run.procedure
     const time = this.frame / 48000
     const testing = time >= this.warmup
@@ -153,7 +220,7 @@ export class DynoTest {
         this.lastMean = mean
         if (this.stableWindows >= 1) {
           this.record()
-          if (this.stepTarget >= p.endRpm) this.run.status = 'complete'
+          if (this.stepTarget >= p.endRpm) this.beginRundown()
           this.stepTarget = Math.min(p.endRpm, this.stepTarget + p.stepRpm)
           this.stageTime = 0
           this.lastMean = null
@@ -162,10 +229,7 @@ export class DynoTest {
           this.abort('Steady-state torque did not settle within 4 seconds')
         else this.clear()
       }
-      if (p.kind === 'sweep' && target >= p.endRpm) {
-        this.record()
-        this.run.status = 'complete'
-      }
+      if (p.kind === 'sweep' && target >= p.endRpm) this.beginRundown()
     }
     if (this.frame > 48000 * 120)
       this.abort('Test duration exceeded the two-minute limit')

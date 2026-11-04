@@ -42,6 +42,7 @@ import type {
   EngineDefinition,
   Procedure,
   Run,
+  Sample,
 } from '../sim/schema'
 import { BenchAudio } from './audio'
 import { Chart } from './Chart'
@@ -440,19 +441,28 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     ? changes
     : ['Same engine geometry, settings and environment.']
 }
+/**
+ * Each run's pull, then each run's run-down (recorded falling, drawn by
+ * RPM), on one shared RPM axis.
+ */
 function alignCurves(
   runs: (Run | null)[],
   field: 'torque' | 'power',
   convert: (value: number) => number,
 ) {
+  const curves = [
+    ...runs.map((r) => r?.samples ?? null),
+    ...runs.map((r) =>
+      r?.rundown?.length ? [...r.rundown].sort((a, b) => a.rpm - b.rpm) : null,
+    ),
+  ]
   const xs = [
     ...new Set(
-      runs.flatMap((r) => r?.samples.map((s) => Math.round(s.rpm)) ?? []),
+      curves.flatMap((c) => c?.map((s) => Math.round(s.rpm)) ?? []),
     ),
   ].sort((x, y) => x - y)
-  const interpolate = (run: Run | null, x: number) => {
-    if (!run?.samples.length) return null
-    const points = run.samples
+  const interpolate = (points: Sample[] | null, x: number) => {
+    if (!points?.length) return null
     if (x < points[0].rpm - 2 || x > points.at(-1)!.rpm + 2) return null
     const index = points.findIndex((s) => s.rpm >= x)
     if (index <= 0) return points[index < 0 ? points.length - 1 : 0][field]
@@ -466,9 +476,9 @@ function alignCurves(
   }
   return [
     xs,
-    ...runs.map((run) =>
+    ...curves.map((curve) =>
       xs.map((x) => {
-        const v = interpolate(run, x)
+        const v = interpolate(curve, x)
         return v === null ? null : convert(v)
       }),
     ),
@@ -676,13 +686,22 @@ export function BenchPage() {
           if (activeRunKind.current === 'quick') {
             calculatingRef.current = false
             setCalculating(false)
+          } else if (event.value.status === 'complete') {
+            // The pull has run down and the engine idles on the bench.
+            setMode('manual')
+            setThrottle(0)
+            setHold(0)
+            setLoad(0)
           } else {
             setRunning(false)
             setMode('manual')
           }
+          const rundown = event.value.rundown?.length
+            ? ` and a ${event.value.rundown.length}-point run-down`
+            : ''
           setNotice(
             event.value.status === 'complete'
-              ? `Test complete. ${event.value.samples.length} measured points captured in ${captured}.${captured === 'baseline' ? ' The next run will capture in Modified.' : ''}`
+              ? `Test complete. ${event.value.samples.length} measured points${rundown} captured in ${captured}.${event.value.reason ? ` ${event.value.reason}.` : ''}${captured === 'baseline' ? ' The next run will capture in Modified.' : ''}`
               : `Test aborted: ${event.value.reason}`,
           )
         }
@@ -1149,6 +1168,9 @@ export function BenchPage() {
       `Baseline · ${prefs.torque}`,
       `Modified · ${prefs.torque}`,
       `This run · ${prefs.torque}`,
+      'Baseline run-down',
+      'Modified run-down',
+      'This run run-down',
     ],
     [prefs.torque],
   )
@@ -1158,6 +1180,9 @@ export function BenchPage() {
       `Baseline · ${prefs.power}`,
       `Modified · ${prefs.power}`,
       `This run · ${prefs.power}`,
+      'Baseline run-down',
+      'Modified run-down',
+      'This run run-down',
     ],
     [prefs.power],
   )

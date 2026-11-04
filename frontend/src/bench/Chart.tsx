@@ -36,8 +36,9 @@ export function Chart({
             .slice(1)
             .map((label, i) => ({
               label,
-              stroke: ['#f5b35d', '#63c5d7', '#b0a0e4'][i % 3],
-              width: 2,
+              stroke: colours[i % 3],
+              width: label.includes('run-down') ? 1.5 : 2,
+              dash: label.includes('run-down') ? [6, 4] : undefined,
               spanGaps: true,
             })),
         ],
@@ -71,6 +72,8 @@ const colours = ['#f5b35d', '#63c5d7', '#b0a0e4']
 function drawPeaks(u: uPlot) {
   const context = u.ctx
   for (let s = 1; s < u.series.length; s++) {
+    // Run-downs are engine braking; their peaks mean nothing.
+    if (String(u.series[s].label).includes('run-down')) continue
     const values = u.data[s] as (number | null)[]
     let best = -1
     for (let i = 0; i < values.length; i++)

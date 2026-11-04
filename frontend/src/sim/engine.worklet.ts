@@ -175,10 +175,15 @@ export class EngineProcessor extends AudioWorkletProcessor {
         )
           this.core.setControls({ starter: false })
         if (this.dyno && this.dyno.run.status !== 'running') {
+          const complete = this.dyno.run.status === 'complete'
           this.send({ type: 'run', value: this.dyno.run })
           this.dyno = null
-          this.running = false
-          this.use(new EngineCore(this.core.engine, this.core.conditions))
+          // A completed pull has run down and is released to idle; an
+          // aborted one stops, as an emergency stop should.
+          if (!complete) {
+            this.running = false
+            this.use(new EngineCore(this.core.engine, this.core.conditions))
+          }
           this.sendTelemetry()
         }
       }
