@@ -389,6 +389,43 @@ Acceptance: a new user can start an engine, make a change, run a test and compar
 
 ### 13. Fidelity and release readiness
 
+Known model gaps to fix (user request, 4 November 2026). Each is recorded with its evidence in `docs/SIMULATION.md`, `docs/PRESETS.md` or `docs/VERIFICATION.md`. Fixing one needs a model version bump, rechecked presets and unchanged results for builds that do not opt in, unless the user decides otherwise.
+
+Gas exchange and cams:
+
+- [ ] Model exhaust pressure waves (a 1D or tuned-pipe model) so header length, collector type and cam overlap affect scavenging and power, not only sound. Today the exhaust is a lumped back pressure, so tuned exhaust pulses cannot scavenge the cylinder.
+- [ ] Reduce naturally aspirated low-speed torque, which runs high: the K20A was 28 Nm over Honda's curve at 1,500 RPM and the Golf 22 Nm over at 1,000 RPM before cam phasing hid it. Review low-speed volumetric efficiency, residual and wall heat.
+- [ ] Add valve ramps and realistic cam acceleration profiles in place of half-sine lift, so a cam's aggressiveness can differ at the same duration and lift.
+- [ ] Make valve float progressive (lost power and erratic seating) before it bends a valve, and give valve-to-piston room per engine (valve reliefs), rather than half the clearance height for every build.
+
+Forced induction and combustion:
+
+- [ ] Fix the inconsistent boosted torque: at the same boost the Golf preset makes about 20% more than the real engine (calibrated down to 0.6 bar from 0.9), while the Evo matches at its real boost. Investigate knock-limited spark retard, charge heating, residual and back pressure, then restore the Golf's real 0.9 bar.
+- [ ] Add compressor and turbine maps (surge and choke lines, efficiency islands) from real or representative hardware.
+- [ ] Move best power to λ 0.86–0.9 (now about λ 0.95), and bring the enrichment EGT drop (about 120 K from λ 1.0 to 0.85) towards the 30–60 K quoted for real engines.
+- [ ] Recalibrate knock onset: the Road engine on RON 95 does not knock at 4,000 RPM even at 50° of advance, long past MBT. Add RON 100 fuel for Japanese-market presets.
+
+Temperatures and limits:
+
+- [ ] Bring piston crown and turbine inlet temperatures towards published ranges (the hot hatch crown reaches about 376 °C), add oil-jet piston cooling, then lower the crown and turbine limits towards real values (now 437–497 °C and 1,100 °C to fit the model).
+- [ ] Add partial damage (an engine that keeps running with a damaged part), and decide whether wear belongs in the sandbox.
+
+Presets:
+
+- [ ] Represent the remaining preset features: intake manifold flaps (Golf), T-VIS (4A-GE), split injection for catalyst heating, twin catalysts' back pressure and the dual-mass flywheel.
+- [ ] Replace the Evo, SR20 and 4A-GE rated-point calibrations with full manufacturer or dyno curves if they can be sourced, and the i-VTC and VTC phasing fits with published cam maps.
+
+Sound:
+
+- [ ] Let rich exhaust burn where it meets outside air at the tailpipe, and model secondary-air injection, so afterfire covers these cases. Rich running is silent now because the exhaust has no spare oxygen.
+
+Checks:
+
+- [ ] Run the backend tests in Docker; they have not been run since model 1.11.0's schema changes because no backend containers exist on the development machine.
+- [ ] Make the browser suite reliable: emergency-stop, loaded-stall, over-boost and Golf cases fail only in full runs, and the sign-in navigation case needs the local API.
+
+Release readiness:
+
 - [ ] Improve thermal behaviour, forced induction, valvetrain and mechanical-limit models in bounded increments.
 - [ ] Add browser compatibility/performance checks, accessible controls, recovery from audio suspension and worker errors.
 - [ ] Choose supported browsers/hardware and publish measured limits.
