@@ -305,7 +305,7 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Built-in browser pane (development server): the stress strip, parts editor and push panel render. The Road build's timing push at 4,000 RPM ran from 20° to 50° without knock. Torque fell from 188 to 138 Nm and the crown reached 77% of its limit, so on RON 95 at this speed the model finds no knock limit before MBT is long passed. On the live bench, the over-boosted hot hatch cracked a piston at 3,900 RPM. Fuel flow fell to zero, the readings froze at the moment of failure (knock 330%, head gasket 131%) and Rebuild cleared it.
 - Cost (Node, standard benchmark, interleaved twice with the committed 1.10.0): medians 0.37–0.38 against 0.35–0.37 ms at 1,000–7,500 RPM and 0.68–0.70 against 0.67 ms at 8,400 RPM, about 3–5% more, against a 2.67 ms budget.
 - Not run: backend tests (no backend containers or images on this machine). Only the exported schemas changed: an optional `parts` block, the optional sample `stress` field and the model-version list. The installed ajv (version 6) cannot read the exported draft 2020-12 schemas, so they were not machine-validated outside Laravel. Firefox was not run (see the testing-depth decision of 3 November).
-- Known gaps: see `docs/SIMULATION.md`. The cutaway does not show fitted or failed parts yet; that is Stage 8 work.
+- Known gaps: see `docs/SIMULATION.md`. The cutaway does not show fitted or failed parts yet; that is Stage 9 work.
 
 ## Preset: VW 2.0 TFSI (AXX), Golf GTI Mk5
 

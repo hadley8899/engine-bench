@@ -4,16 +4,17 @@ Updated: 3 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 10's layouts. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
-3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 10.
-4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
+3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
+4. Stage 8, camshafts and valve timing (user decision, 4 November 2026: next after the famous inline-fours).
+5. Stage 9, a 3D overhaul. It is independent of the simulation and may run alongside the other stages.
 
-Two-stroke engines (Stage 9) move behind these, followed by other layouts (Stage 10). A UI revision (Stage 11) follows once those features are in place (user decision, 3 November 2026).
+Two-stroke engines (Stage 10) move behind these, followed by other layouts (Stage 11). A UI revision (Stage 12) follows once those features are in place (user decision, 3 November 2026).
 
 ## Product direction
 
@@ -83,7 +84,7 @@ The shell checks above describe the extraction verification, not verification of
 
 ## Engine configuration
 
-Start with a four-stroke petrol inline-four. Two-stroke engines with editable ports and exhaust shapes were requested by the user on 1 November 2026 (Stage 9; design in `docs/TWO_STROKE.md`). They now follow the tuning and real-engine stages. Expand to inline-six, V6, V8 and boxer layouts after that.
+Start with a four-stroke petrol inline-four. Two-stroke engines with editable ports and exhaust shapes were requested by the user on 1 November 2026 (Stage 10; design in `docs/TWO_STROKE.md`). They now follow the tuning and real-engine stages. Expand to inline-six, V6, V8 and boxer layouts after that.
 
 - Geometry: cylinder count/layout, bore, stroke, connecting-rod length and compression ratio.
 - Timing: firing order, crank phasing, valve timing/lift and ignition timing, introduced as their simulation support becomes available.
@@ -223,7 +224,7 @@ Acceptance: runs survive reloads, stored samples are unchanged after editing a b
 - [x] Add fuel systems (model 1.4.0): carburettor (venturi metering by volume, restriction, accelerator pump), throttle-body, port and direct injection, with x–τ wall-film transport, transient correction, overrun cut, evaporative charge cooling and misfire limits. Requested by the user with the period variety engines have used.
 - [x] Add opt-in Live updates that apply valid edits to the running engine.
 
-The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 12 and layouts to Stage 10.
+The remaining Stage 4 items moved on 2 November 2026: presets to Stage 7, knock to Stage 6, sharing to Stage 13 and layouts to Stage 11.
 
 ### 5. Sound and bench feel — complete
 
@@ -290,7 +291,7 @@ Parts and limits:
 
 - [x] Add a parts list where every part is available from the start: pistons (cast, hypereutectic, forged), connecting rods (cast/stock, forged I-beam, H-beam), head gasket and fasteners, valve springs, turbochargers of several sizes, intercoolers, injectors and fuel pumps. Parts change mass, inertia, friction and thermal properties where modelled, and each has estimated limits. Model 1.11.0. Internal parts are stored in the definition's `parts` block; builds saved earlier read as stock parts, which add no inertia or friction, so their results are unchanged. Turbos, intercoolers, injectors and pumps are named sets of the existing induction and fuel-supply fields. Decision (4 November 2026): stock rods and valve springs are rated against the build's estimated mechanical limit; pistons do not yet change crown heat transfer.
 - [x] Add stress indicators for the main limits: rod load from peak cylinder pressure and reciprocating inertia, piston crown temperature and knock exposure, head clamping against peak pressure, valve-float speed and turbocharger shaft speed and inlet temperature. The bench shows each as a share of its limit for the worst cylinder, with accumulated overload.
-- [x] Add failure events when a limit is exceeded long enough: holed or cracked piston, bent or broken rod, lifted head gasket, valve float or valve-to-piston contact, and turbo damage. The engine stops and the bench shows what failed, where and why. Dyno runs record the failure as their abort reason. A rebuild restores the last build, and indestructible mode disables failures. Failures are on by default. The cutaway does not show failed parts yet (Stage 8).
+- [x] Add failure events when a limit is exceeded long enough: holed or cracked piston, bent or broken rod, lifted head gasket, valve float or valve-to-piston contact, and turbo damage. The engine stops and the bench shows what failed, where and why. Dyno runs record the failure as their abort reason. A rebuild restores the last build, and indestructible mode disables failures. Failures are on by default. The cutaway does not show failed parts yet (Stage 9).
 - [x] Add a "push it" procedure: a stepped boost or timing ramp at a chosen RPM that stops at the first knock limit or failure and reports how far the engine went. It runs headless in the worker and reports a table of steps; it is not stored as a run.
 - [x] Document every limit, its basis and its uncertainty in `docs/SIMULATION.md`. Do not present forum figures as specifications.
 
@@ -303,12 +304,36 @@ The user wants famous engines they recognise, starting with the 2.0 TFSI from th
 - [x] Source a documented VW EA113 2.0 TFSI (AXX/BWA, Golf Mk5 GTI) preset: geometry, compression, valve timing, turbocharger, direct injection and published torque and power. Identify inferred and calibrated inputs explicitly. Requires Stage 6 knock and maps. Done 4 November 2026 from VW SSP 337; provenance in `docs/PRESETS.md`. Valve timing is not published beyond 42° of intake cam phasing, so it is inferred. Decision: the boost target is calibrated to 0.6 bar, because the model makes about 20% more torque than the real engine at its 0.9 bar; this is recorded as a known model deviation.
 - [x] Compare each preset with a sourced reference torque curve and operating range; record deviations. The AXX matches SSP 337's curve within 7 Nm from 2,000 to 6,500 RPM (+22 and −15 Nm at 1,000 and 1,500 RPM), and `src/sim/presets.test.ts` holds it there.
 - [x] Then add further well-known inline-fours with contrasting characters, for example the Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Done 4 November 2026. Model 1.12.0 adds an optional two-stage cam so the K20A's VTEC changeover reproduces Honda's published curve. Decision: the Evo, SR20 and 4A-GE are calibrated to their rated points because no manufacturer curves were found; `docs/PRESETS.md` says so for each. SR20 VTC and 4A-GE T-VIS are not represented.
-- [ ] After the matching layouts exist (Stage 10), add famous engines that need them, for example the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20/EJ25 (boxer) and a GM LS V8.
+- [ ] After the matching layouts exist (Stage 11), add famous engines that need them, for example the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20/EJ25 (boxer) and a GM LS V8.
 - [x] Add a stock-or-modified view: for a preset, show which settings and parts differ from the stock engine. A build that keeps a preset's name lists its changes from that preset in the workshop.
 
 Acceptance: each released preset has provenance and model limitations, reproduces its sourced curve within a recorded deviation, and runs through the editor, animation, audio, dyno and persistence. The interface never calls a preset an exact replica.
 
-### 8. 3D overhaul
+### 8. Camshafts and valve timing
+
+Requested by the user on 4 November 2026, after the famous inline-fours. Cams are among the most common tuning changes, and today's model fixes valve events: intake opens at 350°, the exhaust runs from 145° to 370°, and only intake closing, valve areas and model 1.12.0's two-stage switch are editable. This stage makes the camshafts a real part of the engine.
+
+Valve events and lift:
+
+- [ ] Replace the fixed events with editable intake and exhaust cam profiles: opening and closing angles (or duration and centreline), peak lift and a lift curve. Flow area comes from lift through a discharge coefficient and the valve curtain area, capped by the port. Builds saved earlier keep their exact events and results.
+- [ ] Show valve overlap, lobe separation and each cam's centreline. Overlap must have its modelled effects: scavenging with tuned exhaust pulses, reversion and residual at low speed, a rough idle that is heard and seen in idle speed, and boosted engines blowing charge through.
+
+Variable valve timing:
+
+- [ ] Add continuous intake and exhaust cam phasers (VANOS, VTC, AVCS, VVT-i style), driven by an ECU cam map by RPM and load, with phaser range and response rate. Show the live cam angle on the bench.
+- [ ] Keep the two-stage lift switch (VTEC) as a profile change that can combine with phasing (i-VTEC).
+- [ ] Revisit the presets that have variable timing: the Golf AXX's 42° intake phasing, the SR20DET's VTC, and continuous i-VTEC phasing for the K20A. Recalibrate and record new deviations.
+
+Parts and limits:
+
+- [ ] Add cam parts to the parts list: stock, fast-road, and race profiles with more lift and duration. Their trade-offs (top end against idle and low-speed torque) come from the model, not from fixed multipliers.
+- [ ] Tie lift and springs to the existing limits: more lift and acceleration lower the valve-float speed unless springs are uprated. Add a valve-to-piston clearance estimate from lift, timing and compression, so aggressive cams with advanced timing can cause contact.
+- [ ] Animate the 3D valvetrain from the same cam profiles and live phasing (with Stage 9).
+- [ ] Document the cam, flow and phasing models, their sources and limits in `docs/SIMULATION.md`; add tests for flow against lift, overlap effects, phasing and preset stability.
+
+Acceptance: earlier builds' results are unchanged. More duration moves torque up the rev range, and more overlap roughens idle and helps a tuned top end. Phasing broadens the torque curve. Presets with variable timing match their sourced curves at least as well as before. A big cam with stock springs floats valves sooner, and contact failures are repeatable.
+
+### 9. 3D overhaul
 
 Intake and inspection follow-up: turbo builds now connect the compressor outlet to the intake through a finned intercooler when effectiveness is above zero, otherwise using a direct charge pipe. Silicone-style couplers and clamps mark the joints; carb/TBI builds use a sealed pressure hat, and direct-injection builds now retain an intake manifold. Overview fits the assembled bounds; Timing, Crank and conditional Turbo camera presets focus on the assemblies, with manual orbit preserved across rebuilds. Other supercharger charge routes and further housing refinement remain future work. Visual/mobile/performance verification remains pending.
 
@@ -330,7 +355,7 @@ The user reported on 2 November 2026 that the 3D graphics need improving and con
 
 Acceptance: the model stays consistent with the active definition and telemetry, inspection mode stays clearly labelled, and browser tests cover rendering with and without WebGL.
 
-### 9. Two-stroke engines
+### 10. Two-stroke engines
 
 Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 November 2026. The design proposal, open questions and verification approach are in `docs/TWO_STROKE.md`.
 
@@ -343,13 +368,13 @@ Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 Nov
 
 Acceptance: port timing is derived from geometry and validated; mass and energy balance across crankcase, cylinder and pipe; supported trends hold (pipe length moves the torque peak, exhaust-port height moves and narrows the band, a tuned chamber beats a straight pipe at its tuned speed); the two-stroke works through the editor, animation, audio, dyno and persistence; four-stroke results are unchanged.
 
-### 10. Additional layouts
+### 11. Additional layouts
 
 - [ ] Add inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Prioritise meaningful variety over a large list of near-identical presets.
 
 Acceptance: each released layout works through configuration, animation, audio, dyno and persistence.
 
-### 11. UI revision
+### 12. UI revision
 
 Requested by the user on 3 November 2026: the interface has become hard to understand, and the bench controls pane on the right is very long. Scheduled once the feature stages are in place, so the layout is designed around the finished set of controls, not revised again for each new one. Bring it forward if the bench becomes hard to use for the work in between.
 
@@ -362,7 +387,7 @@ Requested by the user on 3 November 2026: the interface has become hard to under
 
 Acceptance: a new user can start an engine, make a change, run a test and compare it without help. Every existing workflow keeps working, and browser tests cover the new layout in Chromium and Firefox.
 
-### 12. Fidelity and release readiness
+### 13. Fidelity and release readiness
 
 - [ ] Improve thermal behaviour, forced induction, valvetrain and mechanical-limit models in bounded increments.
 - [ ] Add browser compatibility/performance checks, accessible controls, recovery from audio suspension and worker errors.
