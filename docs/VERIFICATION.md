@@ -307,6 +307,19 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Not run: backend tests (no backend containers or images on this machine). Only the exported schemas changed: an optional `parts` block, the optional sample `stress` field and the model-version list. The installed ajv (version 6) cannot read the exported draft 2020-12 schemas, so they were not machine-validated outside Laravel. Firefox was not run (see the testing-depth decision of 3 November).
 - Known gaps: see `docs/SIMULATION.md`. The cutaway does not show fitted or failed parts yet; that is Stage 8 work.
 
+## Preset: VW 2.0 TFSI (AXX), Golf GTI Mk5
+
+- Sources and values: `docs/PRESETS.md`. The specification table and torque curve are from VW SSP 337 (page 6, diagram S337_008), with the curve read from the figure at 500 RPM steps.
+- Calibration (Node, steady full load in normal air): within 7 Nm of the curve from 2,000 to 6,500 RPM, +22 Nm at 1,000 and −15 Nm at 1,500 RPM, about 9 Nm RMS. The boost target is calibrated to 0.6 bar against the published 0.9 bar; this deviation is recorded in `docs/PRESETS.md`. A standard sweep gives 148.6 kW at about 6,070 RPM and 289 Nm (rated 147 kW and 280 Nm), with the highest part stress at 92%. A boost push at 4,000 RPM ends with a cracked cast piston at a 1.6 bar target.
+- Vitest: 135 passed. New tests:
+  - `src/sim/presets.test.ts` checks the published geometry, eight curve points within their recorded tolerances with no failure and stress under 95%, and about 147 kW at 5,700 RPM;
+  - the starting-build test (`src/sim/builds.test.ts`) now also checks that the preset starts, idles and completes a sweep.
+- Chromium (Playwright, new case in `tests/bench.spec.ts`): loading the preset shows its rating and "Stock". It labels the Boost target field as unused while maps set boost. Fitting forged pistons lists "Pistons: Cast → Forged", and the rebuilt engine starts.
+- Also fixed:
+  - the Forced induction note still said knock was not modelled and boost could not damage the engine; it now describes knock control and failures;
+  - a push step that fails before its measurement window now reports the boost at the failure instead of 0.
+- Build passes; lint passes with the existing warning.
+
 ### 3 November — cutaway geometry follow-up
 
 - Added solid rear half-bores, machined liners/deck faces and crankcase end walls; relieved piston skirts and wrist pins; rigid I-section rods with bearing eyes and caps; stepped head flanges and cam supports; closer default framing. Simulation and audio code were not changed by this pass.

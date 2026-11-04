@@ -79,6 +79,7 @@ import type { ShortcutAction } from './shortcuts'
 import { ShortcutHelp } from './ShortcutHelp'
 import { PullSummary } from './PullSummary'
 import { starterBuilds } from './builds'
+import { realEngines } from './presets'
 import {
   formatFixed,
   fromKw,
@@ -1078,6 +1079,18 @@ export function BenchPage() {
     URL.revokeObjectURL(url)
   }
   const activeTest = (running && mode === 'live') || calculating
+  // A preset keeps its name while edited, so changes are shown against it.
+  const realPreset = realEngines.find((b) => b.engine.name === draft.name)
+  const stockChanges = realPreset
+    ? describeChanges(
+        {
+          engine: realPreset.engine,
+          conditions: conditions,
+        } as Run,
+        draft,
+        conditions,
+      ).filter((c) => !c.startsWith('Same engine'))
+    : []
   const changeIndestructible = (value: boolean) => {
     indestructibleRef.current = value
     setIndestructible(value)
@@ -1909,11 +1922,48 @@ export function BenchPage() {
                     </Button>
                   ))}
                 </div>
-                <p className="helper-text">
-                  {starterBuilds.find((b) => b.engine.name === draft.name)
-                    ?.description ?? 'Your own build.'}{' '}
-                  Fictional starting points, not production replicas.
-                </p>
+                <div className="preset-buttons" data-testid="real-engines">
+                  {realEngines.map((b) => (
+                    <Button
+                      key={b.label}
+                      variant="outlined"
+                      size="small"
+                      color="warning"
+                      title={`${b.description} Rated ${b.rated}.`}
+                      disabled={activeTest}
+                      onClick={() => loadBuild(b.engine, experiment.conditions)}
+                    >
+                      {b.label}
+                    </Button>
+                  ))}
+                </div>
+                {realPreset ? (
+                  <div className="helper-text" data-testid="real-engine-note">
+                    <p>
+                      {realPreset.description} Rated{' '}
+                      {realPreset.rated}. An approximation calibrated to the
+                      published torque curve, not an exact replica; it is not a
+                      prediction of what a real engine would survive.
+                    </p>
+                    {stockChanges.length === 0 ? (
+                      <p>
+                        <strong>Stock.</strong>
+                      </p>
+                    ) : (
+                      <p data-testid="stock-changes">
+                        <strong>Modified from stock:</strong>{' '}
+                        {stockChanges.join('; ')}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="helper-text">
+                    {starterBuilds.find((b) => b.engine.name === draft.name)
+                      ?.description ?? 'Your own build.'}{' '}
+                    The first row are fictional starting points; famous engines
+                    below them are calibrated approximations of real ones.
+                  </p>
+                )}
                 <TextField
                   size="small"
                   label="Build name"
@@ -2028,6 +2078,7 @@ export function BenchPage() {
                 <InductionEditor
                   value={draft.induction}
                   disabled={activeTest}
+                  boostMapped={!!draft.management}
                   onChange={(update) =>
                     setDraft((d) => ({ ...d, induction: update(d.induction) }))
                   }

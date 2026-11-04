@@ -4,13 +4,13 @@ Updated: 3 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7 has begun with the VW Golf GTI Mk5 2.0 TFSI (AXX) preset. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
-3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
+3. Stage 7, famous real engines — in progress. The VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI is done; further inline-fours are next.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
 Two-stroke engines (Stage 9) move behind these, followed by other layouts (Stage 10). A UI revision (Stage 11) follows once those features are in place (user decision, 3 November 2026).
@@ -300,11 +300,11 @@ Acceptance: supported trends hold in tests. More advance, more boost, lower octa
 
 The user wants famous engines they recognise, starting with the 2.0 TFSI from the 2005 Golf GTI, so they can push them to see how much they take. Each preset follows the provenance rules under Data and access.
 
-- [ ] Source a documented VW EA113 2.0 TFSI (AXX/BWA, Golf Mk5 GTI) preset: geometry, compression, valve timing, turbocharger, direct injection and published torque and power. Identify inferred and calibrated inputs explicitly. Requires Stage 6 knock and maps.
-- [ ] Compare each preset with a sourced reference torque curve and operating range; record deviations.
+- [x] Source a documented VW EA113 2.0 TFSI (AXX/BWA, Golf Mk5 GTI) preset: geometry, compression, valve timing, turbocharger, direct injection and published torque and power. Identify inferred and calibrated inputs explicitly. Requires Stage 6 knock and maps. Done 4 November 2026 from VW SSP 337; provenance in `docs/PRESETS.md`. Valve timing is not published beyond 42° of intake cam phasing, so it is inferred. Decision: the boost target is calibrated to 0.6 bar, because the model makes about 20% more torque than the real engine at its 0.9 bar; this is recorded as a known model deviation.
+- [x] Compare each preset with a sourced reference torque curve and operating range; record deviations. The AXX matches SSP 337's curve within 7 Nm from 2,000 to 6,500 RPM (+22 and −15 Nm at 1,000 and 1,500 RPM), and `src/sim/presets.test.ts` holds it there.
 - [ ] Then add further well-known inline-fours with contrasting characters, for example the Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE.
 - [ ] After the matching layouts exist (Stage 10), add famous engines that need them, for example the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20/EJ25 (boxer) and a GM LS V8.
-- [ ] Add a stock-or-modified view: for a preset, show which settings and parts differ from the stock engine.
+- [x] Add a stock-or-modified view: for a preset, show which settings and parts differ from the stock engine. A build that keeps a preset's name lists its changes from that preset in the workshop.
 
 Acceptance: each released preset has provenance and model limitations, reproduces its sourced curve within a recorded deviation, and runs through the editor, animation, audio, dyno and persistence. The interface never calls a preset an exact replica.
 

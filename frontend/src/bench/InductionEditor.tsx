@@ -15,10 +15,13 @@ export function InductionEditor({
   value,
   onChange,
   disabled,
+  boostMapped,
 }: {
   value: Induction
   onChange: (update: (current: Induction) => Induction) => void
   disabled?: boolean
+  /** Engine-management maps are on, so the boost map sets the target. */
+  boostMapped?: boolean
 }) {
   const errors = inductionErrors(value)
   const toggle =
@@ -58,7 +61,12 @@ export function InductionEditor({
                 label={`${f.label} (${f.unit})`}
                 title={f.help}
                 error={!!errors[f.label]}
-                helperText={errors[f.label] ?? rangeText(f)}
+                helperText={
+                  errors[f.label] ??
+                  (boostMapped && f.key === 'boostTarget'
+                    ? 'Not used: the boost map sets the target while maps are on'
+                    : rangeText(f))
+                }
                 value={read(value, f.key) * f.scale}
                 slotProps={{
                   htmlInput: { min: f.min, max: f.max, step: f.step },
@@ -91,9 +99,11 @@ export function InductionEditor({
             />
           )}
           <p className="cranking-note warn">
-            Knock is not modelled, so boost will not damage this engine or force
-            timing back. Real boosted engines need lower compression (about
-            8.5–9.5:1) and less ignition advance.
+            More boost raises cylinder pressure, knock and exhaust heat. Knock
+            control pulls timing back; without it, or past what the parts
+            take, pistons, rods, the head gasket or the turbo can fail. Real
+            boosted engines use lower compression (about 8.5–10.5:1) and less
+            ignition advance.
           </p>
         </>
       )}

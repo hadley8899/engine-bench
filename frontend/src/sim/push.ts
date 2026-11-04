@@ -216,7 +216,9 @@ export class PushTest {
       retard: this.retard,
       stress: this.stress,
       limit: this.limit,
-      boost: this.count ? this.boost / this.count : 0,
+      boost: this.count
+        ? this.boost / this.count
+        : core.induction.supply - core.conditions.pressure,
     })
     this.torque = this.boost = this.count = 0
     this.knock = this.retard = this.stress = 0

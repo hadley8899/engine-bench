@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { starterBuilds } from '../bench/builds'
+import { realEngines } from '../bench/presets'
 import { EngineCore } from './core'
 import { DynoTest } from './dyno'
 import {
@@ -10,7 +11,7 @@ import {
 } from './schema'
 
 describe('starting builds', () => {
-  for (const build of starterBuilds)
+  for (const build of [...starterBuilds, ...realEngines])
     it(`${build.label} is valid, starts, idles and completes a dyno sweep`, () => {
       const engine = validateEngine(build.engine)
       expect(undersizedForEngine(engine)).toEqual([])

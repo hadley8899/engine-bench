@@ -674,3 +674,31 @@ test('push it raises timing in the worker and reports each step', async ({
     '20.0° (+0.0)',
   )
 })
+
+test('the Golf GTI preset loads as stock, shows its edits and runs', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'VW Golf GTI Mk5 2.0 TFSI' }).click()
+  const note = page.getByTestId('real-engine-note')
+  await expect(note).toContainText('280 Nm at 1,800–4,700 RPM')
+  await expect(note).toContainText('Stock.')
+  await expect(page.getByLabel('Boost target (bar)')).toBeVisible()
+  await expect(
+    page.getByText('Not used: the boost map sets the target while maps are on'),
+  ).toBeVisible()
+  await page.getByLabel('Pistons').click()
+  await page.getByRole('option', { name: 'Forged' }).click()
+  await expect(page.getByTestId('stock-changes')).toContainText(
+    'Pistons: Cast → Forged',
+  )
+  await page
+    .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
+    .click()
+  await page.getByRole('button', { name: 'Start engine' }).click()
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
+    )
+    .toBeGreaterThan(500)
+})
