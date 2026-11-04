@@ -593,6 +593,36 @@
                       "maximum": 400000
                     }
                   }
+                },
+                "intakeCam": {
+                  "minItems": 2,
+                  "maxItems": 16,
+                  "type": "array",
+                  "items": {
+                    "minItems": 2,
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "minimum": -60,
+                      "maximum": 60
+                    }
+                  }
+                },
+                "exhaustCam": {
+                  "minItems": 2,
+                  "maxItems": 16,
+                  "type": "array",
+                  "items": {
+                    "minItems": 2,
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "minimum": -60,
+                      "maximum": 60
+                    }
+                  }
                 }
               },
               "required": [
@@ -735,6 +765,198 @@
                 "intakeArea",
                 "exhaustArea",
                 "intakeClose"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cams": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "intake": {
+                  "type": "object",
+                  "properties": {
+                    "open": {
+                      "type": "number",
+                      "minimum": 300,
+                      "maximum": 400
+                    },
+                    "close": {
+                      "type": "number",
+                      "minimum": 520,
+                      "maximum": 660
+                    },
+                    "lift": {
+                      "type": "number",
+                      "minimum": 0.002,
+                      "maximum": 0.02
+                    }
+                  },
+                  "required": [
+                    "open",
+                    "close",
+                    "lift"
+                  ],
+                  "additionalProperties": false
+                },
+                "exhaust": {
+                  "type": "object",
+                  "properties": {
+                    "open": {
+                      "type": "number",
+                      "minimum": 80,
+                      "maximum": 220
+                    },
+                    "close": {
+                      "type": "number",
+                      "minimum": 330,
+                      "maximum": 430
+                    },
+                    "lift": {
+                      "type": "number",
+                      "minimum": 0.002,
+                      "maximum": 0.02
+                    }
+                  },
+                  "required": [
+                    "open",
+                    "close",
+                    "lift"
+                  ],
+                  "additionalProperties": false
+                },
+                "high": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "rpm": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 15000
+                        },
+                        "intake": {
+                          "type": "object",
+                          "properties": {
+                            "open": {
+                              "type": "number",
+                              "minimum": 300,
+                              "maximum": 400
+                            },
+                            "close": {
+                              "type": "number",
+                              "minimum": 520,
+                              "maximum": 660
+                            },
+                            "lift": {
+                              "type": "number",
+                              "minimum": 0.002,
+                              "maximum": 0.02
+                            }
+                          },
+                          "required": [
+                            "open",
+                            "close",
+                            "lift"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "exhaust": {
+                          "type": "object",
+                          "properties": {
+                            "open": {
+                              "type": "number",
+                              "minimum": 80,
+                              "maximum": 220
+                            },
+                            "close": {
+                              "type": "number",
+                              "minimum": 330,
+                              "maximum": 430
+                            },
+                            "lift": {
+                              "type": "number",
+                              "minimum": 0.002,
+                              "maximum": 0.02
+                            }
+                          },
+                          "required": [
+                            "open",
+                            "close",
+                            "lift"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "intakeArea": {
+                          "type": "number",
+                          "minimum": 0.00001,
+                          "maximum": 0.02
+                        },
+                        "exhaustArea": {
+                          "type": "number",
+                          "minimum": 0.00001,
+                          "maximum": 0.025
+                        }
+                      },
+                      "required": [
+                        "rpm",
+                        "intake",
+                        "exhaust",
+                        "intakeArea",
+                        "exhaustArea"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "phasers": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "intakeRange": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 60
+                        },
+                        "exhaustRange": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 60
+                        },
+                        "rate": {
+                          "type": "number",
+                          "minimum": 20,
+                          "maximum": 1000
+                        }
+                      },
+                      "required": [
+                        "intakeRange",
+                        "exhaustRange",
+                        "rate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "intake",
+                "exhaust",
+                "high",
+                "phasers"
               ],
               "additionalProperties": false
             },

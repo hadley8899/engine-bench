@@ -30,8 +30,12 @@ import { z } from 'zod'
  * unless a limit is exceeded.
  * 1.12.0: an optional two-stage cam (VTEC-style lift change or a cam
  * phaser's switch point). Builds without one are unchanged.
+ * 1.13.0: optional camshaft profiles (valve events and lift), continuous
+ * cam phasers driven by cam maps, a high-lift profile switch, and valve
+ * float and valve-to-piston clearance from the profiles. Builds without
+ * cam profiles keep 1.12.0's fixed events and results.
  */
-export const MODEL_VERSION = 'eb-0d-1.12.0'
+export const MODEL_VERSION = 'eb-0d-1.13.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -46,6 +50,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.9.0',
   'eb-0d-1.10.0',
   'eb-0d-1.11.0',
+  'eb-0d-1.12.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -243,10 +248,20 @@ export const managementSchema = z
     throttle: axis(0, 1),
     /** Turbo boost target (gauge), Pa, by throttle row and RPM column. */
     boost: table(0, 400000),
+    /**
+     * Cam phaser targets, crank degrees of advance (negative retards), by
+     * load row and RPM column. Present only for builds with cam phasers.
+     */
+    intakeCam: table(-60, 60).optional(),
+    exhaustCam: table(-60, 60).optional(),
   })
   .superRefine((m, ctx) => {
-    const check = (name: 'ignition' | 'lambda' | 'boost', rows: number) => {
+    const check = (
+      name: 'ignition' | 'lambda' | 'boost' | 'intakeCam' | 'exhaustCam',
+      rows: number,
+    ) => {
       const t = m[name]
+      if (!t) return
       if (t.length !== rows || t.some((r) => r.length !== m.rpm.length))
         ctx.addIssue({
           code: 'custom',
@@ -257,6 +272,8 @@ export const managementSchema = z
     check('ignition', m.load.length)
     check('lambda', m.load.length)
     check('boost', m.throttle.length)
+    if (m.intakeCam) check('intakeCam', m.load.length)
+    if (m.exhaustCam) check('exhaustCam', m.load.length)
   })
 export type Management = z.infer<typeof managementSchema>
 /**
@@ -298,6 +315,55 @@ export const camSwitchSchema = z.strictObject({
   intakeClose: z.number().min(550).max(630),
 })
 export type CamSwitch = z.infer<typeof camSwitchSchema>
+
+/**
+ * One cam's valve event in crank degrees of the 720° cycle (0 = firing
+ * top dead centre, 360 = overlap top dead centre), at zero phaser angle,
+ * and its peak valve lift. Opening and closing are where lift begins and
+ * ends.
+ */
+const valveEvent = (open: [number, number], close: [number, number]) =>
+  z
+    .strictObject({
+      open: z.number().min(open[0]).max(open[1]),
+      close: z.number().min(close[0]).max(close[1]),
+      lift: z.number().min(0.002).max(0.02),
+    })
+export const intakeEventSchema = valveEvent([300, 400], [520, 660])
+export const exhaustEventSchema = valveEvent([80, 220], [330, 430])
+export type ValveEvent = z.infer<typeof intakeEventSchema>
+/**
+ * Camshaft profiles. The build's intake and exhaust areas become the flow
+ * area at full lift; lift below a quarter of the valve diameter limits it.
+ */
+export const camsSchema = z.strictObject({
+  intake: intakeEventSchema,
+  exhaust: exhaustEventSchema,
+  /** A high-lift profile above a switch speed (VTEC), with 150 RPM of hysteresis. */
+  high: z
+    .strictObject({
+      rpm: z.number().int().min(1000).max(15000),
+      intake: intakeEventSchema,
+      exhaust: exhaustEventSchema,
+      /** Flow areas at full lift on the high profile, m². */
+      intakeArea: z.number().min(0.00001).max(0.02),
+      exhaustArea: z.number().min(0.00001).max(0.025),
+    })
+    .nullable(),
+  /**
+   * Continuous phasers: the cam maps set targets within these ranges
+   * (crank degrees each way) and the phasers follow at this rate.
+   */
+  phasers: z
+    .strictObject({
+      intakeRange: z.number().min(0).max(60),
+      exhaustRange: z.number().min(0).max(60),
+      /** Crank degrees per second. */
+      rate: z.number().min(20).max(1000),
+    })
+    .nullable(),
+})
+export type Cams = z.infer<typeof camsSchema>
 export const stockParts: Parts = {
   pistons: 'cast',
   rods: 'stock',
@@ -351,6 +417,8 @@ export const engineSchema = z.strictObject({
   parts: partsSchema.default(stockParts),
   // Builds saved before 1.12.0 have a single cam profile.
   camSwitch: camSwitchSchema.nullable().default(null),
+  // Builds saved before 1.13.0 have fixed valve events.
+  cams: camsSchema.nullable().default(null),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -412,6 +480,10 @@ export function validateEngine(value: unknown): EngineDefinition {
     throw new Error(
       `Connecting rod length must be at least ${MIN_ROD_STROKE} × stroke.`,
     )
+  if (e.cams && e.camSwitch)
+    throw new Error(
+      'A build with cam profiles uses their high-lift switch, not the two-stage cam.',
+    )
   return e
 }
 export function validateProcedure(p: Procedure, e: EngineDefinition) {
@@ -453,6 +525,7 @@ export const roadEngine: EngineDefinition = {
   fuelSupply: { injectorFlow: 240, maxDuty: 0.85, pumpFlow: 110 },
   parts: stockParts,
   camSwitch: null,
+  cams: null,
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {
@@ -552,6 +625,12 @@ export function flatMaps(e: EngineDefinition): Management {
       throttle.length,
       e.induction.kind === 'turbo' ? e.induction.boostTarget : 0,
     ).map((r) => r.slice(0, 16)),
+    ...(e.cams?.phasers
+      ? {
+          intakeCam: fill(load.length, 0).map((r) => r.slice(0, 16)),
+          exhaustCam: fill(load.length, 0).map((r) => r.slice(0, 16)),
+        }
+      : {}),
   }
 }
 /** Bilinear lookup, held flat beyond the axes. */

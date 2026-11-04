@@ -21,6 +21,7 @@ import type { InductionTelemetry } from './induction'
 import { FUELS, FuelDelivery, LEAN_MISFIRE, RICH_MISFIRE } from './fuel'
 import { BurnedGas, FREEZE } from './chemistry'
 import { partsInertia, Stress, VALVE_SPRINGS } from './parts'
+import { clearanceRatio, emptyEvents, valveEvents } from './cams'
 import type { StressTelemetry } from './parts'
 import type { FuelTelemetry } from './fuel'
 import {
@@ -135,6 +136,8 @@ export type EcuTelemetry = {
   advance: number
   /** Two-stage cam in use: which profile is engaged, or null without one. */
   cam: 'low' | 'high' | null
+  /** Cam phaser angles, crank degrees of advance, or null without phasers. */
+  camPhase: { intake: number; exhaust: number } | null
   /** Commanded λ. */
   lambda: number
   /** Turbo boost target (gauge), Pa, or null without a turbo. */
@@ -301,6 +304,16 @@ export class EngineCore {
   readonly stress: Stress
   /** The second cam profile is engaged. */
   highCam = false
+  /** Cam phaser angles and their targets, crank degrees of advance. */
+  intakePhase = 0
+  exhaustPhase = 0
+  private intakeTarget = 0
+  private exhaustTarget = 0
+  /** Valve events in use this step. */
+  private valves = emptyEvents()
+  /** Phases the valve-to-piston clearance was last evaluated at (NaN: never). */
+  private clearancePhase = [NaN, NaN, 0]
+  private clearance = 0
   private crowns = [0, 0, 0, 0]
   private knocks = [0, 0, 0, 0]
 
@@ -451,7 +464,12 @@ export class EngineCore {
     core.induction.adopt(previous.induction)
     core.stress.adopt(previous.stress)
     core.boostBase = previous.boostBase
-    core.highCam = previous.highCam && !!engine.camSwitch
+    core.highCam =
+      previous.highCam && !!(engine.camSwitch || engine.cams?.high)
+    if (engine.cams?.phasers) {
+      core.intakePhase = previous.intakePhase
+      core.exhaustPhase = previous.exhaustPhase
+    }
     if (engine.induction.kind === 'turbo' && !engine.management)
       core.boostBase = engine.induction.boostTarget
     core.fuel.adopt(previous.fuel)
@@ -544,13 +562,9 @@ export class EngineCore {
         )
       : 0
     const throttle = Math.max(this.controls.throttle, idle)
-    const camSwitch = e.camSwitch
-    if (camSwitch)
-      this.highCam = this.highCam
-        ? rpm >= camSwitch.rpm - 150
-        : rpm >= camSwitch.rpm
-    const cam = camSwitch && this.highCam ? camSwitch : e
-    const intakeClose = cam.intakeClose
+    const switchRpm = e.cams ? e.cams.high?.rpm : e.camSwitch?.rpm
+    if (switchRpm)
+      this.highCam = this.highCam ? rpm >= switchRpm - 150 : rpm >= switchRpm
     const induction = this.induction
     const maps = e.management
     // The ECU updates its tables at 3 kHz, and on a new core's first step.
@@ -579,7 +593,40 @@ export class EngineCore {
           this.controls.throttle,
           rpm,
         )
+      const phasers = e.cams?.phasers
+      if (phasers && maps.intakeCam && maps.exhaustCam) {
+        this.intakeTarget = clamp(
+          lookup(maps.load, maps.rpm, maps.intakeCam, this.manifold, rpm),
+          -phasers.intakeRange,
+          phasers.intakeRange,
+        )
+        this.exhaustTarget = clamp(
+          lookup(maps.load, maps.rpm, maps.exhaustCam, this.manifold, rpm),
+          -phasers.exhaustRange,
+          phasers.exhaustRange,
+        )
+      }
     }
+    // Phasers move towards their targets at a limited rate.
+    const phasers = e.cams?.phasers
+    if (phasers) {
+      const step = phasers.rate * this.dt
+      this.intakePhase += clamp(this.intakeTarget - this.intakePhase, -step, step)
+      this.exhaustPhase += clamp(
+        this.exhaustTarget - this.exhaustPhase,
+        -step,
+        step,
+      )
+    }
+    const valves = valveEvents(
+      e,
+      this.highCam,
+      this.intakePhase,
+      this.exhaustPhase,
+      this.valves,
+    )
+    const intakeClose = valves.intakeClose
+    const exhaustClose = valves.exhaustClose
     const turbo = induction.config.kind === 'turbo'
     if (turbo)
       induction.boostTarget = Math.max(
@@ -643,7 +690,8 @@ export class EngineCore {
         const previousDeg = (cyl.phase * 180) / Math.PI
         const intakeClosing =
           previousDeg < intakeClose && deg >= intakeClose
-        const exhaustClosing = previousDeg < 370 && deg >= 370
+        const exhaustClosing =
+          previousDeg < exhaustClose && deg >= exhaustClose
         if (intakeClosing || exhaustClosing) valveSeats++
         if (exhaustClosing) cyl.thermal.closeExhaust(this.time)
         if (intakeClosing) this.stress.closeCycle(i)
@@ -667,14 +715,28 @@ export class EngineCore {
         const outflowEnthalpy =
           capacity * internalEnergy(temperature) + moles * R * temperature
         const heldPerMass = cyl.held / cyl.mass
+        // Flow area follows lift until the curtain reaches full flow.
         const inlet =
-          deg >= 350 && deg < intakeClose
-            ? Math.sin((Math.PI * (deg - 350)) / (intakeClose - 350)) *
-              cam.intakeArea
+          deg >= valves.intakeOpen && deg < intakeClose
+            ? Math.min(
+                1,
+                valves.intakeRatio *
+                  Math.sin(
+                    (Math.PI * (deg - valves.intakeOpen)) /
+                      (intakeClose - valves.intakeOpen),
+                  ),
+              ) * valves.intakeArea
             : 0
         const exhaust =
-          deg >= 145 && deg < 370
-            ? Math.sin((Math.PI * (deg - 145)) / 225) * cam.exhaustArea
+          deg >= valves.exhaustOpen && deg < exhaustClose
+            ? Math.min(
+                1,
+                valves.exhaustRatio *
+                  Math.sin(
+                    (Math.PI * (deg - valves.exhaustOpen)) /
+                      (exhaustClose - valves.exhaustOpen),
+                  ),
+              ) * valves.exhaustArea
             : 0
         // Enthalpy transport across each open valve; reverse flow is supported.
         if (inlet > 0) {
@@ -1054,6 +1116,18 @@ export class EngineCore {
         this.crowns[i] = cyl.thermal.crown
         this.knocks[i] = cyl.knockIntensity
       }
+      // Clearance changes only with the profile and phasers.
+      if (
+        e.cams &&
+        (Math.abs(this.clearancePhase[0] - this.intakePhase) > 0.1 ||
+          !(Math.abs(this.clearancePhase[1] - this.exhaustPhase) <= 0.1) ||
+          this.clearancePhase[2] !== Number(this.highCam))
+      ) {
+        this.clearance = clearanceRatio(e, valves)
+        this.clearancePhase[0] = this.intakePhase
+        this.clearancePhase[1] = this.exhaustPhase
+        this.clearancePhase[2] = Number(this.highCam)
+      }
       this.stress.update(
         THERMAL_INTERVAL * this.dt,
         this.time,
@@ -1063,6 +1137,7 @@ export class EngineCore {
         omegaToRpm(induction.shaftOmega),
         induction.exhaustTemperature,
         this.controls.indestructible ?? false,
+        this.clearance,
       )
     }
     if (this.stress.failure) this.warning = this.stress.failure.title
@@ -1258,7 +1333,15 @@ export class EngineCore {
       ecu: {
         maps: !!this.engine.management,
         advance: this.sparkAdvance,
-        cam: this.engine.camSwitch ? (this.highCam ? 'high' : 'low') : null,
+        cam:
+          this.engine.camSwitch || this.engine.cams?.high
+            ? this.highCam
+              ? 'high'
+              : 'low'
+            : null,
+        camPhase: this.engine.cams?.phasers
+          ? { intake: this.intakePhase, exhaust: this.exhaustPhase }
+          : null,
         lambda: this.targetLambda,
         boostTarget:
           this.induction.config.kind === 'turbo'

@@ -4,14 +4,14 @@ Updated: 3 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0). Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
 3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
-4. Stage 8, camshafts and valve timing (user decision, 4 November 2026: next after the famous inline-fours).
+4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
 5. Stage 9, a 3D overhaul. It is independent of the simulation and may run alongside the other stages.
 
 Two-stroke engines (Stage 10) move behind these, followed by other layouts (Stage 11). A UI revision (Stage 12) follows once those features are in place (user decision, 3 November 2026).
@@ -309,27 +309,27 @@ The user wants famous engines they recognise, starting with the 2.0 TFSI from th
 
 Acceptance: each released preset has provenance and model limitations, reproduces its sourced curve within a recorded deviation, and runs through the editor, animation, audio, dyno and persistence. The interface never calls a preset an exact replica.
 
-### 8. Camshafts and valve timing
+### 8. Camshafts and valve timing — complete
 
 Requested by the user on 4 November 2026, after the famous inline-fours. Cams are among the most common tuning changes, and today's model fixes valve events: intake opens at 350°, the exhaust runs from 145° to 370°, and only intake closing, valve areas and model 1.12.0's two-stage switch are editable. This stage makes the camshafts a real part of the engine.
 
 Valve events and lift:
 
-- [ ] Replace the fixed events with editable intake and exhaust cam profiles: opening and closing angles (or duration and centreline), peak lift and a lift curve. Flow area comes from lift through a discharge coefficient and the valve curtain area, capped by the port. Builds saved earlier keep their exact events and results.
-- [ ] Show valve overlap, lobe separation and each cam's centreline. Overlap must have its modelled effects: scavenging with tuned exhaust pulses, reversion and residual at low speed, a rough idle that is heard and seen in idle speed, and boosted engines blowing charge through.
+- [x] Replace the fixed events with editable intake and exhaust cam profiles: opening and closing angles (or duration and centreline), peak lift and a lift curve. Flow area comes from lift through a discharge coefficient and the valve curtain area, capped by the port. Builds saved earlier keep their exact events and results. Model 1.13.0: half-sine lift, full flow at a quarter of the valve diameter; fixed events convert to profiles bit for bit.
+- [x] Show valve overlap, lobe separation and each cam's centreline. Overlap must have its modelled effects: scavenging with tuned exhaust pulses, reversion and residual at low speed, a rough idle that is heard and seen in idle speed, and boosted engines blowing charge through. Reversion, residual, the rough idle and blow-through come from the valve flows. Decision: tuned exhaust-pulse scavenging is not represented, because the exhaust is a lumped back pressure; it is recorded as a known gap.
 
 Variable valve timing:
 
-- [ ] Add continuous intake and exhaust cam phasers (VANOS, VTC, AVCS, VVT-i style), driven by an ECU cam map by RPM and load, with phaser range and response rate. Show the live cam angle on the bench.
-- [ ] Keep the two-stage lift switch (VTEC) as a profile change that can combine with phasing (i-VTEC).
-- [ ] Revisit the presets that have variable timing: the Golf AXX's 42° intake phasing, the SR20DET's VTC, and continuous i-VTEC phasing for the K20A. Recalibrate and record new deviations.
+- [x] Add continuous intake and exhaust cam phasers (VANOS, VTC, AVCS, VVT-i style), driven by an ECU cam map by RPM and load, with phaser range and response rate. Show the live cam angle on the bench. The cam maps are Intake cam and Exhaust cam tabs in Engine maps.
+- [x] Keep the two-stage lift switch (VTEC) as a profile change that can combine with phasing (i-VTEC).
+- [x] Revisit the presets that have variable timing: the Golf AXX's 42° intake phasing, the SR20DET's VTC, and continuous i-VTEC phasing for the K20A. Recalibrate and record new deviations. Golf RMS 9 → 5 Nm, K20A 11 → 3 Nm, SR20 within 2 Nm of both rated points; `docs/PRESETS.md`.
 
 Parts and limits:
 
-- [ ] Add cam parts to the parts list: stock, fast-road, and race profiles with more lift and duration. Their trade-offs (top end against idle and low-speed torque) come from the model, not from fixed multipliers.
-- [ ] Tie lift and springs to the existing limits: more lift and acceleration lower the valve-float speed unless springs are uprated. Add a valve-to-piston clearance estimate from lift, timing and compression, so aggressive cams with advanced timing can cause contact.
-- [ ] Animate the 3D valvetrain from the same cam profiles and live phasing (with Stage 9).
-- [ ] Document the cam, flow and phasing models, their sources and limits in `docs/SIMULATION.md`; add tests for flow against lift, overlap effects, phasing and preset stability.
+- [x] Add cam parts to the parts list: stock, fast-road, and race profiles with more lift and duration. Their trade-offs (top end against idle and low-speed torque) come from the model, not from fixed multipliers. Decision: they are Mild, Fast road and Race grades in the Camshaft section, fitted around each cam's own centreline; a preset's own profile is its stock cam.
+- [x] Tie lift and springs to the existing limits: more lift and acceleration lower the valve-float speed unless springs are uprated. Add a valve-to-piston clearance estimate from lift, timing and compression, so aggressive cams with advanced timing can cause contact. Valve clearance is a new stress limit and failure.
+- [x] Animate the 3D valvetrain from the same cam profiles and live phasing (with Stage 9). Valves follow the live events, including VTEC and phasing; the cams turn with their phase and their lobes are drawn from the profiles.
+- [x] Document the cam, flow and phasing models, their sources and limits in `docs/SIMULATION.md`; add tests for flow against lift, overlap effects, phasing and preset stability.
 
 Acceptance: earlier builds' results are unchanged. More duration moves torque up the rev range, and more overlap roughens idle and helps a tuned top end. Phasing broadens the torque curve. Presets with variable timing match their sourced curves at least as well as before. A big cam with stock springs floats valves sooner, and contact failures are repeatable.
 

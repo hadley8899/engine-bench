@@ -8,6 +8,7 @@ import {
   RODS,
   VALVE_SPRINGS,
 } from '../sim/parts'
+import { floatFactor } from '../sim/cams'
 import {
   injectors,
   intercoolers,
@@ -67,8 +68,10 @@ const internals: {
     limit: (e, k) =>
       `Float from about ${formatLimit(
         'valveFloat',
-        e.mechanicalLimit * VALVE_SPRINGS[k as Parts['valveSprings']].float,
-      )}.`,
+        e.mechanicalLimit *
+          VALVE_SPRINGS[k as Parts['valveSprings']].float *
+          floatFactor(e),
+      )}${e.cams ? ' with these cams' : ''}.`,
   },
 ]
 

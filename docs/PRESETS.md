@@ -28,6 +28,7 @@ Other sources list the BWA as mechanically the same. Volkswagen's later CCTA/CAE
 | Intercooler | Effectiveness 0.55, 12 kPa drop | Inferred: a modest side-mounted cooler |
 | Full-load mixture | λ 0.93 at 3,500–5,000 RPM and λ 0.88 above, from 150 kPa manifold pressure; λ 1 elsewhere (engine-management maps) | Inferred: typical production enrichment |
 | Ignition | 14° BTDC with knock control | Inferred |
+| Cam phasing (1.13.0) | Intake phaser, 42° range: −20° at 1,000 RPM, +20° at 1,500, +5° at 2,000, 0° from 2,500 (all loads) | Range sourced (1); map calibrated. Profiles are the calibrated fixed events converted exactly |
 | Valve areas, intake closing (585°), runners, burn duration, inertia | As in the file | Inferred; the SSP gives only 42° of intake cam phasing, which the model's fixed timing cannot represent |
 | Rev limit / mechanical limit | 6,800 / 7,200 RPM | Inferred; the published curve runs to 7,000 RPM |
 | Parts | Cast pistons, stock rods, MLS gasket, bolts, stock springs | Inferred from the SSP's description of the production parts (strengthened crank and valve seats, uprated springs relative to the NA FSI, sodium-filled exhaust valves) |
@@ -42,7 +43,7 @@ Steady full load in normal air (the S337_008 curve read at 500 RPM steps, agains
 | Published, Nm | 170 | 239 | 280 | 280 | 280 | 271 | 254 | 236 | 218 |
 | Preset, Nm | 192 | 224 | 283 | 283–287 | 277 | 266 | 253 | 235 | 211 |
 
-The RMS deviation is about 9 Nm. The largest deviations are +22 Nm at 1,000 RPM and −15 Nm at 1,500 RPM, where the model's turbo spools later and its naturally aspirated torque is higher than the real engine's. From 2,000 RPM up, every point is within 7 Nm. A standard 1,500–6,600 RPM sweep reaches 148.6 kW at about 6,070 RPM and 289 Nm at 3,650 RPM; in that sweep the hottest EGT is 921 °C and the highest part stress 92% (turbine inlet). `src/sim/presets.test.ts` holds these points to the recorded tolerances.
+With model 1.13.0's intake phasing the preset makes 172 Nm at 1,000 RPM, 244 at 1,500 and 288 at 2,000; above that it is unchanged. The RMS deviation fell from about 9 to 5 Nm, and every point is within 8 Nm. Before phasing (1.11.0), the largest deviations were +22 Nm at 1,000 RPM and −15 Nm at 1,500, where the model's turbo spools later and its naturally aspirated torque is higher. A standard 1,500–6,600 RPM sweep reaches 148.6 kW at about 6,070 RPM and 289 Nm at 3,650 RPM; in that sweep the hottest EGT is 921 °C and the highest part stress 92% (turbine inlet). `src/sim/presets.test.ts` holds these points to the recorded tolerances.
 
 **Known deviation: boost.** At the published 0.9 bar, the model makes about 350–370 Nm instead of 280 Nm, so the preset's boost target is calibrated to 0.6 bar. The model overestimates boosted torque at a given manifold pressure by about 20%. It probably has too little knock-limited spark retard, too little charge heating and too weak residual and back-pressure effects compared with the real K03 at high load. So boost changes on this preset are relative to the model's 0.6 bar, and absolute boost numbers should not be compared with a real car's logs.
 
@@ -64,7 +65,8 @@ Added with model 1.12.0 (4 November 2026). It is the only preset besides the Gol
 | --- | --- | --- |
 | Bore × stroke, compression | 86 × 86 mm, 11.7:1 | Sourced |
 | Rated output | 165 kW at 8,000 RPM, 215 Nm at 6,100 RPM | Sourced |
-| VTEC | High cam from 5,200 RPM: intake area 1,200 mm², exhaust 800 mm², intake closing 615°; low cam 700 mm², 680 mm², 575° | Switch speed calibrated to the curve's crossover; profiles inferred and calibrated |
+| VTEC | High cam from 5,200 RPM: intake area 1,200 mm², exhaust 800 mm², intake closing 615°; low cam 700 mm², 680 mm², 575° | Switch speed calibrated to the curve's crossover; profiles inferred and calibrated. Since 1.13.0 these are cam profiles converted exactly |
+| i-VTC (1.13.0) | Intake phaser, 50° range: −32° at 1,500 RPM, −15° at 2,500, 0° at 3,500, −25° at 4,500 around the changeover, +5° from 6,000 (all loads) | Range inferred; map calibrated to the curve |
 | Rod length | 139 mm | Inferred (common figure; not confirmed by a source found) |
 | Ignition | 12° BTDC at 1,500 RPM rising to 24° from 4,000 RPM at full load (map) | Calibrated: limits low-speed knock on RON 98 at 11.7:1 |
 | Mixture | λ 0.92 at 4,000 RPM to 0.88 from 6,000 RPM at full load (map) | Inferred |
@@ -80,7 +82,7 @@ The curve was read from the image, so expect about ±5 Nm of reading error.
 | Honda, Nm | ~160 | ~186 | ~204 | ~187 | ~208 | ~218 | ~210 | ~190 |
 | Preset, Nm | 188 | 192 | 200 | 198 | 207 | 212 | 209 | 192 |
 
-The preset follows the curve's two humps: the low-cam peak, the dip before VTEC and the high-cam peak. Its low-speed torque is too high: +28 Nm at 1,500 RPM, where this model's naturally aspirated breathing stays too good. The dip is shallower than Honda's (+11 Nm at 4,500). A standard sweep gives 162.3 kW at about 8,170 RPM and 213 Nm at about 6,380. Not represented: VTC intake phasing, which this two-stage cam cannot vary continuously.
+With model 1.13.0's intake phasing the preset makes 159, 181, 200, 191, 207, 215, 210 and 192 Nm at those speeds: within 5 Nm everywhere except −5 at 2,500 RPM, and RMS about 3 Nm. Retarding the intake removes 1.12.0's +28 Nm excess at 1,500 RPM and deepens the dip before VTEC. A standard sweep gives 162.3 kW at about 8,170 RPM and 215 Nm at about 6,280. The real i-VTC map is not published, so this phasing is a fit to the curve, not Honda's calibration.
 
 ## Mitsubishi 4G63T, Lancer Evolution VIII
 
@@ -126,12 +128,13 @@ No manufacturer torque curve was found; calibrated to the two rated points.
 | Turbo | T28-sized ball bearing: 54 mm compressor, 0.0006 m² turbine | Inferred; turbine calibrated |
 | Boost | 0.55 bar at 3,000 RPM, 0.58 at 4,800, 0.8 at 6,400 (map) | Calibrated |
 | Mixture | λ 0.92 at 4,000 to 0.86 from 6,000 RPM at full load (map) | Inferred |
-| Cam | One profile | VTC's two-position intake phasing is not represented |
+| Cam | One profile with VTC (1.13.0): the intake phaser advances 20° between 1,500 and 5,000 RPM | VTC sourced (2); its switch speeds and angle inferred |
+| Boost (1.13.0) | 0.45 bar at 3,000 RPM, 0.52 at 4,800, 0.8 at 6,400 (map) | Calibrated, lowered from 1.12.0's 0.55–0.58 because VTC adds mid-range torque |
 | Rev limit / mechanical limit | 7,500 / 8,000 RPM | Inferred |
 
 ### Calibration and deviation
 
-At 4,800 RPM the preset makes 282 Nm against the rated 275 Nm. At 6,400 RPM it makes 277 Nm (186 kW) against 274 Nm (184 kW). Between them it holds 280–284 Nm from 4,000 to 6,400 RPM, the broad plateau the S15 is known for. A standard sweep gives 189.5 kW at about 6,700 RPM and 284 Nm. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
+With VTC (1.13.0) the preset makes 274 Nm at 4,800 RPM against the rated 275 Nm, and 276 Nm (185 kW) at 6,400 RPM against 274 Nm (184 kW). It holds 274–281 Nm from 3,000 to 6,400 RPM, the broad plateau the S15 is known for. A standard sweep gives 189.6 kW at about 6,700 RPM and 281 Nm. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
 
 ## Toyota 4A-GE (16-valve), AE86
 

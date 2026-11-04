@@ -87,7 +87,12 @@ export function MapEditor({
   const [selection, setSelection] = useState<Selection | null>(null)
   const turbo = engine.induction.kind === 'turbo'
   const carburettor = engine.fuelSystem.kind === 'carburettor'
-  const shown: MapTable = table === 'boost' && !turbo ? 'ignition' : table
+  const camMaps = !!maps?.intakeCam && !!maps?.exhaustCam
+  const shown: MapTable =
+    (table === 'boost' && !turbo) ||
+    ((table === 'intakeCam' || table === 'exhaustCam') && !camMaps)
+      ? 'ignition'
+      : table
   const spec = MAP_TABLES[shown]
   const rows = maps ? (shown === 'boost' ? maps.throttle : maps.load) : []
   const rowAxis = shown === 'boost' ? 'throttle' : 'load'
@@ -96,7 +101,7 @@ export function MapEditor({
   const setCell = (r: number, c: number, v: number) =>
     update((m) => ({
       ...m,
-      [shown]: m[shown].map((row, i) =>
+      [shown]: m[shown]!.map((row, i) =>
         i === r ? row.map((x, j) => (j === c ? v / spec.scale : x)) : row,
       ),
     }))
@@ -109,7 +114,7 @@ export function MapEditor({
   const adjust = (delta: number) =>
     update((m) => ({
       ...m,
-      [shown]: m[shown].map((row, r) =>
+      [shown]: m[shown]!.map((row, r) =>
         row.map((x, c) =>
           !selection || inSelection(r, c)
             ? Math.min(
@@ -135,7 +140,7 @@ export function MapEditor({
       : null
   const liveValue =
     maps && live
-      ? lookup(rows, maps.rpm, maps[shown], liveRow, live.rpm) * spec.scale
+      ? lookup(rows, maps.rpm, maps[shown]!, liveRow, live.rpm) * spec.scale
       : null
   const rowScale = shown === 'boost' ? 100 : 0.001
   const rowLimits = shown === 'boost' ? [0, 100] : [10, 500]
@@ -157,6 +162,8 @@ export function MapEditor({
             <Tab value="ignition" label="Ignition" />
             <Tab value="lambda" label="Target λ" />
             {turbo && <Tab value="boost" label="Boost" />}
+            {camMaps && <Tab value="intakeCam" label="Intake cam" />}
+            {camMaps && <Tab value="exhaustCam" label="Exhaust cam" />}
           </Tabs>
           <p className="cranking-note">
             {spec.help}
@@ -221,7 +228,7 @@ export function MapEditor({
                         />
                       </th>
                       {maps.rpm.map((rpm, c) => {
-                        const v = maps[shown][r][c] * spec.scale
+                        const v = maps[shown]![r][c] * spec.scale
                         const share = (v - spec.min) / (spec.max - spec.min)
                         return (
                           <td
@@ -281,7 +288,7 @@ export function MapEditor({
                 const single = singleValue(engine, shown)
                 update((m) => ({
                   ...m,
-                  [shown]: m[shown].map((row) => row.map(() => single)),
+                  [shown]: m[shown]!.map((row) => row.map(() => single)),
                 }))
                 setSelection(null)
               }}

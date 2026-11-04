@@ -1,4 +1,5 @@
-import type { FuelSupply, Induction } from '../sim/schema'
+import type { EngineDefinition, FuelSupply, Induction } from '../sim/schema'
+import { valveDiameter } from '../sim/cams'
 
 type Turbo = Extract<Induction, { kind: 'turbo' }>
 type Intercooler = Turbo['intercooler']
@@ -107,4 +108,56 @@ export function matchIntercooler(i: Intercooler) {
       p.value.effectiveness === i.effectiveness &&
       p.value.pressureDrop === i.pressureDrop,
   )
+}
+
+/**
+ * Cam grades: durations (crank degrees, opening to closing) and peak lift
+ * as a share of valve diameter. Fitting one keeps each cam's centreline.
+ */
+export const camGrades: {
+  label: string
+  note: string
+  intake: number
+  exhaust: number
+  lift: number
+}[] = [
+  { label: 'Mild', note: 'Smooth idle and strong low-speed torque.', intake: 230, exhaust: 225, lift: 0.27 },
+  { label: 'Fast road', note: 'More top end; a little lumpy at idle.', intake: 260, exhaust: 255, lift: 0.32 },
+  { label: 'Race', note: 'Top end only: weak below mid-range, a rough idle and harder on springs.', intake: 290, exhaust: 285, lift: 0.37 },
+]
+export function applyCamGrade(e: EngineDefinition, grade: (typeof camGrades)[number]) {
+  const cams = e.cams
+  if (!cams) return e
+  const fit = (
+    event: { open: number; close: number },
+    duration: number,
+    area: number,
+    [openMin, openMax]: [number, number],
+    [closeMin, closeMax]: [number, number],
+  ) => {
+    const centre = (event.open + event.close) / 2
+    return {
+      open: Math.min(openMax, Math.max(openMin, Math.round(centre - duration / 2))),
+      close: Math.min(closeMax, Math.max(closeMin, Math.round(centre + duration / 2))),
+      lift:
+        Math.round(
+          Math.min(0.02, Math.max(0.002, grade.lift * valveDiameter(area))) * 1e4,
+        ) / 1e4,
+    }
+  }
+  return {
+    ...e,
+    cams: {
+      ...cams,
+      intake: fit(cams.intake, grade.intake, e.intakeArea, [300, 400], [520, 660]),
+      exhaust: fit(cams.exhaust, grade.exhaust, e.exhaustArea, [80, 220], [330, 430]),
+    },
+  }
+}
+export function matchCamGrade(e: EngineDefinition) {
+  return camGrades.findIndex((g) => {
+    const fitted = applyCamGrade(e, g).cams
+    return JSON.stringify(fitted?.intake) === JSON.stringify(e.cams?.intake) &&
+      JSON.stringify(fitted?.exhaust) === JSON.stringify(e.cams?.exhaust)
+  })
 }

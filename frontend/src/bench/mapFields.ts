@@ -1,6 +1,11 @@
 import type { EngineDefinition, Management } from '../sim/schema'
 
-export type MapTable = 'ignition' | 'lambda' | 'boost'
+export type MapTable =
+  | 'ignition'
+  | 'lambda'
+  | 'boost'
+  | 'intakeCam'
+  | 'exhaustCam'
 
 /** Display units and limits for each table; values are stored in SI. */
 export const MAP_TABLES: Record<
@@ -52,6 +57,28 @@ export const MAP_TABLES: Record<
     help: 'Turbo wastegate target (gauge) by RPM and driver throttle.',
     hue: (s) => 200 - 200 * Math.min(1, s * 2),
   },
+  intakeCam: {
+    label: 'Intake cam',
+    unit: '°',
+    scale: 1,
+    min: -60,
+    max: 60,
+    step: 1,
+    digits: 0,
+    help: 'Intake phaser target in crank degrees of advance (negative retards), by RPM and manifold pressure. Advancing it adds overlap and closes the intake earlier; the phaser range caps it.',
+    hue: (s) => 200 - 200 * s,
+  },
+  exhaustCam: {
+    label: 'Exhaust cam',
+    unit: '°',
+    scale: 1,
+    min: -60,
+    max: 60,
+    step: 1,
+    digits: 0,
+    help: 'Exhaust phaser target in crank degrees of advance (negative retards, adding overlap), by RPM and manifold pressure; the phaser range caps it.',
+    hue: (s) => 200 - 200 * s,
+  },
 }
 
 /** Index of the breakpoint closest to a value. */
@@ -66,6 +93,7 @@ export function nearest(axis: number[], value: number) {
 export function singleValue(e: EngineDefinition, table: MapTable) {
   if (table === 'ignition') return e.ignitionAdvance
   if (table === 'lambda') return e.lambda
+  if (table === 'intakeCam' || table === 'exhaustCam') return 0
   return e.induction.kind === 'turbo' ? e.induction.boostTarget : 0
 }
 
@@ -78,9 +106,16 @@ export function describeMaps(a: Management | null, b: Management | null) {
   for (const axis of ['rpm', 'load', 'throttle'] as const)
     if (JSON.stringify(a[axis]) !== JSON.stringify(b[axis]))
       changes.push(`Map ${axis === 'rpm' ? 'RPM' : axis} breakpoints changed`)
-  for (const t of ['ignition', 'lambda', 'boost'] as const) {
-    const cells = b[t].flat()
-    const before = a[t].flat()
+  for (const t of [
+    'ignition',
+    'lambda',
+    'boost',
+    'intakeCam',
+    'exhaustCam',
+  ] as const) {
+    if (!a[t] && !b[t]) continue
+    const cells = b[t]?.flat() ?? []
+    const before = a[t]?.flat() ?? []
     if (cells.length !== before.length) {
       changes.push(`${MAP_TABLES[t].label} map resized`)
       continue

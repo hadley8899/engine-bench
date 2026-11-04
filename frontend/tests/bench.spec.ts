@@ -720,3 +720,34 @@ test('the K20A preset switches to its VTEC high cam when revved', async ({
   await expect(page.getByTestId('high-cam')).toBeVisible({ timeout: 10000 })
   await page.keyboard.up('Space')
 })
+
+test('cam profiles convert exactly, take a race grade and phase from the maps', async ({
+  page,
+}) => {
+  await page.goto('/')
+  const editor = page.getByTestId('cam-editor')
+  await editor.getByTestId('use-cam-profiles').click()
+  await expect(page.getByTestId('cam-summary')).toContainText(
+    'Duration 240° intake, 225° exhaust',
+  )
+  await expect(page.getByTestId('cam-summary')).toContainText('overlap 20°')
+  await editor.getByLabel('Camshafts').click()
+  await page.getByRole('option', { name: 'Race' }).click()
+  await expect(page.getByTestId('cam-summary')).toContainText(
+    'Duration 290° intake, 285° exhaust',
+  )
+  await editor.getByLabel('Variable cam timing (phasers)').check()
+  await expect(page.getByRole('tab', { name: 'Intake cam' })).toBeVisible()
+  await page
+    .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
+    .click()
+  await page.getByRole('button', { name: 'Start engine' }).click()
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
+    )
+    .toBeGreaterThan(500)
+  await expect(page.getByTestId('cam-strip')).toContainText('OVERLAP')
+  await page.getByTestId('cam-strip').screenshot({ path: 'test-results/cam-strip.png' })
+  await page.locator('.bench-stage').screenshot({ path: 'test-results/cam-cutaway.png' })
+})

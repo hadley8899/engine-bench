@@ -14,6 +14,7 @@ import {
   stockParts,
 } from '../sim/schema'
 import type { EngineDefinition, Management } from '../sim/schema'
+import { camsFromEvents } from '../sim/cams'
 
 export type RealEngine = {
   label: string
@@ -119,6 +120,35 @@ function shapedMaps(
       ),
     )
   return m
+}
+
+/**
+ * Cam profiles reproducing the build's calibrated events, plus an intake
+ * phaser whose map follows an RPM curve (the same at every load). The
+ * exhaust cam is fixed.
+ */
+function phased(
+  e: EngineDefinition,
+  maps: Management,
+  range: number,
+  intake: [number, number][],
+): EngineDefinition {
+  const cams = {
+    ...camsFromEvents(e),
+    phasers: { intakeRange: range, exhaustRange: 0, rate: 200 },
+  }
+  return {
+    ...e,
+    camSwitch: null,
+    cams,
+    management: {
+      ...maps,
+      intakeCam: maps.load.map(() =>
+        maps.rpm.map((r) => Math.round(byRpm(intake, r))),
+      ),
+      exhaustCam: maps.load.map(() => maps.rpm.map(() => 0)),
+    },
+  }
 }
 
 // Honda K20A (Civic Type R FD2, 2007): Honda's archived catalogue.
@@ -266,16 +296,25 @@ export const realEngines: RealEngine[] = [
     description:
       'The 2005 Golf GTI’s EA113 2.0 TFSI (AXX): turbocharged direct injection on RON 98, with a K03-sized turbo that runs out of breath above 4,700 RPM. Push the boost and see what the cast pistons take.',
     rated: '147 kW at 5,700 RPM · 280 Nm at 1,800–4,700 RPM (VW)',
-    engine: { ...axx, management: axxMaps },
+    // 42° of intake phasing (SSP 337): retarded at idle speeds, advanced
+    // while the turbo spools, then held where the ECU limits torque.
+    engine: phased(axx, axxMaps, 42, [
+      [1000, -20],
+      [1500, 20],
+      [2000, 5],
+      [2500, 0],
+    ]),
   },
   {
     label: 'Honda Civic Type R FD2 K20A',
     description:
       'Honda’s high-compression K20A: 225 PS without a turbo, an 8,400 RPM redline and VTEC switching to a high-lift cam at 5,200 RPM. Watch the torque dip, then come back hard.',
     rated: '165 kW at 8,000 RPM · 215 Nm at 6,100 RPM (Honda)',
-    engine: {
-      ...k20a,
-      management: shapedMaps(k20a, {
+    // i-VTEC: VTEC's high-lift profile plus 50° of continuous intake
+    // phasing, retarded at low speed and around the changeover.
+    engine: phased(
+      k20a,
+      shapedMaps(k20a, {
         ignition: [
           [1500, 12],
           [3000, 20],
@@ -286,7 +325,20 @@ export const realEngines: RealEngine[] = [
           [6000, 0.88],
         ],
       }),
-    },
+      50,
+      [
+        [1500, -32],
+        [2500, -15],
+        [3500, 0],
+        [4000, -5],
+        [4500, -25],
+        [5000, -10],
+        [5500, 0],
+        [6000, 5],
+        [7000, 5],
+        [8000, 0],
+      ],
+    ),
   },
   {
     label: 'Mitsubishi Evo VIII 4G63T',
@@ -314,12 +366,13 @@ export const realEngines: RealEngine[] = [
     description:
       'The S15 Silvia Spec-R’s SR20DET: a ball-bearing T28-sized turbo and a broad, flat torque curve from 4,000 RPM. A drifting icon.',
     rated: '184 kW at 6,400 RPM · 275 Nm at 4,800 RPM (Nissan)',
-    engine: {
-      ...sr20,
-      management: shapedMaps(sr20, {
+    // VTC: the intake cam advances 20° between 1,500 and 5,000 RPM.
+    engine: phased(
+      sr20,
+      shapedMaps(sr20, {
         boost: [
-          [3000, 55000],
-          [4800, 58000],
+          [3000, 45000],
+          [4800, 52000],
           [6400, 80000],
         ],
         lambda: [
@@ -327,7 +380,14 @@ export const realEngines: RealEngine[] = [
           [6000, 0.86],
         ],
       }),
-    },
+      20,
+      [
+        [1400, 0],
+        [1500, 20],
+        [5000, 20],
+        [5100, 0],
+      ],
+    ),
   },
   {
     label: 'Toyota AE86 4A-GE',

@@ -320,6 +320,23 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
   - a push step that fails before its measurement window now reports the boost at the failure instead of 0.
 - Build passes; lint passes with the existing warning.
 
+## Model 1.13.0: camshafts and valve timing (4 November)
+
+- Compatibility: all 165 earlier tests pass unchanged, including every preset curve and the bit-identity checks. Converting the Road engine's fixed events to profiles gives bit-identical torque.
+- Trends (Node, Road engine, held at full load):
+  - race grade against converted stock: 145.5 against 173.4 Nm at 2,000 RPM and 172.9 against 149.8 at 6,500;
+  - idle-speed spread 65 against 23 RPM;
+  - phasing (+30° below 3,000 RPM, −15° above) raises torque at both 2,000 and 6,500 RPM;
+  - phasers move at 200°/s (20° after 0.1 s);
+  - valve-float factor with stock springs: 0.99 mild, 0.90 fast road, 0.71 race; 1.02 for race on uprated springs;
+  - a race cam at 11:1 compression is clear unphased, but advancing its intake 60° fails Valve clearance repeatably.
+- Presets recalibrated with phasing (details in `docs/PRESETS.md`): Golf RMS 9 → 5 Nm (1,000 RPM now 172 against 170); K20A 11 → 3 Nm (1,500 RPM now 159 against 160); SR20 within 2 Nm of both rated points. Highest sweep stress 84–92%.
+- Vitest: 171 passed (new `src/sim/cams.test.ts`).
+- Chromium: a new case converts the Road engine to profiles (240/225° duration, 20° overlap), fits the race grade (290/285°) and turns on phasers. The Intake cam map tab and the bench's cam strip then appear, and the engine runs. The K20A HIGH CAM case still passes. Screenshots taken in that run show the cutaway rendering, and the race grade on the Road engine at 75° of overlap and 91% of valve clearance.
+- A stale hot-reloaded module in a long-running dev server made the editor fail to render (`valveDiameter is not defined`). A fresh server served the correct module and both cases passed. This was a development-server artefact, not a code fault, and production builds are unaffected.
+- Benchmark (Node): medians 0.38 ms at 1,000–7,500 RPM and 0.69 ms at 8,400, within noise of 1.12.0, against a 2.67 ms budget.
+- Build passes; lint passes with the existing warning.
+
 ## Model 1.12.0 and Stage 7's inline-fours (4 November)
 
 - Two-stage cam: a new `core.test.ts` case checks that the cam is low below its switch speed, gives torque identical to the build without a cam there, gives more torque on the high cam above it, and drops back only 150 RPM below the switch. Builds without a cam switch are unchanged by construction: the default is null and the core uses the base valve areas and closing.

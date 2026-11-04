@@ -6,6 +6,7 @@
  */
 import type { EngineDefinition, Parts } from './schema'
 import { rpmToOmega } from './physics'
+import { floatFactor } from './cams'
 
 /** Piston assembly (piston, pin, rings) mass per bore³, kg/m³: 0.47 kg at 86 mm. */
 const PISTON_DENSITY = 740
@@ -169,6 +170,7 @@ export type LimitKey =
   | 'knock'
   | 'headGasket'
   | 'valveFloat'
+  | 'valveClearance'
   | 'turboSpeed'
   | 'turbineTemperature'
 export type StressLimit = {
@@ -203,6 +205,7 @@ const LABELS: Record<LimitKey, string> = {
   knock: 'Piston knock',
   headGasket: 'Head gasket',
   valveFloat: 'Valve float',
+  valveClearance: 'Valve clearance',
   turboSpeed: 'Turbo speed',
   turbineTemperature: 'Turbine inlet',
 }
@@ -213,6 +216,7 @@ const HOLD: Record<LimitKey, number> = {
   knock: 3,
   headGasket: 1.5,
   valveFloat: 1,
+  valveClearance: 0.1,
   turboSpeed: 2,
   turbineTemperature: 5,
 }
@@ -223,6 +227,7 @@ const PER_CYLINDER: Record<LimitKey, boolean> = {
   knock: true,
   headGasket: true,
   valveFloat: false,
+  valveClearance: false,
   turboSpeed: false,
   turbineTemperature: false,
 }
@@ -242,6 +247,8 @@ export function formatLimit(key: LimitKey, value: number) {
     case 'valveFloat':
     case 'turboSpeed':
       return `${Math.round(value).toLocaleString('en-GB')} RPM`
+    case 'valveClearance':
+      return `${Math.round(value * 100)}% of the room`
   }
 }
 
@@ -294,7 +301,12 @@ export class Stress {
       headGasket:
         HEAD_GASKETS[parts.headGasket].clamp *
         HEAD_FASTENERS[parts.headFasteners].factor,
-      valveFloat: e.mechanicalLimit * VALVE_SPRINGS[parts.valveSprings].float,
+      // Cam profiles more aggressive than the reference float sooner.
+      valveFloat:
+        e.mechanicalLimit *
+        VALVE_SPRINGS[parts.valveSprings].float *
+        floatFactor(e),
+      valveClearance: 1,
       turboSpeed:
         induction.kind === 'turbo' || induction.kind === 'centrifugal'
           ? induction.maxShaftRpm * BURST_MARGIN
@@ -304,6 +316,7 @@ export class Stress {
     this.keys = (Object.keys(LABELS) as LimitKey[]).filter(
       (k) =>
         (k !== 'turboSpeed' || this.limit.turboSpeed > 0) &&
+        (k !== 'valveClearance' || !!e.cams) &&
         (k !== 'turbineTemperature' || induction.kind === 'turbo'),
     )
     for (const k of this.keys) {
@@ -335,6 +348,7 @@ export class Stress {
     shaftRpm: number,
     turbineTemperature: number,
     indestructible: boolean,
+    clearance = 0,
   ) {
     // The loads at the moment of failure stay on show.
     if (this.failure) return this.failure
@@ -369,6 +383,9 @@ export class Stress {
             break
           case 'turbineTemperature':
             v = turbineTemperature
+            break
+          case 'valveClearance':
+            v = clearance
             break
         }
         values[i] = v
@@ -464,6 +481,10 @@ export class Stress {
       headGasket: [
         'Lifted head gasket',
         `${where}peak pressure with knock spikes (${shown}) exceeded the estimated clamp of a ${HEAD_GASKETS[p.headGasket].label.toLowerCase()} gasket with ${HEAD_FASTENERS[p.headFasteners].label.toLowerCase()} (${limit}).`,
+      ],
+      valveClearance: [
+        'Valve hit a piston',
+        `The cam timing opens a valve into the piston's path near overlap top dead centre (${shown}). The valves bent.`,
       ],
       valveFloat: [
         'Valve hit a piston',

@@ -57,6 +57,7 @@ import { KnockStrip } from './KnockStrip'
 import { StressPanel } from './StressPanel'
 import { PartsEditor } from './PartsEditor'
 import { CamEditor } from './CamEditor'
+import { overlap, valveEvents } from '../sim/cams'
 import { PushPanel } from './PushPanel'
 import { stockParts } from '../sim/schema'
 import type { Parts } from '../sim/schema'
@@ -417,6 +418,15 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     ...describeCombustion(a.engine.combustion, e.combustion),
     ...describeMaps(a.engine.management ?? null, e.management),
   )
+  // Runs before 1.13.0 had fixed valve events.
+  if (JSON.stringify(a.engine.cams ?? null) !== JSON.stringify(e.cams))
+    changes.push(
+      !a.engine.cams
+        ? 'Cam profiles: fixed events → profiles'
+        : !e.cams
+          ? 'Cam profiles: profiles → fixed events'
+          : 'Cam profiles changed',
+    )
   // Runs before 1.12.0 had a single cam.
   if (
     JSON.stringify(a.engine.camSwitch ?? null) !==
@@ -1520,14 +1530,7 @@ export function BenchPage() {
                     <small>
                       TARGET λ{telemetry.ecu.maps ? ' · MAP' : ''}
                     </small>
-                    <strong>
-                      {telemetry.ecu.lambda.toFixed(2)}
-                      {telemetry.ecu.cam === 'high' && (
-                        <em className="boost-flag pop" data-testid="high-cam">
-                          HIGH CAM
-                        </em>
-                      )}
-                    </strong>
+                    <strong>{telemetry.ecu.lambda.toFixed(2)}</strong>
                   </div>
                   <div>
                     <small>INJECTOR DUTY</small>
@@ -1556,6 +1559,54 @@ export function BenchPage() {
                     </strong>
                   </div>
                 </div>
+                {(viewEngine.cams || viewEngine.camSwitch) && (
+                  <div className="stats-strip boost-strip" data-testid="cam-strip">
+                    <div>
+                      <small>CAM PROFILE</small>
+                      <strong>
+                        {telemetry.ecu.cam === 'high' ? (
+                          <em className="boost-flag pop" data-testid="high-cam">
+                            HIGH CAM
+                          </em>
+                        ) : telemetry.ecu.cam === 'low' ? (
+                          'Low'
+                        ) : (
+                          'Single'
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <small>INTAKE CAM</small>
+                      <strong>
+                        {formatFixed(telemetry.ecu.camPhase?.intake ?? 0, 0)}
+                        <span>° adv</span>
+                      </strong>
+                    </div>
+                    <div>
+                      <small>EXHAUST CAM</small>
+                      <strong>
+                        {formatFixed(telemetry.ecu.camPhase?.exhaust ?? 0, 0)}
+                        <span>° adv</span>
+                      </strong>
+                    </div>
+                    <div>
+                      <small>OVERLAP</small>
+                      <strong>
+                        {Math.round(
+                          overlap(
+                            valveEvents(
+                              viewEngine,
+                              telemetry.ecu.cam === 'high',
+                              telemetry.ecu.camPhase?.intake ?? 0,
+                              telemetry.ecu.camPhase?.exhaust ?? 0,
+                            ),
+                          ),
+                        )}
+                        <span>°</span>
+                      </strong>
+                    </div>
+                  </div>
+                )}
                 <KnockStrip
                   knock={telemetry.knock}
                   temperatures={telemetry.temperatures}
@@ -2098,9 +2149,7 @@ export function BenchPage() {
                 <CamEditor
                   engine={draft}
                   disabled={activeTest}
-                  onChange={(camSwitch) =>
-                    setDraft((d) => ({ ...d, camSwitch }))
-                  }
+                  onChange={(update) => setDraft((d) => update(d))}
                 />
                 <h3 className="workshop-subheading">Combustion & knock</h3>
                 <CombustionEditor

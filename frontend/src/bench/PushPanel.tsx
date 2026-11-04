@@ -13,6 +13,7 @@ const limitLabels = {
   knock: 'piston knock',
   headGasket: 'head gasket',
   valveFloat: 'valve float',
+  valveClearance: 'valve clearance',
   turboSpeed: 'turbo speed',
   turbineTemperature: 'turbine inlet',
 } as const

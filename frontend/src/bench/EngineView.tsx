@@ -6,6 +6,11 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { EngineDefinition, Metres } from '../sim/schema'
 import type { Telemetry } from '../sim/core'
 import { pistonTravel, phaseName, wrap } from '../sim/physics'
+import { emptyEvents, liftAt, valveEvents } from '../sim/cams'
+
+/** Drawn valve lift for a real lift, m: 9 mm draws 0.1 units. */
+const drawnLift = (lift: number) =>
+  0.1 * Math.min(1.6, Math.max(0.5, lift / 0.009))
 
 // Power, exhaust, intake, compression.
 const phaseColours = [0xff7a12, 0xff3b6b, 0x1fc8ff, 0x9d6bff]
@@ -350,14 +355,18 @@ export function EngineView({
         // Sample the same opening window as the valve animation. The profile
         // is an illustrative radial cam, not a manufactured cam design.
         const offset = engine.firingOrder.indexOf((i + 1) as 1 | 2 | 3 | 4) * 180
-        const open = z < 0 ? 350 : 145
-        const close = z < 0 ? engine.intakeClose : 370
+        // The build's low profile at zero phaser angle; phasing turns the
+        // whole cam in the animation.
+        const base = valveEvents(engine, false, 0, 0)
+        const open = z < 0 ? base.intakeOpen : base.exhaustOpen
+        const close = z < 0 ? base.intakeClose : base.exhaustClose
+        const height = drawnLift(z < 0 ? base.intakeLift : base.exhaustLift)
         const profile = new THREE.Shape()
         for (let j = 0; j <= 128; j++) {
           const a = j / 128 * Math.PI * 2
           const phase = ((a * 360 / Math.PI - offset) % 720 + 720) % 720
           const lift = phase >= open && phase < close
-            ? 0.1 * u * Math.sin(Math.PI * (phase - open) / (close - open)) : 0
+            ? height * u * Math.sin(Math.PI * (phase - open) / (close - open)) : 0
           const radius = 0.12 * u + lift
           const px = -radius * Math.sin(a), py = -radius * Math.cos(a)
           if (j === 0) profile.moveTo(px, py)
@@ -1359,12 +1368,22 @@ export function EngineView({
       lastSample = -1,
       receivedAt = performance.now()
     const up = new THREE.Vector3(0, 1, 0)
+    const frameEvents = emptyEvents()
     const animate = () => {
       frame = requestAnimationFrame(animate)
       const now = performance.now(),
         dt = Math.min((now - last) / 1000, 0.05)
       last = now
       const t = telemetry.current
+      const intakePhase = t?.ecu.camPhase?.intake ?? 0
+      const exhaustPhase = t?.ecu.camPhase?.exhaust ?? 0
+      const events = valveEvents(
+        engine,
+        t?.ecu.cam === 'high',
+        intakePhase,
+        exhaustPhase,
+        frameEvents,
+      )
       if (t && t.sample !== lastSample) {
         lastSample = t.sample
         receivedAt = now
@@ -1431,27 +1450,38 @@ export function EngineView({
         const height = Math.max(0.02 * u, head - y - crown)
         chambers[i].scale.y = height
         chambers[i].position.y = y + crown + height / 2
-        const lift = 0.1 * u
+        // The same events as the physics, including phasing and VTEC.
         valves[i][0].position.y =
           head +
           0.16 * u -
-          (degrees >= 350 && degrees < engine.intakeClose
-            ? lift *
-              Math.sin((Math.PI * (degrees - 350)) / (engine.intakeClose - 350))
-            : 0)
+          u *
+            liftAt(
+              events.intakeOpen,
+              events.intakeClose,
+              drawnLift(events.intakeLift),
+              degrees,
+            )
         valves[i][1].position.y =
           head +
           0.16 * u -
-          (degrees >= 145 && degrees < 370
-            ? lift * Math.sin((Math.PI * (degrees - 145)) / 225)
-            : 0)
+          u *
+            liftAt(
+              events.exhaustOpen,
+              events.exhaustClose,
+              drawnLift(events.exhaustLift),
+              degrees,
+            )
       }
       for (let i = 0; i < 4; i++)
         for (let v = 0; v < 2; v++)
           valveSprings[i][v].scale.y = (valves[i][v].position.y + 0.5 * u - (head + 0.3 * u)) / (0.36 * u)
       for (const pulley of timingPulleys) pulley.group.rotation.x = angle * pulley.ratio
       flywheel.rotation.x = angle
-      for (const cam of cams) cam.rotation.x = angle * 0.5
+      // Phasers turn each cam ahead of the crank (half crank degrees).
+      cams.forEach((cam, k) => {
+        const advance = k === 0 ? intakePhase : exhaustPhase
+        cam.rotation.x = angle * 0.5 + (advance * Math.PI) / 360
+      })
       if (t) {
         // Visible from about 400 °C, bright by 800 °C.
         hotPipe.emissiveIntensity = Math.min(
