@@ -623,3 +623,54 @@ test('full reset returns a persisted edited build to a running Road engine', asy
   await expect.poll(rpm).toBeGreaterThan(2000)
   await page.keyboard.up('Space')
 })
+
+test('an overboosted unprotected engine fails, explains why and rebuilds', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Turbo hot hatch' }).click()
+  await page.getByLabel('ECU knock control').uncheck()
+  await page.getByLabel('Boost target (bar)').fill('1.6')
+  await page.getByLabel('Pistons').click()
+  await page.getByRole('option', { name: 'Cast' }).click()
+  await page
+    .getByRole('button', { name: 'Stop & rebuild engine', exact: true })
+    .click()
+  await expect(page.getByTestId('stress-turboSpeed')).toBeVisible()
+  await page.getByRole('button', { name: 'Start engine' }).click()
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, '')),
+    )
+    .toBeGreaterThan(500)
+  const hold = page.getByLabel('RPM hold (0 = free)')
+  await hold.fill('4000')
+  await hold.press('Enter')
+  await page.getByRole('heading', { level: 1 }).click()
+  await page.keyboard.down('Space')
+  await expect(page.getByTestId('failure')).toContainText('Cracked piston', {
+    timeout: 20000,
+  })
+  await page.keyboard.up('Space')
+  await page.getByTestId('failure').getByRole('button', { name: 'Rebuild' }).click()
+  await expect(page.getByTestId('failure')).toHaveCount(0)
+  await expect(page.getByText('Engine rebuilt with new parts')).toBeVisible()
+})
+
+test('push it raises timing in the worker and reports each step', async ({
+  page,
+}) => {
+  await page.goto('/')
+  const push = page.getByTestId('push')
+  await push.getByLabel('Engine speed (RPM)').fill('3000')
+  await push.getByLabel('Seconds per step').fill('0.8')
+  await push.getByLabel('Step (° advance)').fill('5')
+  await push.getByTestId('push-run').click()
+  await expect(page.getByTestId('push-result')).not.toHaveText('Pushing…', {
+    timeout: 60000,
+  })
+  await expect(push.locator('.push-results tbody tr')).not.toHaveCount(0)
+  await expect(push.locator('.push-results tbody tr').first()).toContainText(
+    '20.0° (+0.0)',
+  )
+})

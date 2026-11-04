@@ -10,6 +10,8 @@ export class BenchAudio {
   onEvent: (event: HostEvent) => void = () => {}
   volume = 0.25
   listener: Listener = 'tailpipe'
+  /** Bench setting the worklet keeps across the cores it replaces. */
+  indestructible = false
   async enable() {
     if (!this.context) {
       this.context = new AudioContext({
@@ -39,6 +41,10 @@ export class BenchAudio {
           type: 'listener',
           value: this.listener,
         } satisfies HostMessage)
+        this.node.port.postMessage({
+          type: 'controls',
+          value: { indestructible: this.indestructible },
+        } satisfies HostMessage)
         this.node.port.onmessage = (e: MessageEvent<HostEvent>) =>
           this.onEvent(e.data)
         this.node.onprocessorerror = () =>
@@ -58,6 +64,10 @@ export class BenchAudio {
   setListener(listener: Listener) {
     this.listener = listener
     this.send({ type: 'listener', value: listener })
+  }
+  setIndestructible(value: boolean) {
+    this.indestructible = value
+    this.send({ type: 'controls', value: { indestructible: value } })
   }
   setVolume(volume: number) {
     this.volume = volume

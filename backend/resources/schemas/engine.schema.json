@@ -637,6 +637,65 @@
         }
       ]
     },
+    "parts": {
+      "default": {
+        "pistons": "cast",
+        "rods": "stock",
+        "headGasket": "mls",
+        "headFasteners": "bolts",
+        "valveSprings": "stock"
+      },
+      "type": "object",
+      "properties": {
+        "pistons": {
+          "type": "string",
+          "enum": [
+            "cast",
+            "hypereutectic",
+            "forged"
+          ]
+        },
+        "rods": {
+          "type": "string",
+          "enum": [
+            "stock",
+            "forgedI",
+            "hBeam"
+          ]
+        },
+        "headGasket": {
+          "type": "string",
+          "enum": [
+            "composite",
+            "mls",
+            "copper"
+          ]
+        },
+        "headFasteners": {
+          "type": "string",
+          "enum": [
+            "bolts",
+            "studs"
+          ]
+        },
+        "valveSprings": {
+          "type": "string",
+          "enum": [
+            "stock",
+            "uprated",
+            "race"
+          ]
+        }
+      },
+      "required": [
+        "pistons",
+        "rods",
+        "headGasket",
+        "headFasteners",
+        "valveSprings"
+      ],
+      "additionalProperties": false
+    },
     "firingOrder": {
       "type": "array",
       "prefixItems": [

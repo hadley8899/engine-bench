@@ -1,6 +1,7 @@
 import type { Conditions, EngineDefinition, Procedure, Run } from './schema'
 import type { Controls, Telemetry } from './core'
 import type { Listener } from './acoustics'
+import type { PushResult, PushSettings } from './push'
 export type HostMessage =
   | { type: 'configure'; engine: EngineDefinition; conditions: Conditions }
   /** Live update: apply a definition without stopping a running engine. */
@@ -17,6 +18,16 @@ export type HostMessage =
       procedure: Procedure
       id: string
       runtime: string
+      indestructible?: boolean
+    }
+  /** Headless push-it test (worker only). */
+  | {
+      type: 'push'
+      engine: EngineDefinition
+      conditions: Conditions
+      settings: PushSettings
+      id: string
+      indestructible?: boolean
     }
   | {
       type: 'probe'
@@ -35,3 +46,4 @@ export type HostEvent =
   | { type: 'run'; value: Run }
   | { type: 'error'; message: string }
   | { type: 'probe'; value: Telemetry }
+  | { type: 'push'; value: PushResult }

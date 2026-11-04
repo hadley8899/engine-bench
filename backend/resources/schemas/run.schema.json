@@ -19,7 +19,8 @@
         "eb-0d-1.7.0",
         "eb-0d-1.8.0",
         "eb-0d-1.9.0",
-        "eb-0d-1.10.0"
+        "eb-0d-1.10.0",
+        "eb-0d-1.11.0"
       ]
     },
     "id": {
@@ -670,6 +671,65 @@
             }
           ]
         },
+        "parts": {
+          "default": {
+            "pistons": "cast",
+            "rods": "stock",
+            "headGasket": "mls",
+            "headFasteners": "bolts",
+            "valveSprings": "stock"
+          },
+          "type": "object",
+          "properties": {
+            "pistons": {
+              "type": "string",
+              "enum": [
+                "cast",
+                "hypereutectic",
+                "forged"
+              ]
+            },
+            "rods": {
+              "type": "string",
+              "enum": [
+                "stock",
+                "forgedI",
+                "hBeam"
+              ]
+            },
+            "headGasket": {
+              "type": "string",
+              "enum": [
+                "composite",
+                "mls",
+                "copper"
+              ]
+            },
+            "headFasteners": {
+              "type": "string",
+              "enum": [
+                "bolts",
+                "studs"
+              ]
+            },
+            "valveSprings": {
+              "type": "string",
+              "enum": [
+                "stock",
+                "uprated",
+                "race"
+              ]
+            }
+          },
+          "required": [
+            "pistons",
+            "rods",
+            "headGasket",
+            "headFasteners",
+            "valveSprings"
+          ],
+          "additionalProperties": false
+        },
         "firingOrder": {
           "type": "array",
           "prefixItems": [
@@ -858,6 +918,11 @@
             "type": "number",
             "minimum": 0,
             "maximum": 4000
+          },
+          "stress": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
           }
         },
         "required": [

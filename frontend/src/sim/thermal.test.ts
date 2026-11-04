@@ -19,7 +19,8 @@ const C = 273.15
 function soak(e: EngineDefinition, rpm: number, throttle = 1, seconds = 16) {
   const core = new EngineCore(e, normalConditions)
   core.sound = false
-  core.setControls({ ignition: true, throttle, holdRpm: rpm })
+  // Temperatures only: knocking builds would otherwise crack a piston.
+  core.setControls({ ignition: true, throttle, holdRpm: rpm, indestructible: true })
   for (let i = 0; i < 48000 * seconds; i++) core.step()
   const t = core.telemetry().temperatures
   return { egt: t.egt[0], crown: t.crown[0], valve: t.valve[0], head: t.head[0], all: t }

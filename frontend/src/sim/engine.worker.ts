@@ -1,11 +1,13 @@
 import { EngineCore } from './core'
 import { DynoTest } from './dyno'
+import { PushTest } from './push'
 import type { HostEvent, HostMessage } from './messages'
 const scope = self as unknown as {
   onmessage: (event: MessageEvent<HostMessage>) => void
   postMessage: (message: HostEvent) => void
 }
 let active: DynoTest | null = null
+let pushing: PushTest | null = null
 let generation = 0
 let lastPublished = 0
 scope.onmessage = ({ data }) => {
@@ -26,7 +28,35 @@ scope.onmessage = ({ data }) => {
       active?.abort(data.reason)
       if (active) scope.postMessage({ type: 'run', value: active.run })
       active = null
+      pushing?.abort(data.reason)
+      if (pushing) scope.postMessage({ type: 'push', value: pushing.result })
+      pushing = null
       generation++
+    }
+    if (data.type === 'push') {
+      generation++
+      active = null
+      const task = generation
+      const test = (pushing = new PushTest(
+        data.engine,
+        data.conditions,
+        data.settings,
+        data.id,
+        data.indestructible,
+      ))
+      let published = -Infinity
+      const batch = () => {
+        if (pushing !== test || task !== generation) return
+        test.advance(4800)
+        const done = test.result.status !== 'running'
+        if (done || performance.now() - published >= 100) {
+          scope.postMessage({ type: 'push', value: test.result })
+          published = performance.now()
+        }
+        if (done) pushing = null
+        else setTimeout(batch, 0)
+      }
+      batch()
     }
     if (data.type === 'dyno') {
       generation++
@@ -38,7 +68,9 @@ scope.onmessage = ({ data }) => {
         data.procedure,
         data.id,
         data.runtime,
+        data.indestructible,
       )
+      pushing = null
       // Headless tests discard audio; sound never affects the physics.
       active.core.sound = false
       const batch = () => {

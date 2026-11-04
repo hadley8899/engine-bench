@@ -53,6 +53,20 @@ import { ExhaustEditor } from './ExhaustEditor'
 import { CombustionEditor } from './CombustionEditor'
 import { describeCombustion } from './combustionFields'
 import { KnockStrip } from './KnockStrip'
+import { StressPanel } from './StressPanel'
+import { PartsEditor } from './PartsEditor'
+import { PushPanel } from './PushPanel'
+import { stockParts } from '../sim/schema'
+import type { Parts } from '../sim/schema'
+import {
+  HEAD_FASTENERS,
+  HEAD_GASKETS,
+  PISTONS,
+  RODS,
+  VALVE_SPRINGS,
+} from '../sim/parts'
+import { defaultPush, validatePush } from '../sim/push'
+import type { PushResult, PushSettings } from '../sim/push'
 import { MapEditor, MapToggle } from './MapEditor'
 import { describeMaps } from './mapFields'
 import { FuelSupplyEditor } from './FuelSupplyEditor'
@@ -357,6 +371,27 @@ function conditionErrors(c: Conditions) {
   }
   return errors
 }
+const partLabels: Record<keyof Parts, string> = {
+  pistons: 'Pistons',
+  rods: 'Connecting rods',
+  headGasket: 'Head gasket',
+  headFasteners: 'Head fasteners',
+  valveSprings: 'Valve springs',
+}
+const partNames = Object.fromEntries(
+  (
+    [
+      ['pistons', PISTONS],
+      ['rods', RODS],
+      ['headGasket', HEAD_GASKETS],
+      ['headFasteners', HEAD_FASTENERS],
+      ['valveSprings', VALVE_SPRINGS],
+    ] as const
+  ).map(([k, c]) => [
+    k,
+    Object.fromEntries(Object.entries(c).map(([n, v]) => [n, v.label])),
+  ]),
+) as Record<keyof Parts, Record<string, string>>
 function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
   if (!a) return ['Capture a baseline to see what changed.']
   const changes = numericFields
@@ -384,6 +419,13 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     JSON.stringify(e.fuelSupply)
   )
     changes.push('Fuel supply (injectors and pump) changed')
+  // Runs before 1.11.0 had stock parts.
+  const before = a.engine.parts ?? stockParts
+  for (const k of Object.keys(e.parts) as (keyof Parts)[])
+    if (before[k] !== e.parts[k])
+      changes.push(
+        `${partLabels[k]}: ${partNames[k][before[k] as never]} → ${partNames[k][e.parts[k] as never]}`,
+      )
   if ((a.engine.limiterCut ?? 'fuel') !== e.limiterCut)
     changes.push(
       `Limiter cuts: ${a.engine.limiterCut ?? 'fuel'} → ${e.limiterCut}`,
@@ -500,6 +542,12 @@ export function BenchPage() {
   /** Bumped by a full reset to replace the audio and worker hosts. */
   const [hostKey, setHostKey] = useState(0)
   const [confirmReset, setConfirmReset] = useState(false)
+  /** Parts are stressed but never fail (bench setting, live and tests). */
+  const [indestructible, setIndestructible] = useState(false)
+  const indestructibleRef = useRef(false)
+  const [pushSettings, setPushSettings] = useState<PushSettings>(defaultPush)
+  const [push, setPush] = useState<PushResult | null>(null)
+  const pushId = useRef<string | null>(null)
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(experiment.engine) ||
     JSON.stringify(conditions) !== JSON.stringify(experiment.conditions)
@@ -593,6 +641,7 @@ export function BenchPage() {
   useEffect(() => {
     const engineAudio = new BenchAudio()
     engineAudio.listener = loadPreferences().listener
+    engineAudio.indestructible = indestructibleRef.current
     audio.current = engineAudio
     const engineWorker = new Worker(
       new URL('../sim/engine.worker.ts', import.meta.url),
@@ -635,6 +684,16 @@ export function BenchPage() {
               ? `Test complete. ${event.value.samples.length} measured points captured in ${captured}.${captured === 'baseline' ? ' The next run will capture in Modified.' : ''}`
               : `Test aborted: ${event.value.reason}`,
           )
+        }
+      }
+      if (event.type === 'push') {
+        if (event.value.id !== pushId.current) return
+        setPush(event.value)
+        if (event.value.status !== 'running') {
+          pushId.current = null
+          calculatingRef.current = false
+          setCalculating(false)
+          setNotice(`Push it finished. ${event.value.reason}`)
         }
       }
       if (event.type === 'error') {
@@ -840,6 +899,10 @@ export function BenchPage() {
     setBusy(false)
     setAuditionEngine(null)
     setRun(null)
+    setPush(null)
+    pushId.current = null
+    indestructibleRef.current = false
+    setIndestructible(false)
     setLimiterVisible(false)
     setHistory([[], []])
     const t = new EngineCore(roadEngine, normalConditions).telemetry()
@@ -926,6 +989,7 @@ export function BenchPage() {
         procedure: testProcedure,
         id,
         runtime: `${kind === 'live' ? 'AudioWorklet' : 'Web Worker'} · ${navigator.userAgent}`,
+        indestructible,
       }
       if (kind === 'live') {
         await audio.current!.enable()
@@ -1014,6 +1078,39 @@ export function BenchPage() {
     URL.revokeObjectURL(url)
   }
   const activeTest = (running && mode === 'live') || calculating
+  const changeIndestructible = (value: boolean) => {
+    indestructibleRef.current = value
+    setIndestructible(value)
+    audio.current?.setIndestructible(value)
+  }
+  let pushBlocked = ''
+  try {
+    validatePush(pushSettings, experiment.engine)
+  } catch (err) {
+    pushBlocked = err instanceof Error ? err.message : String(err)
+  }
+  if (!pushBlocked && calculating) pushBlocked = 'Wait for the calculation to finish.'
+  if (!pushBlocked && running && mode !== 'manual')
+    pushBlocked = 'Wait for the automatic test to finish.'
+  const runPush = () => {
+    if (pushBlocked || !worker.current) return
+    const id = crypto.randomUUID()
+    pushId.current = id
+    calculatingRef.current = true
+    setCalculating(true)
+    setPush(null)
+    worker.current.postMessage({
+      type: 'push',
+      engine: experiment.engine,
+      conditions: experiment.conditions,
+      settings: pushSettings,
+      id,
+      indestructible,
+    })
+    setNotice(
+      `Pushing the applied build at ${pushSettings.rpm} RPM in a worker. Manual controls are locked until it finishes.`,
+    )
+  }
   const fuelCut = telemetry.fuel.overrunCut || telemetry.fuel.limiterCut
   const baseline = experiment.baseline,
     modified = experiment.modified
@@ -1404,6 +1501,18 @@ export function BenchPage() {
                 <KnockStrip
                   knock={telemetry.knock}
                   temperatures={telemetry.temperatures}
+                />
+                <StressPanel
+                  stress={telemetry.stress}
+                  indestructible={indestructible}
+                  onIndestructible={changeIndestructible}
+                  rebuildDisabled={mode !== 'manual' && running}
+                  onRebuild={() => {
+                    stop('Rebuilt after a failure')
+                    setNotice(
+                      'Engine rebuilt with new parts from the last build. Press Start to run it.',
+                    )
+                  }}
                 />
                 {telemetry.induction.kind !== 'none' && (
                   <div className="stats-strip boost-strip" data-testid="boost">
@@ -1901,6 +2010,12 @@ export function BenchPage() {
                     }))
                   }
                 />
+                <h3 className="workshop-subheading">Parts & limits</h3>
+                <PartsEditor
+                  engine={draft}
+                  disabled={activeTest}
+                  onChange={(update) => setDraft((d) => update(d))}
+                />
                 <h3 className="workshop-subheading">Engine management</h3>
                 <MapToggle
                   engine={draft}
@@ -2215,6 +2330,24 @@ export function BenchPage() {
                 </div>
               </Paper>
             </div>
+            <Paper className="editor-panel push-panel" variant="outlined">
+              <h3>Push it</h3>
+              <PushPanel
+                engine={experiment.engine}
+                settings={pushSettings}
+                onSettings={setPushSettings}
+                result={push}
+                busy={calculating}
+                blocked={pushBlocked}
+                onRun={runPush}
+                onStop={() => {
+                  worker.current?.postMessage({
+                    type: 'stop',
+                    reason: 'Push stopped',
+                  })
+                }}
+              />
+            </Paper>
           </section>
           <SavedLibrary
             engine={experiment.engine}

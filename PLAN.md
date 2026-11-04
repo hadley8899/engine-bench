@@ -4,12 +4,12 @@ Updated: 3 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stage 5 are complete, and Stage 6 is in progress: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0) and dissociation (1.10.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
-2. Stage 6, tuning, temperatures and limits — in progress. Combustion and knock (1.6.0) and ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0) and dissociation (1.10.0) are implemented; upgradeable parts and failures are next.
+2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
 3. Stage 7, famous real engines, starting with the VW EA113 2.0 TFSI (AXX) from the 2005 Golf GTI.
 4. Stage 8, a 3D overhaul. It is independent of the simulation and may run alongside stages 5–7.
 
@@ -131,7 +131,7 @@ Treat the electronic limiter and the engine's mechanical capability separately. 
 
 First implement a configurable limiter, supported operating bounds, overspeed warnings and dyno abort behaviour. Then add validated estimates for piston speed, component loading, valvetrain limits, heat and lubrication as their models become available.
 
-Knock, valve float, component overload and catastrophic failures are planned for Stage 6 (user request, 2 November 2026). Wear stays a later extension. Use simplified, labelled estimates with recorded assumptions. Do not claim that every engine fails at one universal RPM or piston-speed value. A failure stops the engine and explains what failed and why. A rebuild returns it to its last build. An optional indestructible mode keeps pure exploration available. Failures are never a currency, penalty or unlock gate.
+Knock, valve float, component overload and catastrophic failures were added in Stage 6 (user request, 2 November 2026; model 1.11.0). Wear stays a later extension. Use simplified, labelled estimates with recorded assumptions. Do not claim that every engine fails at one universal RPM or piston-speed value. A failure stops the engine and explains what failed and why. A rebuild returns it to its last build. An optional indestructible mode keeps pure exploration available. Failures are never a currency, penalty or unlock gate.
 
 ## Browser architecture
 
@@ -262,7 +262,7 @@ Evidence is in `docs/VERIFICATION.md`. The user accepted the sound after the blo
 
 Acceptance: exhaust-system changes produce audible, explainable differences that physics, sound and the view share from one definition. Offline PCM tests check that the sound stays bounded and that exhaust changes alter its spectrum as intended. The user confirms in a listening session that the new sound is a clear improvement; automated checks do not substitute for this. The quick fixes have browser regression tests. Gauges and live plots add no React updates at audio rate. Audio cost stays inside the measured AudioWorklet budget (`npm run benchmark`).
 
-### 6. Tuning, temperatures and limits — in progress
+### 6. Tuning, temperatures and limits — complete
 
 Requested by the user on 2 November 2026. This stage turns the bench into a tuning sandbox. Knock comes first: without it, extra boost and timing cost nothing, so maps, fuel grade and stronger parts would have no meaning.
 
@@ -288,11 +288,11 @@ Temperatures:
 
 Parts and limits:
 
-- [ ] Add a parts list where every part is available from the start: pistons (cast, hypereutectic, forged), connecting rods (cast/stock, forged I-beam, H-beam), head gasket and fasteners, valve springs, turbochargers of several sizes, intercoolers, injectors and fuel pumps. Parts change mass, inertia, friction and thermal properties where modelled, and each has estimated limits.
-- [ ] Add stress indicators for the main limits: rod load from peak cylinder pressure and reciprocating inertia, piston crown temperature and knock exposure, head clamping against peak pressure, valve-float speed and turbocharger shaft speed and inlet temperature.
-- [ ] Add failure events when a limit is exceeded long enough: holed or cracked piston, bent or broken rod, lifted head gasket, valve float or valve-to-piston contact, and turbo damage. The engine stops and the bench shows what failed, where and why. Dyno runs record the failure as their abort reason. A rebuild restores the last build, and indestructible mode disables failures.
-- [ ] Add a "push it" procedure: a stepped boost or timing ramp at a chosen RPM that stops at the first knock limit or failure and reports how far the engine went.
-- [ ] Document every limit, its basis and its uncertainty in `docs/SIMULATION.md`. Do not present forum figures as specifications.
+- [x] Add a parts list where every part is available from the start: pistons (cast, hypereutectic, forged), connecting rods (cast/stock, forged I-beam, H-beam), head gasket and fasteners, valve springs, turbochargers of several sizes, intercoolers, injectors and fuel pumps. Parts change mass, inertia, friction and thermal properties where modelled, and each has estimated limits. Model 1.11.0. Internal parts are stored in the definition's `parts` block; builds saved earlier read as stock parts, which add no inertia or friction, so their results are unchanged. Turbos, intercoolers, injectors and pumps are named sets of the existing induction and fuel-supply fields. Decision (4 November 2026): stock rods and valve springs are rated against the build's estimated mechanical limit; pistons do not yet change crown heat transfer.
+- [x] Add stress indicators for the main limits: rod load from peak cylinder pressure and reciprocating inertia, piston crown temperature and knock exposure, head clamping against peak pressure, valve-float speed and turbocharger shaft speed and inlet temperature. The bench shows each as a share of its limit for the worst cylinder, with accumulated overload.
+- [x] Add failure events when a limit is exceeded long enough: holed or cracked piston, bent or broken rod, lifted head gasket, valve float or valve-to-piston contact, and turbo damage. The engine stops and the bench shows what failed, where and why. Dyno runs record the failure as their abort reason. A rebuild restores the last build, and indestructible mode disables failures. Failures are on by default. The cutaway does not show failed parts yet (Stage 8).
+- [x] Add a "push it" procedure: a stepped boost or timing ramp at a chosen RPM that stops at the first knock limit or failure and reports how far the engine went. It runs headless in the worker and reports a table of steps; it is not stored as a run.
+- [x] Document every limit, its basis and its uncertainty in `docs/SIMULATION.md`. Do not present forum figures as specifications.
 
 Acceptance: supported trends hold in tests. More advance, more boost, lower octane, hotter intake air or a leaner mixture each increase knock tendency, and enrichment and better fuel reduce it. Torque peaks near MBT timing when knock is absent. Temperatures respond to load, mixture and timing in the right direction. A stronger part raises only its own limit. Failures are repeatable for the same snapshot and inputs. Existing builds migrate with unchanged results unless they opt in to the new behaviour, which needs a model version bump.
 

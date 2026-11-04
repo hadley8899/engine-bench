@@ -472,7 +472,8 @@ describe('calibrated full-load trends', () => {
 /** Full-throttle hold long enough for a turbo to spool and settle. */
 function boosted(engine: EngineDefinition, rpm: number, seconds = 3) {
   const core = new EngineCore(engine, normalConditions)
-  core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+  // Induction behaviour only; extreme builds would otherwise fail a part.
+  core.setControls({ ignition: true, throttle: 1, holdRpm: rpm, indestructible: true })
   advance(core, seconds)
   let sum = 0
   const steps = Math.round((6 * 120 * 48000) / rpm)

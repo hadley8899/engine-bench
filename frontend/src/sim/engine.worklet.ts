@@ -27,6 +27,8 @@ export class EngineProcessor extends AudioWorkletProcessor {
   private peakMs = 0
   private budgetMs = (128 / sampleRate) * 1000
   private listener: Listener = 'tailpipe'
+  /** A bench setting, so it survives the cores a stop or rebuild replaces. */
+  private indestructible = false
   constructor(options?: {
     processorOptions?: {
       initial?: {
@@ -75,8 +77,15 @@ export class EngineProcessor extends AudioWorkletProcessor {
           this.dyno = null
           this.accumulator = 0
         }
-        if (data.type === 'controls') this.core.setControls(data.value)
+        if (data.type === 'controls') {
+          if (data.value.indestructible !== undefined)
+            this.indestructible = data.value.indestructible
+          this.core.setControls(data.value)
+        }
         if (data.type === 'start') {
+          // Starting a failed engine rebuilds it from its last build first.
+          if (this.core.stress.failure)
+            this.use(new EngineCore(this.core.engine, this.core.conditions))
           this.running = true
           this.started = this.core.time
           this.automaticStarter = data.automaticStarter ?? true
@@ -100,6 +109,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
             data.procedure,
             data.id,
             data.runtime,
+            data.indestructible,
           )
           this.use(this.dyno.core)
           this.running = true
@@ -125,6 +135,8 @@ export class EngineProcessor extends AudioWorkletProcessor {
   /** Every core the bench plays keeps the chosen listening position. */
   private use(core: EngineCore) {
     core.setListener(this.listener)
+    if (!this.dyno || this.dyno.core !== core)
+      core.setControls({ indestructible: this.indestructible })
     this.core = core
   }
   private send(event: HostEvent) {

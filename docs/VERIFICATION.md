@@ -286,6 +286,27 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Cost (Node, standard benchmark, interleaved with the committed 1.9.0 on the same machine): running medians are about 10–20% higher (0.39–0.47 against 0.34–0.44 ms at 1,000–7,500 RPM, and 0.75–0.89 against 0.81–0.99 ms at 8,400 RPM), against a 2.67 ms budget. Cranking blocks still spike to 5–7 ms, as 1.9.0's did (5–6 ms, up to 14 ms on a noisy run). The tables of a fuel are built when a core first uses it, about 120–135 ms once per fuel and thread; a live change of fuel pauses the sound that long.
 
 
+## Model 1.11.0: parts, stress, failures and push it
+
+- Calibration (Node, held at full load, 14–16 s so the crown settles): at their highest stress, the five starting builds sit between 63% and 93% of their worst limit. The highest are the Turbo hot hatch's crown (91%) and turbo speed (93%) at 6,300 RPM, and the valve float of every build near its limiter (83–86%). In standard 1,500–6,200 RPM sweeps the worst sample was 98% of the hot hatch's turbine inlet limit at 1,067 °C. The turbine limit was raised to 1,100 °C, which puts that pull at about 96%. Over-boosting the hot hatch to 1.6 bar with knock control off knocks hard (19–21% unburned at onset) and cracks a cast piston within 2 s. With knock control on, it runs at 82–83% of crown and head limits and right at the turbine limit. At 2.2 bar, λ 0.85 and knock control on, it knocks intermittently and still cracks a cast piston in about 3 s.
+- Stock results unchanged: standard sweeps of all five starting builds with stock parts match the committed 1.10.0 model's torque exactly (largest difference 0 Nm over 42–46 samples). The build without a `parts` block parses with stock parts.
+- Vitest: 124 passed. New tests in `src/sim/parts.test.ts`:
+  - old builds read as stock parts, which add no inertia;
+  - H-beam rods add inertia and race springs add friction;
+  - forged pistons raise only the crown and knock limits, and studs only the gasket clamp;
+  - the stock hot hatch stays under its limits at full load near the limiter;
+  - sustained knock cracks a cast piston repeatably, and the failed engine then cannot fire or crank;
+  - forged pistons survive the same knock, and Indestructible mode never fails;
+  - over-revving the Road engine floats stock valves into a piston, and uprated springs move the failure to the stock rods;
+  - a dyno run aborts with the failure as its reason and records stress;
+  - push it advances timing until the first knock and raises boost until a failure.
+- Two existing tests that drive extreme builds to check other behaviour now run indestructible: the compressor-overspeed warning (`core.test.ts`) and the component-temperature soaks (`thermal.test.ts`, whose RON 91 build cracked a piston).
+- Chromium (Playwright): two new `tests/bench.spec.ts` cases pass. One overboosts the hot hatch with knock control off: it fails with a cracked piston, explains why, and Rebuild clears it. The other runs push it on the Road build and fills the step table. The full Chromium bench suite then passed 17 of 18; the failure is the sign-in navigation step, which needs the local API (not running), as on 3 November.
+- Built-in browser pane (development server): the stress strip, parts editor and push panel render. The Road build's timing push at 4,000 RPM ran from 20° to 50° without knock. Torque fell from 188 to 138 Nm and the crown reached 77% of its limit, so on RON 95 at this speed the model finds no knock limit before MBT is long passed. On the live bench, the over-boosted hot hatch cracked a piston at 3,900 RPM. Fuel flow fell to zero, the readings froze at the moment of failure (knock 330%, head gasket 131%) and Rebuild cleared it.
+- Cost (Node, standard benchmark, interleaved twice with the committed 1.10.0): medians 0.37–0.38 against 0.35–0.37 ms at 1,000–7,500 RPM and 0.68–0.70 against 0.67 ms at 8,400 RPM, about 3–5% more, against a 2.67 ms budget.
+- Not run: backend tests (no backend containers or images on this machine). Only the exported schemas changed: an optional `parts` block, the optional sample `stress` field and the model-version list. The installed ajv (version 6) cannot read the exported draft 2020-12 schemas, so they were not machine-validated outside Laravel. Firefox was not run (see the testing-depth decision of 3 November).
+- Known gaps: see `docs/SIMULATION.md`. The cutaway does not show fitted or failed parts yet; that is Stage 8 work.
+
 ### 3 November — cutaway geometry follow-up
 
 - Added solid rear half-bores, machined liners/deck faces and crankcase end walls; relieved piston skirts and wrist pins; rigid I-section rods with bearing eyes and caps; stepped head flanges and cam supports; closer default framing. Simulation and audio code were not changed by this pass.

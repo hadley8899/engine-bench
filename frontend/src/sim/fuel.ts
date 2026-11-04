@@ -133,6 +133,8 @@ export class FuelDelivery {
   overrunCut = false
   /** Set by the core while a fuel-cut rev limiter is active. */
   limiterCut = false
+  /** Set by the core after a part fails: the ECU stops injecting. */
+  shutOff = false
   film = 0
   airFlow = 0
   private vapour = 0
@@ -261,7 +263,7 @@ export class FuelDelivery {
         if (throttle < 0.01 && rpm > 1800) this.overrunCut = true
         else if (throttle >= 0.01 || rpm < 1400) this.overrunCut = false
       }
-      const cut = this.overrunCut || this.limiterCut
+      const cut = this.overrunCut || this.limiterCut || this.shutOff
       const command = cut ? 0 : this.metered
       // Inverse film model: inject what the wall will hold back or release.
       const ideal =

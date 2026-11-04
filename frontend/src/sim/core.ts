@@ -20,6 +20,8 @@ import type { Road } from './road'
 import type { InductionTelemetry } from './induction'
 import { FUELS, FuelDelivery, LEAN_MISFIRE, RICH_MISFIRE } from './fuel'
 import { BurnedGas, FREEZE } from './chemistry'
+import { partsInertia, Stress, VALVE_SPRINGS } from './parts'
+import type { StressTelemetry } from './parts'
 import type { FuelTelemetry } from './fuel'
 import {
   atmosphere,
@@ -81,6 +83,12 @@ export type Controls = {
   holdRpm: number | null
   /** Optional road load through a gearbox and automatic clutch. */
   road: Road | null
+  /** Parts are stressed and reported but never fail. */
+  indestructible?: boolean
+  /** Added to the commanded spark advance, degrees (push-it tests). */
+  advanceOffset?: number
+  /** Added to a turbo's boost target, Pa (push-it tests). */
+  boostOffset?: number
 }
 export type Telemetry = {
   time: number
@@ -117,6 +125,8 @@ export type Telemetry = {
     valve: number[]
     head: number[]
   }
+  /** Part loads against their estimated limits, and any failure. */
+  stress: StressTelemetry
 }
 export type EcuTelemetry = {
   /** Maps in use; otherwise the single values apply. */
@@ -279,11 +289,25 @@ export class EngineCore {
   private octaneDelay: number
   private referenceFlame: number
   private pistonSpeedPerRpm: number
+  /** Crank inertia including any parts heavier or lighter than stock. */
+  private inertia: number
+  private frictionStatic: number
+  /** Boost target before any push-it offset, Pa. */
+  private boostBase = 0
+  readonly stress: Stress
+  private crowns = [0, 0, 0, 0]
+  private knocks = [0, 0, 0, 0]
 
   constructor(engine: EngineDefinition, conditions: Conditions) {
     this.engine = validateEngine(engine)
     this.conditions = conditionsSchema.parse(conditions)
     this.pistonArea = (Math.PI * engine.bore ** 2) / 4
+    this.stress = new Stress(this.engine)
+    this.inertia = engine.inertia + partsInertia(this.engine)
+    this.frictionStatic =
+      FMEP_STATIC + VALVE_SPRINGS[this.engine.parts.valveSprings].friction
+    if (engine.induction.kind === 'turbo')
+      this.boostBase = engine.induction.boostTarget
     this.crankRadius = engine.stroke / 2
     this.clearanceVolume =
       (this.pistonArea * engine.stroke) / (engine.compression - 1)
@@ -418,6 +442,10 @@ export class EngineCore {
     core.acoustics.adopt(previous.acoustics)
     core.traces = previous.traces.map((t) => t.slice())
     core.induction.adopt(previous.induction)
+    core.stress.adopt(previous.stress)
+    core.boostBase = previous.boostBase
+    if (engine.induction.kind === 'turbo' && !engine.management)
+      core.boostBase = engine.induction.boostTarget
     core.fuel.adopt(previous.fuel)
     const p = previous.engine
     const sameGeometry =
@@ -528,7 +556,7 @@ export class EngineCore {
       )
       this.fuel.setLambda(this.targetLambda)
       if (induction.config.kind === 'turbo')
-        induction.boostTarget = lookup(
+        this.boostBase = lookup(
           maps.throttle,
           maps.rpm,
           maps.boost,
@@ -537,8 +565,15 @@ export class EngineCore {
         )
     }
     const turbo = induction.config.kind === 'turbo'
+    if (turbo)
+      induction.boostTarget = Math.max(
+        0,
+        this.boostBase + (this.controls.boostOffset ?? 0),
+      )
+    const failed = this.stress.failure !== null
     const fuel = this.fuel
     fuel.limiterCut = this.limited && !this.sparkCut
+    fuel.shutOff = failed
     // A carburettor's venturi loss sits ahead of the throttle or compressor.
     induction.inletLoss = fuel.inletLoss
     const supply = induction.boosted
@@ -594,6 +629,7 @@ export class EngineCore {
         const exhaustClosing = previousDeg < 370 && deg >= 370
         if (intakeClosing || exhaustClosing) valveSeats++
         if (exhaustClosing) cyl.thermal.closeExhaust(this.time)
+        if (intakeClosing) this.stress.closeCycle(i)
         // Scalar geometry keeps allocations out of the per-sample audio hot path.
         const sin = Math.sin(phase),
           cos = Math.cos(phase)
@@ -755,7 +791,7 @@ export class EngineCore {
         // Without maps the spark stays before top dead centre, as in 1.6.0.
         const advance = Math.max(
           maps ? MIN_ADVANCE : 1,
-          this.sparkAdvance - cyl.retard,
+          this.sparkAdvance + (this.controls.advanceOffset ?? 0) - cyl.retard,
         )
         const spark = CYCLE - (advance * Math.PI) / 180
         const ignition = spark >= CYCLE ? spark - CYCLE : spark
@@ -770,8 +806,11 @@ export class EngineCore {
             cyl.fuel,
             (cyl.fresh * this.oxygen) / this.grade.oxygen,
           )
+          // A failed engine has lost a cylinder's seal or drive: it stops.
           const fires =
-            this.controls.ignition && !(this.limited && this.sparkCut)
+            this.controls.ignition &&
+            !failed &&
+            !(this.limited && this.sparkCut)
           const ignites = lambda <= LEAN_MISFIRE && lambda >= RICH_MISFIRE
           cyl.heat =
             fires && ignites ? burnable * this.grade.heating * 0.96 : 0
@@ -850,6 +889,17 @@ export class EngineCore {
             'Cylinder state left the supported model range. Stop and rebuild.',
           )
         pressure = (cyl.mass * moles * R * temperature) / volume
+        // Rod load along the bore: gas force less the reciprocating
+        // parts' inertia (positive compresses the rod).
+        const rod =
+          (pressure - c.pressure) * this.pistonArea -
+          this.stress.inertiaForce *
+            this.omega *
+            this.omega *
+            (cos + this.stress.rodRatio * (2 * cos * cos - 1))
+        if (rod > this.stress.compression[i]) this.stress.compression[i] = rod
+        if (-rod > this.stress.tension[i]) this.stress.tension[i] = -rod
+        if (pressure > this.stress.peak[i]) this.stress.peak[i] = pressure
         if (cyl.knockOpen) this.integrateKnock(cyl, pressure, elapsed, dt)
         if (intakeClosing) this.closeIntake(cyl, pressure, temperature)
         this.traces[i][Math.min(359, Math.floor(deg / 2))] = pressure
@@ -861,14 +911,15 @@ export class EngineCore {
       // Mechanical friction mean effective pressure from mean piston speed;
       // pumping work is simulated through the valves, not included here.
       const friction =
-        (FMEP_STATIC +
+        (this.frictionStatic +
           FMEP_LINEAR * pistonSpeed +
           FMEP_QUADRATIC * pistonSpeed * pistonSpeed) *
           this.frictionPerPascal +
         induction.crankTorque +
         fuel.crankTorque
       torque += (indicated - friction) / n
-      const starter = this.controls.starter && rpm < 500 ? e.starterTorque : 0
+      const starter =
+        this.controls.starter && rpm < 500 && !failed ? e.starterTorque : 0
       if (this.controls.holdRpm === null) {
         const road = this.controls.road
         const load =
@@ -886,13 +937,14 @@ export class EngineCore {
         this.omega = Math.max(
           0,
           this.omega +
-            ((indicated - friction - load + starter) / e.inertia) * dt,
+            ((indicated - friction - load + starter) / this.inertia) * dt,
         )
       } else {
         // Speed-controlled dynamometer: constraint reaction includes rotational acceleration.
         const target = rpmToOmega(this.controls.holdRpm)
         const acceleration = (target - this.omega) / dt
-        this.absorbedTorque = indicated - friction - e.inertia * acceleration
+        this.absorbedTorque =
+          indicated - friction - this.inertia * acceleration
         this.omega = target
       }
       absorbed += this.absorbedTorque / n
@@ -964,8 +1016,9 @@ export class EngineCore {
     if (e.combustion.knockControl)
       for (const cyl of this.cylinders)
         cyl.retard = Math.max(0, cyl.retard - RETARD_RECOVERY * this.dt)
-    if (this.sample % THERMAL_INTERVAL === 0)
-      for (const cyl of this.cylinders)
+    if (this.sample % THERMAL_INTERVAL === 0) {
+      for (let i = 0; i < 4; i++) {
+        const cyl = this.cylinders[i]
         cyl.thermal.update(
           THERMAL_INTERVAL * this.dt,
           this.coolant,
@@ -973,6 +1026,21 @@ export class EngineCore {
           this.exhaustReference,
           cyl.knockIntensity,
         )
+        this.crowns[i] = cyl.thermal.crown
+        this.knocks[i] = cyl.knockIntensity
+      }
+      this.stress.update(
+        THERMAL_INTERVAL * this.dt,
+        this.time,
+        omegaToRpm(this.omega),
+        this.crowns,
+        this.knocks,
+        omegaToRpm(induction.shaftOmega),
+        induction.exhaustTemperature,
+        this.controls.indestructible ?? false,
+      )
+    }
+    if (this.stress.failure) this.warning = this.stress.failure.title
     this.torque += ((torque - this.torque) * this.dt) / 0.08
     this.time += this.dt
     this.sample++
@@ -1155,6 +1223,7 @@ export class EngineCore {
         burn: this.cylinders.map((c) => c.duration),
         knocking: this.time - this.knockTime < 0.3,
       },
+      stress: this.stress.telemetry(this.controls.indestructible ?? false),
       temperatures: {
         egt: this.cylinders.map((c) => c.thermal.egt),
         crown: this.cylinders.map((c) => c.thermal.crown),

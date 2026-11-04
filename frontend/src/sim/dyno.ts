@@ -13,6 +13,7 @@ export class DynoTest {
   private sumAbsorbed = 0
   private sumRpm = 0
   private sumRetard = 0
+  private stress = 0
   private count = 0
   private lastBin = 0.8
   private stepTarget: number
@@ -25,6 +26,7 @@ export class DynoTest {
     procedure: Procedure = defaultProcedure,
     id = 'test',
     runtime = 'Node',
+    indestructible = false,
   ) {
     validateProcedure(procedure, engine)
     this.core = new EngineCore(engine, conditions)
@@ -32,6 +34,7 @@ export class DynoTest {
       ignition: true,
       throttle: 1,
       holdRpm: procedure.startRpm,
+      indestructible,
     })
     this.stepTarget = procedure.startRpm
     this.run = {
@@ -44,7 +47,9 @@ export class DynoTest {
       procedure: { ...procedure },
       status: 'running',
       reason: '',
-      warnings: [],
+      warnings: indestructible
+        ? ['Indestructible mode: parts were stressed but could not fail.']
+        : [],
       samples: [],
     }
   }
@@ -73,6 +78,7 @@ export class DynoTest {
       knock: Math.min(100, this.core.knockPeak),
       retard: this.sumRetard / this.count,
       egt: Math.max(...this.core.cylinders.map((c) => c.thermal.egt)),
+      stress: Math.min(100, this.stress),
     })
     this.clear()
   }
@@ -82,6 +88,7 @@ export class DynoTest {
     this.sumRpm = 0
     this.sumRetard = 0
     this.count = 0
+    this.stress = 0
     this.core.knockPeak = 0
   }
   tick() {
@@ -111,6 +118,11 @@ export class DynoTest {
       return 0
     }
     this.frame++
+    const failure = this.core.stress.failure
+    if (failure) {
+      this.abort(`${failure.title}. ${failure.detail}`)
+      return audio
+    }
     // Knock during warm-up belongs to no sample.
     if (!testing) this.core.knockPeak = 0
     if (testing) {
@@ -118,6 +130,8 @@ export class DynoTest {
       this.sumAbsorbed += this.core.absorbedTorque
       this.sumRpm += omegaToRpm(this.core.omega)
       this.sumRetard += this.core.meanRetard()
+      if (this.frame % 48 === 0)
+        this.stress = Math.max(this.stress, this.core.stress.worst())
       this.count++
       this.stageTime += 1 / 48000
       if (p.kind === 'sweep' && time - this.lastBin >= 0.15) {

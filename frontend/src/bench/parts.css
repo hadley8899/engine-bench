@@ -1,0 +1,93 @@
+.stress-strip {
+  border-top: 1px solid #2a3943;
+  padding: 12px 20px 14px;
+}
+.stress-switch {
+  margin: -6px 0 !important;
+}
+.stress-switch .MuiFormControlLabel-label {
+  font-size: 12px;
+  color: #93a6b0;
+}
+.stress-limits {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 18px;
+}
+.stress-limit {
+  display: grid;
+  grid-template-columns: 96px 1fr 58px;
+  align-items: center;
+  gap: 8px;
+}
+.stress-label {
+  font-size: 12px;
+  color: #93a6b0;
+  white-space: nowrap;
+}
+.stress-limit .knock-value {
+  text-align: right;
+}
+.stress-limit.near .knock-bar span {
+  background: #e3aa63;
+}
+.stress-limit.over .knock-bar span,
+.stress-limit.failed .knock-bar span {
+  background: #ff3b6b;
+}
+.stress-limit.failed .stress-label {
+  color: #ff8fa8;
+}
+.stress-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #93a6b0;
+}
+.failure-alert {
+  margin-bottom: 10px;
+}
+.failure-note {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+.push-results {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  margin-top: 12px;
+}
+.push-results th,
+.push-results td {
+  padding: 4px 8px;
+  text-align: right;
+  border-bottom: 1px solid #22313a;
+}
+.push-results th:first-child,
+.push-results td:first-child {
+  text-align: left;
+}
+.push-results th {
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  color: #93a6b0;
+}
+.push-results tr.knocked td {
+  color: #e3aa63;
+}
+.push-results tr.failed td {
+  color: #ff8fa8;
+}
+.push-scroll {
+  overflow-x: auto;
+}
+@media (max-width: 600px) {
+  .stress-strip {
+    padding: 10px 16px;
+  }
+  .stress-limits {
+    grid-template-columns: 1fr;
+  }
+}

@@ -192,7 +192,51 @@ Trends follow the cycle model:
 
 Identical cylinders read the same: differences come only from modelled causes, such as manifold interactions, per-cylinder knock retard and knock heat. Dyno samples recorded by 1.8.0 carry the hottest cylinder's EGT.
 
-The bench colours a temperature amber or red at 980/1,050 °C EGT, 320/350 °C crown and 800/870 °C valve. These are display guides, not failure limits. Failures are planned Stage 6 work. The cutaway's pistons glow from about 250 °C, and a knocking chamber flashes white.
+The bench colours a temperature amber or red at 980/1,050 °C EGT, 320/350 °C crown and 800/870 °C valve. These are display guides, not failure limits; the part limits are in the next section. The cutaway's pistons glow from about 250 °C, and a knocking chamber flashes white.
+
+## Parts, stress and failures
+
+Model 1.11.0 (`src/sim/parts.ts`). Every limit below is an estimate calibrated against this model's own pressures and temperatures, so that the five starting builds run at full load with margin and plausible abuse breaks something. None is a rating for a real part, and real component strengths are rarely published, so none should be read as "how much a real engine would take". Forum figures were not used as specifications.
+
+**Parts.** A build carries `parts`: pistons (cast, hypereutectic, forged), connecting rods (stock, forged I-beam, H-beam), head gasket (composite, multi-layer steel, O-ringed copper), head fasteners (bolts, studs) and valve springs (stock, uprated, race). Builds saved before 1.11.0 read with stock parts (cast, stock, MLS, bolts, stock).
+
+What parts change, beyond their limits:
+
+- **Mass and inertia.** A piston assembly (piston, pin, rings) weighs `740 kg/m³ × bore³` (0.47 kg at 86 mm), scaled 0.95 hypereutectic and 1.06 forged. A rod weighs `567 kg/m³ × bore² × rod length` (0.6 kg for the Road engine), scaled 0.95 forged I-beam and 1.1 H-beam. A third of the rod reciprocates with the piston. Parts heavier or lighter than stock change the crank inertia by their rotating mass and half their reciprocating mass, times crank radius². Stock parts add nothing, so the build's own inertia figure still applies.
+- **Friction.** Uprated and race springs add 2.5 and 6 kPa of friction mean effective pressure (about 0.4 and 1 Nm on 2 L).
+- Pistons do not change the crown's thermal properties in this version.
+
+Turbochargers, intercoolers, injectors and fuel pumps are offered as named sets of the existing induction and fuel-supply fields (small to big turbos, intercoolers from none to water-to-air, 240–1,000 cc/min injectors, 110–450 L/h pumps). Fitting one writes those values; they have no further hidden effect.
+
+**Loads.** The core records, per cylinder and cycle (intake closing to intake closing):
+
+- peak cylinder pressure;
+- rod compression and tension along the bore: gas force `(p − p_ambient) × piston area` less the reciprocating mass's inertia, `m × r × ω² × (cos θ + (r/l) × cos 2θ)`. Gas force peaks just after firing TDC; inertia tension peaks at TDC on the exhaust stroke.
+
+Temperatures and knock come from the existing models. Loads are compared with the limits every millisecond.
+
+| Limit | Basis | Stock | Upgrades |
+| --- | --- | --- | --- |
+| Rod compression (buckling) | Peak compressive rod force | 140 bar on the piston area | Forged I 190, H-beam 230 bar |
+| Rod tension | Peak inertia tension | 1.25 × tension at the build's mechanical limit with stock parts | Forged I ×1.4, H-beam ×1.65 |
+| Piston crown | Crown temperature | Cast 437 °C | Hypereutectic 452 °C, forged 497 °C |
+| Piston knock | Unburned share at knock onset | Cast 6% | Hypereutectic 4.5% (brittle), forged 13% |
+| Head gasket | Peak pressure × (1 + 1.5 × knock intensity) | MLS with bolts 150 bar | Composite 125, copper 180 bar; studs ×1.2 |
+| Valve float | Crank speed | 1.08 × mechanical limit | Uprated 1.2×, race 1.33× |
+| Turbo speed | Compressor shaft speed (turbo or centrifugal) | 1.12 × the turbo's rated maximum (burst, not rated speed) | Set by the turbo |
+| Turbine inlet | Turbo exhaust manifold temperature | 1,100 °C | None |
+
+Stock rods and valve springs are rated against the build's estimated mechanical limit, so raising that field describes a stronger design. The electronic rev limiter remains separate and never strengthens anything.
+
+The crown limits sit higher than real aluminium pistons usually tolerate (around 350 °C), because this model's crowns run hot: the Turbo hot hatch reaches about 376 °C at 6,200 RPM without oil jets. The limits are relative to the model, which is why they are labelled estimates.
+
+**Exposure and failure.** A part fails when its limit stays exceeded: exposure grows at `(ratio − 1)/0.1 × dt/hold`, so 10% over fails in `hold` seconds and 30% over three times faster. Below the limit exposure falls by 1/20 per second, so brief excursions survive. Hold times are 0.4 s for rods, 1 s valve float, 1.5 s head gasket, 2 s crown and turbo speed, 3 s knock and 5 s turbine temperature. There is no wear: a rebuild starts every part fresh.
+
+A failure (a holed or cracked piston, bent or broken rod, lifted head gasket, valve-to-piston contact, burst compressor wheel or cracked turbine housing) stops combustion, injection and the starter. The engine coasts to a stop, and the stress readings freeze as they were at the moment of failure. The bench shows what failed, where and why. Rebuild, or Start, makes a fresh core from the last build. A dyno run that meets a failure is aborted with the failure as its reason, and samples record the highest stress share. Failures are deterministic for the same snapshot, controls and host. Indestructible mode still reports stress and exposure but never fails a part; dyno runs record it as a warning.
+
+Not modelled: valve float losing power or bending valves before contact, partial damage (a running engine with a damaged part), wear and fatigue accumulation, oil jets, piston ring flutter, bearing loads, crank torsion, and head-lift leakage before failure.
+
+**Push it.** `PushTest` (`src/sim/push.ts`) holds the applied build at one speed on full throttle in the worker. It settles for 1 s, then raises spark advance (degrees) or the turbo boost target (Pa) by a fixed step every `hold` seconds. Each step records the last 0.5 s's mean torque, boost, the largest knock intensity and ECU retard, and the highest stress share. It stops at the first knock (an unburned share above 3%, the ECU's sensing threshold), at a failure, after 40 steps, or above 50° advance or 4 bar boost. Knock control and parts act as on the bench. Steps of a few seconds are shorter than the crown's 4 s time constant, so temperature limits show up later than they would under a sustained load.
 
 ## Live updates
 

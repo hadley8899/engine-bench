@@ -24,8 +24,12 @@ import { z } from 'zod'
  * 1.10.0: equilibrium dissociation of the burned gas (CO2, CO, H2O, H2,
  * OH, H, O2, O) holds heat back while it is hot and returns it as it
  * cools, so best power falls slightly rich of λ 1. Applies to every build.
+ * 1.11.0: engine parts (pistons, rods, head gasket and fasteners, valve
+ * springs) with estimated limits, stress estimates and failures. Stock
+ * parts, which builds saved earlier receive, leave every result unchanged
+ * unless a limit is exceeded.
  */
-export const MODEL_VERSION = 'eb-0d-1.10.0'
+export const MODEL_VERSION = 'eb-0d-1.11.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -38,6 +42,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.7.0',
   'eb-0d-1.8.0',
   'eb-0d-1.9.0',
+  'eb-0d-1.10.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -264,6 +269,26 @@ export const fuelSupplySchema = z.strictObject({
 })
 export type FuelSupply = z.infer<typeof fuelSupplySchema>
 
+/**
+ * Fitted internal parts; their masses and limits are in parts.ts. Stock
+ * parts are rated for the build's estimated mechanical limit.
+ */
+export const partsSchema = z.strictObject({
+  pistons: z.enum(['cast', 'hypereutectic', 'forged']),
+  rods: z.enum(['stock', 'forgedI', 'hBeam']),
+  headGasket: z.enum(['composite', 'mls', 'copper']),
+  headFasteners: z.enum(['bolts', 'studs']),
+  valveSprings: z.enum(['stock', 'uprated', 'race']),
+})
+export type Parts = z.infer<typeof partsSchema>
+export const stockParts: Parts = {
+  pistons: 'cast',
+  rods: 'stock',
+  headGasket: 'mls',
+  headFasteners: 'bolts',
+  valveSprings: 'stock',
+}
+
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
@@ -305,6 +330,8 @@ export const engineSchema = z.strictObject({
   // and have unlimited fuel supply.
   management: managementSchema.nullable().default(null),
   fuelSupply: fuelSupplySchema.nullable().default(null),
+  // Builds saved before 1.11.0 have stock parts.
+  parts: partsSchema.default(stockParts),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -405,6 +432,7 @@ export const roadEngine: EngineDefinition = {
   combustion: combustionDefaults,
   management: null,
   fuelSupply: { injectorFlow: 240, maxDuty: 0.85, pumpFlow: 110 },
+  parts: stockParts,
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {
@@ -454,6 +482,8 @@ export const sampleSchema = z.strictObject({
   retard: z.number().min(0).max(90).optional(),
   /** Hottest cylinder's exhaust port gas temperature over the sample, K; 1.8.0+. */
   egt: z.number().min(0).max(4000).optional(),
+  /** Highest part stress over the sample, as a share of its limit; 1.11.0+. */
+  stress: z.number().min(0).max(100).optional(),
 })
 export const runSchema = z.strictObject({
   schemaVersion: z.literal(1),
