@@ -1364,26 +1364,24 @@ export function BenchPage() {
     <ThemeProvider theme={theme}>
       <div className="bench-app">
         <header className="bench-header">
-          <header className="bench-header">
-            <Link to="/" className="bench-wordmark">
-              <span className="brand-mark">EB</span>
-              <span>
-                ENGINE BENCH<small>THE VIRTUAL ENGINE WORKSHOP</small>
-              </span>
-            </Link>
-            <div className="header-right">
-              <Chip size="small" label="LOCAL SIMULATION" variant="outlined" />
-              {user ? (
-                <Button component={Link} to="/settings">
-                  Account settings
-                </Button>
-              ) : (
-                <Button component={Link} to="/login">
-                  Sign in
-                </Button>
-              )}
-            </div>
-          </header>
+          <Link to="/" className="bench-wordmark">
+            <span className="brand-mark">EB</span>
+            <span>
+              ENGINE BENCH<small>THE VIRTUAL ENGINE WORKSHOP</small>
+            </span>
+          </Link>
+          <div className="header-right">
+            <Chip size="small" label="LOCAL SIMULATION" variant="outlined" />
+            {user ? (
+              <Button component={Link} to="/settings">
+                Account settings
+              </Button>
+            ) : (
+              <Button component={Link} to="/login">
+                Sign in
+              </Button>
+            )}
+          </div>
         </header>
         <div className="command-bar" data-testid="command-bar">
           <div className="command-build">
@@ -2245,143 +2243,141 @@ export function BenchPage() {
               </section>
               <section hidden={layout.view !== 'dyno'} className="dyno-section">
                 <div className="dyno-grid">
-                  <div className="dyno-grid">
-                    <Paper className="editor-panel" variant="outlined">
-                      <h3>Test procedure</h3>
-                      <div className="field-grid">
-                        <TextField
-                          select
-                          size="small"
-                          label="Procedure"
-                          value={procedure.kind}
-                          onChange={(e) =>
-                            setProcedure({
-                              ...procedure,
-                              kind: e.target.value as Procedure['kind'],
-                            })
-                          }
-                        >
-                          <MenuItem value="sweep">Continuous sweep</MenuItem>
-                          <MenuItem value="steps">Steady-state steps</MenuItem>
-                        </TextField>
-                        <TextField
-                          select
-                          size="small"
-                          label="Capture in"
-                          disabled={activeTest}
-                          value={slot}
-                          onChange={(e) => setSlot(e.target.value as typeof slot)}
-                        >
-                          <MenuItem value="baseline">Baseline</MenuItem>
-                          <MenuItem value="modified">Modified</MenuItem>
-                        </TextField>
-                        {(
-                          [
-                            'startRpm',
-                            'endRpm',
-                            'rate',
-                            'stepRpm',
-                            'holdSeconds',
-                          ] as const
+                  <Paper className="editor-panel" variant="outlined">
+                    <h3>Test procedure</h3>
+                    <div className="field-grid">
+                      <TextField
+                        select
+                        size="small"
+                        label="Procedure"
+                        value={procedure.kind}
+                        onChange={(e) =>
+                          setProcedure({
+                            ...procedure,
+                            kind: e.target.value as Procedure['kind'],
+                          })
+                        }
+                      >
+                        <MenuItem value="sweep">Continuous sweep</MenuItem>
+                        <MenuItem value="steps">Steady-state steps</MenuItem>
+                      </TextField>
+                      <TextField
+                        select
+                        size="small"
+                        label="Capture in"
+                        disabled={activeTest}
+                        value={slot}
+                        onChange={(e) => setSlot(e.target.value as typeof slot)}
+                      >
+                        <MenuItem value="baseline">Baseline</MenuItem>
+                        <MenuItem value="modified">Modified</MenuItem>
+                      </TextField>
+                      {(
+                        [
+                          'startRpm',
+                          'endRpm',
+                          'rate',
+                          'stepRpm',
+                          'holdSeconds',
+                        ] as const
+                      )
+                        .filter((k) =>
+                          procedure.kind === 'steps'
+                            ? k !== 'rate'
+                            : !['stepRpm', 'holdSeconds'].includes(k),
                         )
-                          .filter((k) =>
-                            procedure.kind === 'steps'
-                              ? k !== 'rate'
-                              : !['stepRpm', 'holdSeconds'].includes(k),
-                          )
-                          .map((k) => (
-                            <NumberField
-                              key={k}
-                              size="small"
-                              label={
-                                {
-                                  startRpm: 'Start RPM',
-                                  endRpm: 'End RPM',
-                                  rate: 'Sweep RPM / second',
-                                  stepRpm: 'Step RPM',
-                                  holdSeconds: 'Minimum settling seconds',
-                                }[k]
-                              }
-                              value={procedure[k]}
-                              onValueChange={(v) =>
-                                setProcedure((p) => ({ ...p, [k]: v }))
-                              }
-                            />
-                          ))}
-                      </div>
-                      <Stack direction="row" spacing={1} mt={2}>
-                        <Button
-                          variant="contained"
-                          disabled={dynoBlocked}
-                          onClick={() => requestTest('live')}
-                        >
-                          Live pull
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          disabled={dynoBlocked}
-                          onClick={() => requestTest('quick')}
-                        >
-                          Quick test
-                        </Button>
-                      </Stack>
-                      {dynoReason && !busy && (
-                        <p className="pending-note" data-testid="dyno-blocked">
-                          {dynoReason}
-                        </p>
-                      )}
-                      <p className="helper-text">
-                        Automatic tests own throttle and RPM. Quick tests calculate
-                        silently; they are not playback. Stop retains incomplete
-                        samples.
-                      </p>
-                      {displayed && (
-                        <PullSummary
-                          run={displayed}
-                          baseline={baseline}
-                          power={prefs.power}
-                          torque={prefs.torque}
-                          band={band}
-                          onBand={setBand}
-                        />
-                      )}
-                    </Paper>
-                    <Paper className="chart-panel" variant="outlined">
-                      <Chart
-                        title="Brake torque comparison"
-                        markPeaks
-                        labels={curveLabels}
-                        data={curves}
-                        height={205}
-                      />
-                      <Chart
-                        title="Crank power comparison"
-                        markPeaks
-                        labels={powerLabels}
-                        data={powers}
-                        height={205}
-                      />
-                      <div className="comparison-notes">
-                        <h3>What changed?</h3>
-                        {describeChanges(
-                          baseline,
-                          modified?.engine ?? experiment.engine,
-                          modified?.conditions ?? experiment.conditions,
-                        ).map((c) => (
-                          <p key={c}>{c}</p>
+                        .map((k) => (
+                          <NumberField
+                            key={k}
+                            size="small"
+                            label={
+                              {
+                                startRpm: 'Start RPM',
+                                endRpm: 'End RPM',
+                                rate: 'Sweep RPM / second',
+                                stepRpm: 'Step RPM',
+                                holdSeconds: 'Minimum settling seconds',
+                              }[k]
+                            }
+                            value={procedure[k]}
+                            onValueChange={(v) =>
+                              setProcedure((p) => ({ ...p, [k]: v }))
+                            }
+                          />
                         ))}
-                        <Button
-                          disabled={!baseline || activeTest}
-                          onClick={() =>
-                            baseline &&
-                            configure(baseline.engine, baseline.conditions)
-                          }
-                        >
-                          Restore baseline engine & conditions
-                        </Button>
-                      </div>
-                    </Paper>
-                  </div>
+                    </div>
+                    <Stack direction="row" spacing={1} mt={2}>
+                      <Button
+                        variant="contained"
+                        disabled={dynoBlocked}
+                        onClick={() => requestTest('live')}
+                      >
+                        Live pull
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        disabled={dynoBlocked}
+                        onClick={() => requestTest('quick')}
+                      >
+                        Quick test
+                      </Button>
+                    </Stack>
+                    {dynoReason && !busy && (
+                      <p className="pending-note" data-testid="dyno-blocked">
+                        {dynoReason}
+                      </p>
+                    )}
+                    <p className="helper-text">
+                      Automatic tests own throttle and RPM. Quick tests calculate
+                      silently; they are not playback. Stop retains incomplete
+                      samples.
+                    </p>
+                    {displayed && (
+                      <PullSummary
+                        run={displayed}
+                        baseline={baseline}
+                        power={prefs.power}
+                        torque={prefs.torque}
+                        band={band}
+                        onBand={setBand}
+                      />
+                    )}
+                  </Paper>
+                  <Paper className="chart-panel" variant="outlined">
+                    <Chart
+                      title="Brake torque comparison"
+                      markPeaks
+                      labels={curveLabels}
+                      data={curves}
+                      height={205}
+                    />
+                    <Chart
+                      title="Crank power comparison"
+                      markPeaks
+                      labels={powerLabels}
+                      data={powers}
+                      height={205}
+                    />
+                    <div className="comparison-notes">
+                      <h3>What changed?</h3>
+                      {describeChanges(
+                        baseline,
+                        modified?.engine ?? experiment.engine,
+                        modified?.conditions ?? experiment.conditions,
+                      ).map((c) => (
+                        <p key={c}>{c}</p>
+                      ))}
+                      <Button
+                        disabled={!baseline || activeTest}
+                        onClick={() =>
+                          baseline &&
+                          configure(baseline.engine, baseline.conditions)
+                        }
+                      >
+                        Restore baseline engine & conditions
+                      </Button>
+                    </div>
+                  </Paper>
                 </div>
                 <Paper className="editor-panel push-panel" variant="outlined">
                   <h3>Push it</h3>
