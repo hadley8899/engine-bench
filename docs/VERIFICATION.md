@@ -338,3 +338,10 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Rounded polyline pipe curves replace overshooting splines. Sampled 401 points per primary at 40/86/150 mm bore for 4-1 and 4-2-1 layouts: minimum centre spacing between non-merging primaries was respectively 0.250 and 0.199 × bore, versus 0.164 × bore pipe diameter. This is a routing sanity check, not complete mesh collision or rendered validation; intended paired junctions were excluded.
 - Browser inspection remains pending under the previously recorded local-port restriction. The user’s reported intersections are not considered visually verified fixed until reviewed in the live browser.
 - Final build, lint and whitespace checks passed, retaining existing build warnings and the `BenchPage.tsx:681` lint warning. No simulation changes or new browser-test pass are claimed.
+
+### 3 November — turbo intake route and camera presets
+
+- Added compressor-to-intake charge piping with bounded bends, couplers and clamps. Intercooler geometry follows `induction.intercooler.effectiveness > 0`; zero uses a direct route. The cooler has end tanks and 22 instanced fins. Carb/TBI intake uses a sealed hat; port/direct injection uses an end-mounted throttle housing. Direct injection now has manifold runners/plenum as well as injectors.
+- Added Overview, Timing, Crank and conditional Turbo view buttons. Overview bounds exclude transient gas overlays and the floor; camera fitting accounts for aspect ratio. Manual orbit cancels automatic fitting and its position remains preserved across rebuilds. A 112 px strip separates camera/cylinder controls from the canvas.
+- The Chromium narrow-layout workflow was attempted but its Vite web server could not start. Browser appearance, camera interactions, pipe collisions, narrow-layout fit and frame cost remain unverified. No physics/audio/schema changes were made.
+- Final production build, lint and whitespace checks passed. Existing build warnings and the `BenchPage.tsx:681` cleanup-ref warning remain.

@@ -27,6 +27,7 @@ export function EngineView({
   const container = useRef<HTMLDivElement>(null)
   const options = useRef({ slow, overlays, selected, onSelect })
   const [failed, setFailed] = useState(false)
+  const cameraPreset = useRef<((name: string) => void) | null>(null)
   /** Camera kept across rebuilds (live edits), relative to block size. */
   const view = useRef<{
     position: THREE.Vector3
@@ -921,64 +922,73 @@ export function EngineView({
         z,
       ).rotation.x = tilt
     }
+    const plenumY = head + 1.0 * u
+    const plenumZ = -1.0 * u
+    let intakeConnection = new THREE.Vector3(width * 0.425, plenumY, plenumZ)
     if (fuelSystem.kind === 'direct')
       for (let i = 0; i < 4; i++)
         injector((i - 1.5) * spacing + 0.22 * u, head + 0.45 * u, 0, -0.35)
-    else {
-      const plenumY = head + 1.0 * u
-      const plenumZ = -1.0 * u
-      for (let i = 0; i < 4; i++) {
-        const x = (i - 1.5) * spacing
-        const runner = new THREE.CatmullRomCurve3([
-          new THREE.Vector3(x, head + 0.2 * u, -0.38 * u),
-          new THREE.Vector3(x, head + 0.52 * u, -0.72 * u),
-          new THREE.Vector3(x, plenumY, plenumZ + 0.12 * u),
-        ])
-        mesh(
-          new THREE.TubeGeometry(runner, 20, 0.13 * u, 14, false),
-          intakeMetal,
-          0,
-          0,
-          0,
-        )
-      }
+    for (let i = 0; i < 4; i++) {
+      const x = (i - 1.5) * spacing
+      const runner = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(x, head + 0.2 * u, -0.38 * u),
+        new THREE.Vector3(x, head + 0.52 * u, -0.72 * u),
+        new THREE.Vector3(x, plenumY, plenumZ + 0.12 * u),
+      ])
       mesh(
-        roundedBox(width * 0.85, 0.34 * u, 0.42 * u, 0.1 * u),
+        new THREE.TubeGeometry(runner, 20, 0.13 * u, 14, false),
         intakeMetal,
         0,
-        plenumY,
+        0,
+        0,
+      )
+    }
+    mesh(
+      roundedBox(width * 0.85, 0.34 * u, 0.42 * u, 0.1 * u),
+      intakeMetal,
+      0,
+      plenumY,
+      plenumZ,
+    ).castShadow = true
+    if (fuelSystem.kind === 'port')
+      for (let i = 0; i < 4; i++)
+        injector((i - 1.5) * spacing, plenumY + 0.1 * u, -0.7 * u, 0.5)
+    else if (fuelSystem.kind !== 'direct') {
+      // Carburettor barrels (up to four drawn) or a single throttle body.
+      const barrels =
+        fuelSystem.kind === 'carburettor' ? Math.min(fuelSystem.chokes, 4) : 1
+      const bore =
+        fuelSystem.kind === 'carburettor'
+          ? (fuelSystem.chokeDiameter / 0.032) * 0.16 * u
+          : 0.2 * u
+      for (let b = 0; b < barrels; b++)
+        mesh(
+          new THREE.CylinderGeometry(bore * 1.25, bore * 1.25, 0.42 * u, 24),
+          brass,
+          (b - (barrels - 1) / 2) * (2.6 * bore + 0.05 * u),
+          plenumY + 0.38 * u,
+          plenumZ,
+        )
+      const filter = Math.max(0.4 * u, barrels * 1.5 * bore)
+      // Boosted carb/TBI builds use a sealed pressure hat at their air inlet.
+      intakeConnection = new THREE.Vector3(filter, plenumY + 0.66 * u, plenumZ)
+      mesh(
+        new THREE.CylinderGeometry(filter, filter, 0.16 * u, 32),
+        induction.kind === 'turbo' ? aluminium : paint,
+        0,
+        plenumY + 0.66 * u,
         plenumZ,
       ).castShadow = true
-      if (fuelSystem.kind === 'port')
-        for (let i = 0; i < 4; i++)
-          injector((i - 1.5) * spacing, plenumY + 0.1 * u, -0.7 * u, 0.5)
-      else {
-        // Carburettor barrels (up to four drawn) or a single throttle body.
-        const barrels =
-          fuelSystem.kind === 'carburettor' ? Math.min(fuelSystem.chokes, 4) : 1
-        const bore =
-          fuelSystem.kind === 'carburettor'
-            ? (fuelSystem.chokeDiameter / 0.032) * 0.16 * u
-            : 0.2 * u
-        for (let b = 0; b < barrels; b++)
-          mesh(
-            new THREE.CylinderGeometry(bore * 1.25, bore * 1.25, 0.42 * u, 24),
-            brass,
-            (b - (barrels - 1) / 2) * (2.6 * bore + 0.05 * u),
-            plenumY + 0.38 * u,
-            plenumZ,
-          )
-        const filter = Math.max(0.4 * u, barrels * 1.5 * bore)
-        mesh(
-          new THREE.CylinderGeometry(filter, filter, 0.16 * u, 32),
-          paint,
-          0,
-          plenumY + 0.66 * u,
-          plenumZ,
-        ).castShadow = true
-        if (fuelSystem.kind === 'throttleBody')
-          injector(0, plenumY + 0.86 * u, plenumZ, 0)
-      }
+      if (fuelSystem.kind === 'throttleBody')
+        injector(0, plenumY + 0.86 * u, plenumZ, 0)
+    }
+    if (fuelSystem.kind === 'port' || fuelSystem.kind === 'direct') {
+      const body = mesh(new THREE.CylinderGeometry(0.2 * u, 0.2 * u, 0.26 * u, 24),
+        aluminium, intakeConnection.x + 0.13 * u, intakeConnection.y, intakeConnection.z)
+      body.rotation.z = Math.PI / 2
+      mesh(roundedBox(0.16 * u, 0.18 * u, 0.16 * u, 0.03 * u),
+        darkMetal, intakeConnection.x + 0.13 * u, intakeConnection.y + 0.18 * u, intakeConnection.z)
+      intakeConnection.x += 0.26 * u
     }
     // Exhaust system on the +z side, drawn from the build's exhaust settings:
     // headers sized by length, a 4-1 or 4-2-1 merge, catalyst, silencer and
@@ -1010,7 +1020,7 @@ export function EngineView({
       toneMapped: false,
     })
     const pipeRadius = 0.082 * u
-    const tube = (points: THREE.Vector3[], radius = pipeRadius) => {
+    const tube = (points: THREE.Vector3[], radius = pipeRadius, material: THREE.Material = hotPipe) => {
       // Rounded polyline stays within its routing corridor; unconstrained
       // Catmull-Rom curves overshoot long runs and cross neighbouring pipes.
       const curve = new THREE.CurvePath<THREE.Vector3>()
@@ -1026,7 +1036,7 @@ export function EngineView({
         previous = exit
       }
       curve.add(new THREE.LineCurve3(previous, points[points.length - 1]))
-      mesh(new THREE.TubeGeometry(curve, 64, radius, 16), hotPipe, 0, 0, 0)
+      mesh(new THREE.TubeGeometry(curve, 64, radius, 16), material, 0, 0, 0)
       // Weld collars follow the local pipe tangent instead of floating rings.
       for (const t of [0.06, 0.94]) {
         const point = curve.getPoint(t)
@@ -1034,6 +1044,70 @@ export function EngineView({
           weldMetal, point.x, point.y, point.z)
         collar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), curve.getTangent(t).normalize())
       }
+    }
+    if (induction.kind === 'turbo') {
+      const hose = new THREE.MeshStandardMaterial({ color: 0x253945, roughness: 0.86 })
+      const chargeRadius = 0.14 * u
+      const chargeTube = (points: THREE.Vector3[]) => tube(points, chargeRadius, aluminium)
+      const coupling = (point: THREE.Vector3, axis: THREE.Vector3) => {
+        const rotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
+        const sleeve = mesh(new THREE.CylinderGeometry(chargeRadius * 1.14, chargeRadius * 1.14,
+          0.22 * u, 24, 1, true), hose, point.x, point.y, point.z)
+        sleeve.quaternion.copy(rotation)
+        for (const offset of [-0.075 * u, 0.075 * u]) {
+          const centre = point.clone().addScaledVector(axis, offset)
+          const clamp = mesh(new THREE.CylinderGeometry(chargeRadius * 1.18, chargeRadius * 1.18,
+            0.025 * u, 24, 1, true), steel, centre.x, centre.y, centre.z)
+          clamp.quaternion.copy(rotation)
+        }
+      }
+      // Tangential compressor outlet rises clear of the cold housing before
+      // turning around the outside of the engine to the intake side (-z).
+      const outlet = turboPosition.clone().add(new THREE.Vector3(0.62 * turboScale, 0, 0.55 * turboScale))
+      const outletTop = outlet.clone().add(new THREE.Vector3(0, 0.8 * turboScale + 0.35 * u, 0))
+      const rearZ = -2.0 * u
+      const rearCorner = new THREE.Vector3(outletTop.x, outletTop.y, rearZ)
+      chargeTube([outlet, outletTop, rearCorner])
+      coupling(outlet.clone().add(new THREE.Vector3(0, 0.32 * turboScale, 0)), new THREE.Vector3(0, 1, 0))
+      const throttleApproach = intakeConnection.clone().add(new THREE.Vector3(0.45 * u, 0, 0))
+      if (induction.intercooler.effectiveness > 0) {
+        const coolerX = 0.1 * width, coolerY = head * 0.48
+        mesh(roundedBox(2.0 * u, 0.85 * u, 0.3 * u, 0.035 * u),
+          darkMetal, coolerX, coolerY, rearZ)
+        // Fins are instanced: detail without one draw call per strip.
+        const fins = new THREE.InstancedMesh(new THREE.BoxGeometry(1.95 * u, 0.018 * u, 0.32 * u), aluminium, 22)
+        const fin = new THREE.Object3D()
+        for (let i = 0; i < 22; i++) {
+          fin.position.set(coolerX, coolerY + (i - 10.5) * 0.037 * u, rearZ)
+          fin.updateMatrix()
+          fins.setMatrixAt(i, fin.matrix)
+        }
+        fins.castShadow = true
+        fins.receiveShadow = true
+        scene.add(fins)
+        meshes.push(fins)
+        for (const side of [-1, 1]) {
+          mesh(roundedBox(0.28 * u, 0.92 * u, 0.4 * u, 0.08 * u),
+            aluminium, coolerX + side * 1.1 * u, coolerY, rearZ)
+          mesh(roundedBox(0.1 * u, 0.35 * u, 0.12 * u, 0.02 * u),
+            standPaint, coolerX + side * 0.8 * u, coolerY - 0.6 * u, rearZ)
+        }
+        const inlet = new THREE.Vector3(coolerX + 1.24 * u, coolerY, rearZ)
+        const cooled = new THREE.Vector3(coolerX - 1.24 * u, coolerY, rearZ)
+        chargeTube([rearCorner, new THREE.Vector3(inlet.x + 0.5 * u, coolerY, rearZ), inlet])
+        // Return behind and above the cooler, leaving its inlet route separate.
+        chargeTube([cooled, cooled.clone().add(new THREE.Vector3(-0.4 * u, 0, 0)),
+          new THREE.Vector3(cooled.x - 0.4 * u, plenumY + 0.7 * u, rearZ - 0.5 * u),
+          new THREE.Vector3(throttleApproach.x, plenumY + 0.7 * u, rearZ - 0.5 * u),
+          throttleApproach, intakeConnection])
+        coupling(inlet.clone().add(new THREE.Vector3(0.16 * u, 0, 0)), new THREE.Vector3(1, 0, 0))
+        coupling(cooled.clone().add(new THREE.Vector3(-0.16 * u, 0, 0)), new THREE.Vector3(1, 0, 0))
+      } else {
+        chargeTube([rearCorner,
+          new THREE.Vector3(throttleApproach.x + 0.35 * u, throttleApproach.y, rearZ),
+          throttleApproach, intakeConnection])
+      }
+      coupling(intakeConnection.clone().add(new THREE.Vector3(0.2 * u, 0, 0)), new THREE.Vector3(1, 0, 0))
     }
     // Sweep the individual primaries forward and down into a collector. This
     // keeps all four tubes readable instead of laying them across the cam cover.
@@ -1194,6 +1268,45 @@ export function EngineView({
       puff.castShadow = false
       smokePuffs.push({ mesh: puff, material, offset: i / 6 })
     }
+    scene.updateMatrixWorld(true)
+    const bounds = new THREE.Box3()
+    // Gas volumes have unit-height geometry until the first animation frame;
+    // exclude those overlays from physical framing bounds.
+    for (const part of meshes)
+      if (!chambers.includes(part)) bounds.expandByObject(part)
+    const overviewCentre = bounds.getCenter(new THREE.Vector3())
+    const overviewRadius = bounds.getSize(new THREE.Vector3()).length() / 2
+    let fittedView: string | null = kept ? null : 'Overview'
+    const fitCamera = (name: string) => {
+      let target = overviewCentre.clone(), radius = overviewRadius
+      let direction = new THREE.Vector3(0.65, 0.4, 1)
+      if (name === 'Timing') {
+        target = new THREE.Vector3(timingX, (head + 0.85 * u) / 2, 0)
+        radius = (head + 1.3 * u) * 0.55
+        direction = new THREE.Vector3(-1, 0.15, 0.3)
+      } else if (name === 'Crank') {
+        target = new THREE.Vector3(0, 0.15 * u, 0)
+        radius = Math.hypot(width / 2, r + 0.45 * u)
+        direction = new THREE.Vector3(0.18, 0.12, 1)
+      } else if (name === 'Turbo' && induction.kind === 'turbo') {
+        target = turboPosition.clone()
+        radius = Math.max(1.7 * turboScale, 1.2 * u)
+        direction = new THREE.Vector3(0.5, 0.3, 1)
+      }
+      const vertical = THREE.MathUtils.degToRad(camera.fov)
+      const horizontal = 2 * Math.atan(Math.tan(vertical / 2) * camera.aspect)
+      const distance = radius / Math.sin(Math.min(vertical, horizontal) / 2) * 1.08
+      controls.maxDistance = Math.max(1.6 * size, distance * 2)
+      controls.minDistance = Math.min(0.35 * size, distance * 0.45)
+      camera.far = Math.max(10 * size, distance * 4)
+      camera.position.copy(target).addScaledVector(direction.normalize(), distance)
+      controls.target.copy(target)
+      camera.updateProjectionMatrix()
+      controls.update()
+    }
+    cameraPreset.current = (name) => { fittedView = name; fitCamera(name) }
+    const leavePreset = () => { fittedView = null }
+    controls.addEventListener('start', leavePreset)
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(1.18 * Math.max(size, 1), 64),
       new THREE.ShadowMaterial({ transparent: true, opacity: 0.28 }),
@@ -1233,10 +1346,11 @@ export function EngineView({
     const resize = new ResizeObserver(() => {
       const w = host.clientWidth,
         // Keep the cylinder controls outside the rendered scene at every zoom.
-        h = Math.max(1, host.clientHeight - 76)
+        h = Math.max(1, host.clientHeight - 112)
       renderer.setSize(w, h)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
+      if (fittedView) fitCamera(fittedView)
     })
     resize.observe(host)
     let frame = 0,
@@ -1402,6 +1516,8 @@ export function EngineView({
       }
       cancelAnimationFrame(frame)
       resize.disconnect()
+      cameraPreset.current = null
+      controls.removeEventListener('start', leavePreset)
       controls.dispose()
       renderer.domElement.removeEventListener('pointerup', click)
       for (const m of meshes) {
@@ -1431,6 +1547,14 @@ export function EngineView({
             : 'LIVE CUTAWAY · INLINE FOUR'}
         </span>
         <span>Drag to orbit · scroll to zoom · select a piston</span>
+      </div>
+      <div className="camera-presets" role="group" aria-label="Engine camera views">
+        {['Overview', 'Timing', 'Crank', ...(engine.induction.kind === 'turbo' ? ['Turbo'] : [])].map((name) => (
+          <button key={name} type="button" disabled={failed}
+            onClick={() => cameraPreset.current?.(name)} aria-label={`${name} camera view`}>
+            {name}
+          </button>
+        ))}
       </div>
       <div className="cylinder-selector">
         {[0, 1, 2, 3].map((i) => (

@@ -940,3 +940,28 @@
   color: #ff8fa8;
   font-weight: 600;
 }
+
+.camera-presets {
+  position: absolute;
+  bottom: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+.camera-presets button {
+  border: 1px solid #344a58;
+  border-radius: 4px;
+  background: #0f1a22;
+  color: #a7bac5;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.camera-presets button:hover,
+.camera-presets button:focus-visible {
+  border-color: #eeb065;
+  color: #f2b96f;
+}
+.camera-presets button:disabled { opacity: 0.5; cursor: default; }
