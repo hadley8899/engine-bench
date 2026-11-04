@@ -320,6 +320,21 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
   - a push step that fails before its measurement window now reports the boost at the failure instead of 0.
 - Build passes; lint passes with the existing warning.
 
+## Model 1.12.0 and Stage 7's inline-fours (4 November)
+
+- Two-stage cam: a new `core.test.ts` case checks that the cam is low below its switch speed, gives torque identical to the build without a cam there, gives more torque on the high cam above it, and drops back only 150 RPM below the switch. Builds without a cam switch are unchanged by construction: the default is null and the core uses the base valve areas and closing.
+- Presets (Node, steady full load in normal air; details and sources in `docs/PRESETS.md`):
+  - K20A: within 12 Nm of Honda's curve from 2,500 to 8,000 RPM, including the VTEC dip and crossover; +28 Nm at 1,500 RPM. Sweep: 162.3 kW and 213 Nm (rated 165 kW and 215 Nm).
+  - 4G63T: 384/383 Nm at 3,500 RPM and 305/302 Nm at 6,500. Sweep: 209.3 kW and 390 Nm.
+  - SR20DET: 282/275 Nm at 4,800 RPM and 277/274 Nm at 6,400. Sweep: 189.5 kW and 284 Nm.
+  - 4A-GE: 149/149 Nm at 5,200 RPM and 130/127 Nm at 6,600. Sweep: 91.3 kW and 150 Nm.
+
+  Highest part stress in standard sweeps is 86–90%. Boost pushes crack cast pistons: on the Evo at +1.4 bar and on the SR20 at +1.8 bar. Timing pushes on the K20A and 4A-GE reach the push limit without a failure.
+- Vitest: 165 passed. `src/sim/presets.test.ts` now checks every preset's displacement, published points within recorded tolerances (no failure, stress under 95%) and rated power within 6%. The starting-build test checks that all five start, idle and complete a sweep.
+- Chromium: a new case loads the K20A, revs it and sees HIGH CAM; the Golf case still passes.
+- Benchmark (Node): medians 0.36–0.38 ms at 1,000–7,500 RPM and 0.69 ms at 8,400 RPM, unchanged from 1.11.0 within noise, against a 2.67 ms budget.
+- Build passes; lint passes with the existing warning.
+
 ## Dyno run-down and afterfire oxygen (4 November)
 
 - Run-down (user request: a pull ended in an abrupt stop). Road and Golf 1,500–6,200 RPM sweeps now end with 27 run-down samples: a brief lift-off transient, then engine braking of about −54 Nm near 5,500 RPM falling to −22 to −30 Nm at 1,500 RPM. Released afterwards, both engines idle at 910–920 RPM. New `core.test.ts` cases check that the run-down falls monotonically with negative torque, that the run validates, that the engine then idles, and that an emergency stop during the run-down keeps the completed pull.

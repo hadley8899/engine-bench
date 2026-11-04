@@ -20,7 +20,8 @@
         "eb-0d-1.8.0",
         "eb-0d-1.9.0",
         "eb-0d-1.10.0",
-        "eb-0d-1.11.0"
+        "eb-0d-1.11.0",
+        "eb-0d-1.12.0"
       ]
     },
     "id": {
@@ -729,6 +730,46 @@
             "valveSprings"
           ],
           "additionalProperties": false
+        },
+        "camSwitch": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "rpm": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 15000
+                },
+                "intakeArea": {
+                  "type": "number",
+                  "minimum": 0.00001,
+                  "maximum": 0.02
+                },
+                "exhaustArea": {
+                  "type": "number",
+                  "minimum": 0.00001,
+                  "maximum": 0.025
+                },
+                "intakeClose": {
+                  "type": "number",
+                  "minimum": 550,
+                  "maximum": 630
+                }
+              },
+              "required": [
+                "rpm",
+                "intakeArea",
+                "exhaustArea",
+                "intakeClose"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "firingOrder": {
           "type": "array",

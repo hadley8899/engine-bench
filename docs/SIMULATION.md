@@ -236,6 +236,8 @@ A failure (a holed or cracked piston, bent or broken rod, lifted head gasket, va
 
 Not modelled: valve float losing power or bending valves before contact, partial damage (a running engine with a damaged part), wear and fatigue accumulation, oil jets, piston ring flutter, bearing loads, crank torsion, and head-lift leakage before failure.
 
+**Two-stage cam (1.12.0).** A build may add `camSwitch`: a second set of intake and exhaust valve areas and intake closing used above a switch speed, dropping back 150 RPM lower. It represents Honda VTEC's lift change, or the two positions of an on/off intake cam phaser. Intake still opens at 350° and the exhaust event keeps its timing, so continuous phasing and overlap changes are not represented. The switch is instantaneous at the step where speed crosses it; if the closing angle moves earlier past a cylinder already in its intake stroke, that cylinder skips one knock and stress cycle. Builds without one are unchanged. The bench shows HIGH CAM while it is engaged.
+
 **Push it.** `PushTest` (`src/sim/push.ts`) holds the applied build at one speed on full throttle in the worker. It settles for 1 s, then raises spark advance (degrees) or the turbo boost target (Pa) by a fixed step every `hold` seconds. Each step records the last 0.5 s's mean torque, boost, the largest knock intensity and ECU retard, and the highest stress share. It stops at the first knock (an unburned share above 3%, the ECU's sensing threshold), at a failure, after 40 steps, or above 50° advance or 4 bar boost. Knock control and parts act as on the bench. Steps of a few seconds are shorter than the crown's 4 s time constant, so temperature limits show up later than they would under a sustained load.
 
 ## Live updates

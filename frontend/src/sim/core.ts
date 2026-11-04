@@ -133,6 +133,8 @@ export type EcuTelemetry = {
   maps: boolean
   /** Spark advance before knock retard, degrees BTDC. */
   advance: number
+  /** Two-stage cam in use: which profile is engaged, or null without one. */
+  cam: 'low' | 'high' | null
   /** Commanded λ. */
   lambda: number
   /** Turbo boost target (gauge), Pa, or null without a turbo. */
@@ -297,6 +299,8 @@ export class EngineCore {
   /** Boost target before any push-it offset, Pa. */
   private boostBase = 0
   readonly stress: Stress
+  /** The second cam profile is engaged. */
+  highCam = false
   private crowns = [0, 0, 0, 0]
   private knocks = [0, 0, 0, 0]
 
@@ -447,6 +451,7 @@ export class EngineCore {
     core.induction.adopt(previous.induction)
     core.stress.adopt(previous.stress)
     core.boostBase = previous.boostBase
+    core.highCam = previous.highCam && !!engine.camSwitch
     if (engine.induction.kind === 'turbo' && !engine.management)
       core.boostBase = engine.induction.boostTarget
     core.fuel.adopt(previous.fuel)
@@ -539,6 +544,13 @@ export class EngineCore {
         )
       : 0
     const throttle = Math.max(this.controls.throttle, idle)
+    const camSwitch = e.camSwitch
+    if (camSwitch)
+      this.highCam = this.highCam
+        ? rpm >= camSwitch.rpm - 150
+        : rpm >= camSwitch.rpm
+    const cam = camSwitch && this.highCam ? camSwitch : e
+    const intakeClose = cam.intakeClose
     const induction = this.induction
     const maps = e.management
     // The ECU updates its tables at 3 kHz, and on a new core's first step.
@@ -630,7 +642,7 @@ export class EngineCore {
         const deg = (phase * 180) / Math.PI
         const previousDeg = (cyl.phase * 180) / Math.PI
         const intakeClosing =
-          previousDeg < e.intakeClose && deg >= e.intakeClose
+          previousDeg < intakeClose && deg >= intakeClose
         const exhaustClosing = previousDeg < 370 && deg >= 370
         if (intakeClosing || exhaustClosing) valveSeats++
         if (exhaustClosing) cyl.thermal.closeExhaust(this.time)
@@ -656,13 +668,13 @@ export class EngineCore {
           capacity * internalEnergy(temperature) + moles * R * temperature
         const heldPerMass = cyl.held / cyl.mass
         const inlet =
-          deg >= 350 && deg < e.intakeClose
-            ? Math.sin((Math.PI * (deg - 350)) / (e.intakeClose - 350)) *
-              e.intakeArea
+          deg >= 350 && deg < intakeClose
+            ? Math.sin((Math.PI * (deg - 350)) / (intakeClose - 350)) *
+              cam.intakeArea
             : 0
         const exhaust =
           deg >= 145 && deg < 370
-            ? Math.sin((Math.PI * (deg - 145)) / 225) * e.exhaustArea
+            ? Math.sin((Math.PI * (deg - 145)) / 225) * cam.exhaustArea
             : 0
         // Enthalpy transport across each open valve; reverse flow is supported.
         if (inlet > 0) {
@@ -1246,6 +1258,7 @@ export class EngineCore {
       ecu: {
         maps: !!this.engine.management,
         advance: this.sparkAdvance,
+        cam: this.engine.camSwitch ? (this.highCam ? 'high' : 'low') : null,
         lambda: this.targetLambda,
         boostTarget:
           this.induction.config.kind === 'turbo'

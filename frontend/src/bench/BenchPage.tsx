@@ -56,6 +56,7 @@ import { describeCombustion } from './combustionFields'
 import { KnockStrip } from './KnockStrip'
 import { StressPanel } from './StressPanel'
 import { PartsEditor } from './PartsEditor'
+import { CamEditor } from './CamEditor'
 import { PushPanel } from './PushPanel'
 import { stockParts } from '../sim/schema'
 import type { Parts } from '../sim/schema'
@@ -416,6 +417,18 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     ...describeCombustion(a.engine.combustion, e.combustion),
     ...describeMaps(a.engine.management ?? null, e.management),
   )
+  // Runs before 1.12.0 had a single cam.
+  if (
+    JSON.stringify(a.engine.camSwitch ?? null) !==
+    JSON.stringify(e.camSwitch)
+  )
+    changes.push(
+      !a.engine.camSwitch
+        ? 'Two-stage cam: off → on'
+        : !e.camSwitch
+          ? 'Two-stage cam: on → off'
+          : 'Two-stage cam settings changed',
+    )
   if (
     JSON.stringify(a.engine.fuelSupply ?? null) !==
     JSON.stringify(e.fuelSupply)
@@ -1507,7 +1520,14 @@ export function BenchPage() {
                     <small>
                       TARGET λ{telemetry.ecu.maps ? ' · MAP' : ''}
                     </small>
-                    <strong>{telemetry.ecu.lambda.toFixed(2)}</strong>
+                    <strong>
+                      {telemetry.ecu.lambda.toFixed(2)}
+                      {telemetry.ecu.cam === 'high' && (
+                        <em className="boost-flag pop" data-testid="high-cam">
+                          HIGH CAM
+                        </em>
+                      )}
+                    </strong>
                   </div>
                   <div>
                     <small>INJECTOR DUTY</small>
@@ -1966,8 +1986,8 @@ export function BenchPage() {
                   <div className="helper-text" data-testid="real-engine-note">
                     <p>
                       {realPreset.description} Rated{' '}
-                      {realPreset.rated}. An approximation calibrated to the
-                      published torque curve, not an exact replica; it is not a
+                      {realPreset.rated}. An approximation calibrated to
+                      published figures, not an exact replica; it is not a
                       prediction of what a real engine would survive.
                     </p>
                     {stockChanges.length === 0 ? (
@@ -2072,6 +2092,14 @@ export function BenchPage() {
                   disabled={activeTest}
                   onChange={(update) =>
                     setDraft((d) => ({ ...d, fuelSupply: update(d.fuelSupply) }))
+                  }
+                />
+                <h3 className="workshop-subheading">Camshaft</h3>
+                <CamEditor
+                  engine={draft}
+                  disabled={activeTest}
+                  onChange={(camSwitch) =>
+                    setDraft((d) => ({ ...d, camSwitch }))
                   }
                 />
                 <h3 className="workshop-subheading">Combustion & knock</h3>

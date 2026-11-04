@@ -702,3 +702,21 @@ test('the Golf GTI preset loads as stock, shows its edits and runs', async ({
     )
     .toBeGreaterThan(500)
 })
+
+test('the K20A preset switches to its VTEC high cam when revved', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Honda Civic Type R FD2 K20A' }).click()
+  await expect(page.getByTestId('real-engine-note')).toContainText('Stock.')
+  await expect(page.getByLabel('Switch speed (RPM)')).toHaveValue('5200')
+  await page.getByRole('button', { name: 'Start engine' }).click()
+  const rpm = async () =>
+    Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
+  await expect.poll(rpm).toBeGreaterThan(500)
+  await expect(page.getByTestId('high-cam')).toHaveCount(0)
+  await page.getByRole('heading', { level: 1 }).click()
+  await page.keyboard.down('Space')
+  await expect(page.getByTestId('high-cam')).toBeVisible({ timeout: 10000 })
+  await page.keyboard.up('Space')
+})

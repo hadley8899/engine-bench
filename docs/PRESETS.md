@@ -1,6 +1,6 @@
 # Real-engine presets
 
-Each preset is an approximation of a real engine, calibrated to a published full-load torque curve. It uses this model's simplifications, so it is not a replica. Nor is it a prediction of what the real engine would survive: the part limits are model estimates (see `docs/SIMULATION.md`). Every value below is marked as **sourced**, **inferred** (a plausible choice with no published figure) or **calibrated** (chosen to match the published curve).
+Each preset is an approximation of a real engine, calibrated to published full-load figures: a manufacturer torque curve where one was found (the Golf and the K20A), otherwise the rated peak-torque and peak-power points. It uses this model's simplifications, so it is not a replica. Nor is it a prediction of what the real engine would survive: the part limits are model estimates (see `docs/SIMULATION.md`). Every value below is marked as **sourced**, **inferred** (a plausible choice with no published figure) or **calibrated** (chosen to match the published curve).
 
 ## VW EA113 2.0 TFSI (AXX), Golf GTI Mk5
 
@@ -49,3 +49,108 @@ The RMS deviation is about 9 Nm. The largest deviations are +22 Nm at 1,000 RPM 
 **Pushing it.** On stock parts with knock control on, a boost push at 4,000 RPM reaches 328 Nm at a 1.0 bar target. The knock-control retard reaches its 12° limit at 1.3 bar, and the push ends with a cracked cast piston (sustained knock) at a 1.6 bar target. That is a model estimate, not a prediction of what a real AXX would take.
 
 Not represented: continuous intake cam phasing, intake manifold flaps, the dual (homogeneous split) injection used for catalyst heating, the twin catalysts' back pressure, the dual-mass flywheel, and the torque-based MED 9.1 strategy beyond its boost and λ maps.
+
+## Honda K20A, Civic Type R FD2
+
+Added with model 1.12.0 (4 November 2026). It is the only preset besides the Golf with a full manufacturer curve.
+
+### Sources
+
+1. Honda, archived Civic Type R (FD2) web catalogue: [specification](https://www.honda.co.jp/auto-archive/civic/type-r/2011/webcatalog/spec/) (K20A, 86.0 × 86.0 mm, 1,998 cc, 11.7:1, 165 kW [225 PS] at 8,000 RPM, 215 N·m [21.9 kgf·m] at 6,100 RPM, premium unleaded, PGM-FI) and the [engine page](https://www.honda.co.jp/auto-archive/civic/type-r/2011/webcatalog/engine/), with its engine performance curve ([graph01.gif](https://www.honda.co.jp/auto-archive/civic/type-r/2011/webcatalog/engine/image/graph01.gif)) and an 8,400 RPM redline.
+
+### Values
+
+| Field | Value | Basis |
+| --- | --- | --- |
+| Bore × stroke, compression | 86 × 86 mm, 11.7:1 | Sourced |
+| Rated output | 165 kW at 8,000 RPM, 215 Nm at 6,100 RPM | Sourced |
+| VTEC | High cam from 5,200 RPM: intake area 1,200 mm², exhaust 800 mm², intake closing 615°; low cam 700 mm², 680 mm², 575° | Switch speed calibrated to the curve's crossover; profiles inferred and calibrated |
+| Rod length | 139 mm | Inferred (common figure; not confirmed by a source found) |
+| Ignition | 12° BTDC at 1,500 RPM rising to 24° from 4,000 RPM at full load (map) | Calibrated: limits low-speed knock on RON 98 at 11.7:1 |
+| Mixture | λ 0.92 at 4,000 RPM to 0.88 from 6,000 RPM at full load (map) | Inferred |
+| Rev limit / mechanical limit | 8,600 / 9,000 RPM | Inferred from the 8,400 RPM redline |
+| Fuel | RON 98 (Japanese premium is about RON 100, beyond this model's fuels) | Sourced, nearest available |
+
+### Calibration and deviation
+
+The curve was read from the image, so expect about ±5 Nm of reading error.
+
+| RPM | 1,500 | 2,500 | 3,500 | 4,500 | 5,500 | 6,000 | 7,000 | 8,000 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Honda, Nm | ~160 | ~186 | ~204 | ~187 | ~208 | ~218 | ~210 | ~190 |
+| Preset, Nm | 188 | 192 | 200 | 198 | 207 | 212 | 209 | 192 |
+
+The preset follows the curve's two humps: the low-cam peak, the dip before VTEC and the high-cam peak. Its low-speed torque is too high: +28 Nm at 1,500 RPM, where this model's naturally aspirated breathing stays too good. The dip is shallower than Honda's (+11 Nm at 4,500). A standard sweep gives 162.3 kW at about 8,170 RPM and 213 Nm at about 6,380. Not represented: VTC intake phasing, which this two-stage cam cannot vary continuously.
+
+## Mitsubishi 4G63T, Lancer Evolution VIII
+
+### Sources
+
+1. auto-data.net and carsart.net listings for the Evolution VIII 2.0 4WD: 1,997 cc, 85 × 88 mm, 8.8:1, 280 hp, 383 Nm at 3,500 RPM. Secondary sources.
+2. Peak power at 6,500 RPM appears only in secondary listings. Japanese catalogue torque is often quoted as 40.0 kgf·m (392 Nm); that was not confirmed, so the preset uses 383 Nm.
+
+No manufacturer torque curve was found, so the preset is calibrated to the two rated points only.
+
+### Values
+
+| Field | Value | Basis |
+| --- | --- | --- |
+| Bore × stroke, compression | 85 × 88 mm, 8.8:1 | Sourced (secondary) |
+| Rod length | 150 mm | Inferred |
+| Turbo | TD05HR-sized: 56 mm compressor, 0.00033 m² turbine, 200,000 RPM rated | Inferred; turbine calibrated |
+| Boost | 1.25 bar at 3,000 RPM, tapering to 1.05 bar at 6,500 (map) | Calibrated; similar to commonly reported Evo VIII boost |
+| Mixture | λ 1 to 3,000 RPM, 0.88 at 4,000, 0.84 from 6,000 at full load (map) | Inferred |
+| Intercooler | Effectiveness 0.7, 8 kPa drop | Inferred: front-mounted |
+| Injectors, pump | 560 cc/min, 190 L/h | Inferred |
+| Rev limit / mechanical limit | 7,200 / 7,600 RPM | Inferred |
+
+### Calibration and deviation
+
+At 3,500 RPM the preset makes 384 Nm against the rated 383 Nm. At 6,500 RPM it makes 305 Nm (208 kW) against 302 Nm (206 kW). Between those points the shape is the model's own: 379 Nm at 2,500 RPM and 347 at 5,500. A standard sweep gives 209.3 kW at about 6,490 RPM and 390 Nm at about 3,550. Unlike the Golf, this preset reaches its rated torque at roughly the real boost, so the model's boosted overestimate (see the Golf) is not consistent between engines. On stock parts, a boost push at 4,300 RPM cracks a cast piston at 1.4 bar above the map.
+
+## Nissan SR20DET, Silvia S15 Spec-R
+
+### Sources
+
+1. goo-net-exchange.com catalogue listings for the S15 Silvia Spec-R: 86.0 × 86.0 mm, 1,998 cc, 8.5:1, 250 PS (184 kW) at 6,400 RPM, 28.0 kgf·m (275 N·m) at 4,800 RPM. The Spec-S's 225 PS figure is for the variant without the larger turbo.
+2. Wikipedia's SR20DET applications table: T28BB turbocharger with VTC on the S15 Spec-R.
+
+No manufacturer torque curve was found; calibrated to the two rated points.
+
+### Values
+
+| Field | Value | Basis |
+| --- | --- | --- |
+| Bore × stroke, compression | 86 × 86 mm, 8.5:1 | Sourced |
+| Rod length | 136.3 mm | Inferred |
+| Turbo | T28-sized ball bearing: 54 mm compressor, 0.0006 m² turbine | Inferred; turbine calibrated |
+| Boost | 0.55 bar at 3,000 RPM, 0.58 at 4,800, 0.8 at 6,400 (map) | Calibrated |
+| Mixture | λ 0.92 at 4,000 to 0.86 from 6,000 RPM at full load (map) | Inferred |
+| Cam | One profile | VTC's two-position intake phasing is not represented |
+| Rev limit / mechanical limit | 7,500 / 8,000 RPM | Inferred |
+
+### Calibration and deviation
+
+At 4,800 RPM the preset makes 282 Nm against the rated 275 Nm. At 6,400 RPM it makes 277 Nm (186 kW) against 274 Nm (184 kW). Between them it holds 280–284 Nm from 4,000 to 6,400 RPM, the broad plateau the S15 is known for. A standard sweep gives 189.5 kW at about 6,700 RPM and 284 Nm. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
+
+## Toyota 4A-GE (16-valve), AE86
+
+### Sources
+
+1. AEU86, [AE86 specifications](https://aeu86.org/?p=142): 4A-GE(U), 81.0 × 77.0 mm, 1,587 cc, 9.4:1, 88 kW at 6,600 RPM and 15.2 kgf·m (149 Nm) at 5,200 RPM in the Japanese net table. European figures differ (about 122 bhp, 141 Nm at 6,000 RPM). Later 4A-GE versions had higher compression.
+
+No manufacturer torque curve was found; calibrated to the two Japanese rated points.
+
+### Values
+
+| Field | Value | Basis |
+| --- | --- | --- |
+| Bore × stroke, compression | 81 × 77 mm, 9.4:1 | Sourced |
+| Rod length | 105.5 mm | Inferred |
+| Valves, intake closing, runners | 600 mm² intake and exhaust, 585°, 300 mm | Calibrated |
+| Ignition | 20° BTDC, no maps | Inferred |
+| Rev limit / mechanical limit | 7,600 / 8,000 RPM | Inferred |
+
+### Calibration and deviation
+
+At 5,200 RPM the preset makes 149 Nm against the rated 149 Nm. At 6,600 RPM it makes 130 Nm (90 kW) against 127 Nm (88 kW). A standard sweep gives 91.3 kW at about 6,380 RPM and 150 Nm at about 4,810. Not represented: T-VIS, the intake runner valve that improved low-speed torque.

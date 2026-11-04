@@ -28,8 +28,10 @@ import { z } from 'zod'
  * springs) with estimated limits, stress estimates and failures. Stock
  * parts, which builds saved earlier receive, leave every result unchanged
  * unless a limit is exceeded.
+ * 1.12.0: an optional two-stage cam (VTEC-style lift change or a cam
+ * phaser's switch point). Builds without one are unchanged.
  */
-export const MODEL_VERSION = 'eb-0d-1.11.0'
+export const MODEL_VERSION = 'eb-0d-1.12.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -43,6 +45,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.8.0',
   'eb-0d-1.9.0',
   'eb-0d-1.10.0',
+  'eb-0d-1.11.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -281,6 +284,20 @@ export const partsSchema = z.strictObject({
   valveSprings: z.enum(['stock', 'uprated', 'race']),
 })
 export type Parts = z.infer<typeof partsSchema>
+
+/**
+ * A second cam profile used above a switch speed (with 150 RPM of
+ * hysteresis): Honda's VTEC lift change, or the switch point of a two-
+ * position intake cam phaser. Intake still opens at 350°; the exhaust
+ * event keeps its timing.
+ */
+export const camSwitchSchema = z.strictObject({
+  rpm: z.number().int().min(1000).max(15000),
+  intakeArea: z.number().min(0.00001).max(0.02),
+  exhaustArea: z.number().min(0.00001).max(0.025),
+  intakeClose: z.number().min(550).max(630),
+})
+export type CamSwitch = z.infer<typeof camSwitchSchema>
 export const stockParts: Parts = {
   pistons: 'cast',
   rods: 'stock',
@@ -332,6 +349,8 @@ export const engineSchema = z.strictObject({
   fuelSupply: fuelSupplySchema.nullable().default(null),
   // Builds saved before 1.11.0 have stock parts.
   parts: partsSchema.default(stockParts),
+  // Builds saved before 1.12.0 have a single cam profile.
+  camSwitch: camSwitchSchema.nullable().default(null),
   firingOrder: z.tuple([
     z.literal(1),
     z.literal(3),
@@ -433,6 +452,7 @@ export const roadEngine: EngineDefinition = {
   management: null,
   fuelSupply: { injectorFlow: 240, maxDuty: 0.85, pumpFlow: 110 },
   parts: stockParts,
+  camSwitch: null,
   firingOrder: [1, 3, 4, 2],
 }
 export const sportEngine: EngineDefinition = {

@@ -703,6 +703,46 @@
           ],
           "additionalProperties": false
         },
+        "camSwitch": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "rpm": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 15000
+                },
+                "intakeArea": {
+                  "type": "number",
+                  "minimum": 0.00001,
+                  "maximum": 0.02
+                },
+                "exhaustArea": {
+                  "type": "number",
+                  "minimum": 0.00001,
+                  "maximum": 0.025
+                },
+                "intakeClose": {
+                  "type": "number",
+                  "minimum": 550,
+                  "maximum": 630
+                }
+              },
+              "required": [
+                "rpm",
+                "intakeArea",
+                "exhaustArea",
+                "intakeClose"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "firingOrder": {
           "type": "array",
           "prefixItems": [

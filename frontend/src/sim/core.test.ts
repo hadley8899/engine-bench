@@ -367,6 +367,31 @@ describe('dyno procedures', () => {
     expect(test.core.telemetry().rpm).toBeGreaterThan(600)
     expect(test.core.telemetry().rpm).toBeLessThan(1400)
   })
+  it('switches to the high cam above its speed, with hysteresis', () => {
+    const cam = {
+      ...roadEngine,
+      camSwitch: { rpm: 4000, intakeArea: 0.001, exhaustArea: 0.0008, intakeClose: 610 },
+    }
+    const at = (engine: typeof cam | typeof roadEngine, rpm: number) => {
+      const core = new EngineCore(engine, normalConditions)
+      core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+      advance(core, 1)
+      return core
+    }
+    expect(at(cam, 3800).telemetry().ecu.cam).toBe('low')
+    expect(at(roadEngine, 3800).telemetry().ecu.cam).toBeNull()
+    // Below the switch the cams are identical; above it the bigger cam breathes better.
+    expect(at(cam, 3000).torque).toBe(at(roadEngine, 3000).torque)
+    const high = at(cam, 6000)
+    expect(high.telemetry().ecu.cam).toBe('high')
+    expect(high.torque).toBeGreaterThan(at(roadEngine, 6000).torque + 5)
+    high.setControls({ holdRpm: 3900 })
+    advance(high, 0.2)
+    expect(high.telemetry().ecu.cam).toBe('high')
+    high.setControls({ holdRpm: 3800 })
+    advance(high, 0.2)
+    expect(high.telemetry().ecu.cam).toBe('low')
+  })
   it('an emergency stop during the run-down keeps the completed pull', () => {
     const test = new DynoTest(roadEngine, normalConditions, {
       ...defaultProcedure,
