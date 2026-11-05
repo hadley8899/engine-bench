@@ -22,7 +22,8 @@
         "eb-0d-1.10.0",
         "eb-0d-1.11.0",
         "eb-0d-1.12.0",
-        "eb-0d-1.13.0"
+        "eb-0d-1.13.0",
+        "eb-0d-1.14.0"
       ]
     },
     "id": {
@@ -39,21 +40,53 @@
       "type": "object",
       "properties": {
         "schemaVersion": {
-          "type": "number",
-          "const": 1
+          "anyOf": [
+            {
+              "type": "number",
+              "const": 1
+            },
+            {
+              "type": "number",
+              "const": 2
+            }
+          ]
         },
         "name": {
           "type": "string",
           "minLength": 1,
           "maxLength": 80
         },
+        "cycle": {
+          "default": "four-stroke",
+          "type": "string",
+          "enum": [
+            "four-stroke",
+            "two-stroke"
+          ]
+        },
         "layout": {
           "type": "string",
-          "const": "inline-4"
+          "enum": [
+            "inline-4",
+            "single",
+            "inline-2"
+          ]
         },
         "cylinders": {
-          "type": "number",
-          "const": 4
+          "anyOf": [
+            {
+              "type": "number",
+              "const": 1
+            },
+            {
+              "type": "number",
+              "const": 2
+            },
+            {
+              "type": "number",
+              "const": 4
+            }
+          ]
         },
         "bore": {
           "type": "number",
@@ -113,7 +146,7 @@
         },
         "inertia": {
           "type": "number",
-          "minimum": 0.01,
+          "minimum": 0.002,
           "maximum": 20
         },
         "revLimit": {
@@ -995,28 +1028,378 @@
           ]
         },
         "firingOrder": {
+          "minItems": 1,
+          "maxItems": 4,
           "type": "array",
-          "prefixItems": [
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "twoStroke": {
+          "default": null,
+          "anyOf": [
             {
-              "type": "number",
-              "const": 1
+              "type": "object",
+              "properties": {
+                "exhaustPort": {
+                  "type": "object",
+                  "properties": {
+                    "height": {
+                      "type": "number",
+                      "minimum": 0.005,
+                      "maximum": 0.2
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 0.005,
+                      "maximum": 0.3
+                    },
+                    "bridge": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "height",
+                    "width",
+                    "bridge"
+                  ],
+                  "additionalProperties": false
+                },
+                "transfers": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "const": 2
+                        },
+                        {
+                          "type": "number",
+                          "const": 3
+                        },
+                        {
+                          "type": "number",
+                          "const": 5
+                        }
+                      ]
+                    },
+                    "height": {
+                      "type": "number",
+                      "minimum": 0.005,
+                      "maximum": 0.2
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 0.005,
+                      "maximum": 0.4
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "height",
+                    "width"
+                  ],
+                  "additionalProperties": false
+                },
+                "intake": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "piston"
+                        },
+                        "height": {
+                          "type": "number",
+                          "minimum": 0.002,
+                          "maximum": 0.15
+                        },
+                        "width": {
+                          "type": "number",
+                          "minimum": 0.005,
+                          "maximum": 0.2
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "height",
+                        "width"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "reed"
+                        },
+                        "area": {
+                          "type": "number",
+                          "minimum": 0.00005,
+                          "maximum": 0.02
+                        },
+                        "stiffness": {
+                          "type": "number",
+                          "minimum": 150,
+                          "maximum": 1500
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "area",
+                        "stiffness"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "rotary"
+                        },
+                        "open": {
+                          "type": "number",
+                          "minimum": 90,
+                          "maximum": 180
+                        },
+                        "close": {
+                          "type": "number",
+                          "minimum": 20,
+                          "maximum": 110
+                        },
+                        "area": {
+                          "type": "number",
+                          "minimum": 0.00005,
+                          "maximum": 0.02
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "open",
+                        "close",
+                        "area"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "crankcaseCompression": {
+                  "type": "number",
+                  "minimum": 1.15,
+                  "maximum": 1.9
+                },
+                "pipe": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "straight"
+                        },
+                        "length": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 3
+                        },
+                        "diameter": {
+                          "type": "number",
+                          "minimum": 0.01,
+                          "maximum": 0.15
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "length",
+                        "diameter"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "chamber"
+                        },
+                        "header": {
+                          "type": "object",
+                          "properties": {
+                            "length": {
+                              "type": "number",
+                              "minimum": 0.02,
+                              "maximum": 0.8
+                            },
+                            "diameter": {
+                              "type": "number",
+                              "minimum": 0.008,
+                              "maximum": 0.25
+                            }
+                          },
+                          "required": [
+                            "length",
+                            "diameter"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "diffuser": {
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "length": {
+                                "type": "number",
+                                "minimum": 0.01,
+                                "maximum": 0.8
+                              },
+                              "diameter": {
+                                "type": "number",
+                                "minimum": 0.008,
+                                "maximum": 0.25
+                              }
+                            },
+                            "required": [
+                              "length",
+                              "diameter"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "belly": {
+                          "type": "object",
+                          "properties": {
+                            "length": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 0.8
+                            }
+                          },
+                          "required": [
+                            "length"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "baffle": {
+                          "minItems": 1,
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "length": {
+                                "type": "number",
+                                "minimum": 0.01,
+                                "maximum": 0.8
+                              },
+                              "diameter": {
+                                "type": "number",
+                                "minimum": 0.008,
+                                "maximum": 0.25
+                              }
+                            },
+                            "required": [
+                              "length",
+                              "diameter"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stinger": {
+                          "type": "object",
+                          "properties": {
+                            "length": {
+                              "type": "number",
+                              "minimum": 0.03,
+                              "maximum": 0.8
+                            },
+                            "diameter": {
+                              "type": "number",
+                              "minimum": 0.008,
+                              "maximum": 0.25
+                            }
+                          },
+                          "required": [
+                            "length",
+                            "diameter"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "header",
+                        "diffuser",
+                        "belly",
+                        "baffle",
+                        "stinger"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "powerValve": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "rpm": {
+                          "type": "integer",
+                          "minimum": 2000,
+                          "maximum": 15000
+                        },
+                        "drop": {
+                          "type": "number",
+                          "minimum": 0.001,
+                          "maximum": 0.02
+                        }
+                      },
+                      "required": [
+                        "rpm",
+                        "drop"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "crankPhase": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 180
+                    },
+                    {
+                      "type": "number",
+                      "const": 360
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "exhaustPort",
+                "transfers",
+                "intake",
+                "crankcaseCompression",
+                "pipe",
+                "powerValve",
+                "crankPhase"
+              ],
+              "additionalProperties": false
             },
             {
-              "type": "number",
-              "const": 3
-            },
-            {
-              "type": "number",
-              "const": 4
-            },
-            {
-              "type": "number",
-              "const": 2
+              "type": "null"
             }
-          ],
-          "items": false,
-          "minItems": 4,
-          "maxItems": 4
+          ]
         }
       },
       "required": [

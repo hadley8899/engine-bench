@@ -18,9 +18,12 @@ const level = (kind: keyof typeof HOT, celsius: number) =>
 export function KnockStrip({
   knock,
   temperatures,
+  twoStroke,
 }: {
   knock: KnockTelemetry
   temperatures: Telemetry['temperatures']
+  /** A two-stroke's third temperature is its exhaust port edge, not a valve. */
+  twoStroke?: boolean
 }) {
   return (
     <div className="knock-strip" data-testid="knock">
@@ -61,14 +64,14 @@ export function KnockStrip({
               <span
                 className="cylinder-temps"
                 data-testid={`temps-${i + 1}`}
-                title={`Estimated: exhaust port gas, piston crown, exhaust valve; combustion deck ${Math.round(temperatures.head[i] - 273.15)} °C`}
+                title={`Estimated: exhaust port gas, piston crown, ${twoStroke ? 'exhaust port edge' : 'exhaust valve'}; combustion deck ${Math.round(temperatures.head[i] - 273.15)} °C`}
               >
                 <span className={level('egt', egt)}>EGT {Math.round(egt)}°</span>
                 <span className={level('crown', crown)}>
                   Piston {Math.round(crown)}°
                 </span>
                 <span className={level('valve', valve)}>
-                  Valve {Math.round(valve)}°
+                  {twoStroke ? 'Port' : 'Valve'} {Math.round(valve)}°
                 </span>
               </span>
             </div>

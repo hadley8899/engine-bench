@@ -252,31 +252,30 @@ export class Pipe {
   }
 
   private primitives() {
+    const { q0, q1, q2, q3, q4, rho, u, p, t, yf, yb, c, g1, inverseArea } = this
     let fastest = 1
     for (let i = 0; i < this.cells; i++) {
-      const rho = this.q0[i] * this.inverseArea[i]
-      const inverse = 1 / this.q0[i]
-      const u = this.q1[i] * inverse
-      const e = this.q2[i] * inverse - 0.5 * u * u
-      const t = temperatureFromEnergy(e)
-      if (!(rho > 0) || !(t > 30) || !(t < 6000))
+      const density = q0[i] * inverseArea[i]
+      const inverse = 1 / q0[i]
+      const v = q1[i] * inverse
+      const temperature = temperatureFromEnergy(q2[i] * inverse - 0.5 * v * v)
+      if (!(density > 0) || !(temperature > 30) || !(temperature < 6000))
         throw new Error('Exhaust pipe flow left the supported model range.')
-      this.rho[i] = rho
-      this.u[i] = u
-      this.t[i] = t
-      this.p[i] = rho * R * t
-      this.yf[i] = Math.min(1, Math.max(0, this.q3[i] * inverse))
-      this.yb[i] = Math.max(0, this.q4[i] * inverse)
-      const g = gamma(t)
-      this.g1[i] = g - 1
-      const c = Math.sqrt(g * R * t)
-      this.c[i] = c
-      const speed = Math.abs(u) + c
+      rho[i] = density
+      u[i] = v
+      t[i] = temperature
+      p[i] = density * R * temperature
+      yf[i] = Math.min(1, Math.max(0, q3[i] * inverse))
+      yb[i] = Math.max(0, q4[i] * inverse)
+      const g = gamma(temperature)
+      g1[i] = g - 1
+      const sound = Math.sqrt(g * R * temperature)
+      c[i] = sound
+      const speed = Math.abs(v) + sound
       if (speed > fastest) fastest = speed
     }
     this.fastest = fastest
   }
-
   private step(
     dt: number,
     flow: number,
@@ -361,7 +360,7 @@ export class Pipe {
       this.lu[i + 1] = ur
       this.lp[i + 1] = pr
     }
-    for (let f = 1; f < n; f++) this.hllc(f)
+    this.hllc(1, n - 1)
     // Port face: the cylinder's flow, carrying its momentum into the pipe.
     const a0 = this.faceArea[0]
     this.f0[0] = flow
@@ -386,7 +385,7 @@ export class Pipe {
     this.ru[n] = outU
     this.rf[n] = outU >= 0 ? this.lf[n] : 0
     this.rb[n] = outU >= 0 ? this.lb[n] : 0
-    this.hllc(n)
+    this.hllc(n, n)
     // Conservative update with the area-change pressure source, wall
     // friction and heat loss.
     const r = dt / this.dx
@@ -414,66 +413,76 @@ export class Pipe {
     return this.f0[n]
   }
   /**
-   * HLLC flux through face f (Davis wave-speed estimates), times the face
-   * area: mass, momentum, energy and the two scalars.
+   * HLLC fluxes through faces first to last (Davis wave-speed estimates
+   * from the neighbouring cells' sound speeds; the outlet ghost shares the
+   * last cell's), times the face area: mass, momentum, energy and the two
+   * scalars.
    */
-  private hllc(f: number) {
-    const rl = this.lr[f],
-      ul = this.lu[f],
-      pl = this.lp[f]
-    const rr = this.rr[f],
-      ur = this.ru[f],
-      pr = this.rp[f]
-    const tl = (pl * INV_R) / rl
-    const tr = (pr * INV_R) / rr
-    // Wave speeds from the neighbouring cells' sound speeds (the outlet
-    // ghost shares the last cell's).
-    const al = this.c[f - 1]
-    const ar = this.c[f < this.cells ? f : f - 1]
-    const el = rl * (internalEnergy(tl) + 0.5 * ul * ul)
-    const er = rr * (internalEnergy(tr) + 0.5 * ur * ur)
-    const sl = Math.min(ul - al, ur - ar)
-    const sr = Math.max(ul + al, ur + ar)
-    let m0: number, m1: number, m2: number, m3: number, m4: number
-    if (sl >= 0 || sr <= 0) {
-      const left = sl >= 0
-      const d = left ? rl : rr
-      const v = left ? ul : ur
-      const q = left ? pl : pr
-      const e = left ? el : er
-      const m = d * v
-      m0 = m
-      m1 = m * v + q
-      m2 = v * (e + q)
-      m3 = m * (left ? this.lf[f] : this.rf[f])
-      m4 = m * (left ? this.lb[f] : this.rb[f])
-    } else {
-      const ml = rl * (sl - ul)
-      const mr = rr * (sr - ur)
-      const star = (pr - pl + ml * ul - mr * ur) / (ml - mr)
-      const left = star >= 0
-      const d = left ? rl : rr
-      const v = left ? ul : ur
-      const q = left ? pl : pr
-      const e = left ? el : er
-      const s = left ? sl : sr
-      const y3 = left ? this.lf[f] : this.rf[f]
-      const y4 = left ? this.lb[f] : this.rb[f]
-      const m = d * v
-      const ds = (d * (s - v)) / (s - star)
-      const es = ds * (e / d + (star - v) * (star + q / (d * (s - v))))
-      m0 = m + s * (ds - d)
-      m1 = m * v + q + s * (ds * star - m)
-      m2 = v * (e + q) + s * (es - e)
-      m3 = m0 * y3
-      m4 = m0 * y4
+  private hllc(first: number, last: number) {
+    const { lr, lu, lp, lf, lb, rr, ru, rp, rf, rb, c, faceArea } = this
+    const { f0, f1, f2, f3, f4 } = this
+    const cells = this.cells
+    for (let f = first; f <= last; f++) {
+      const dl = lr[f],
+        ul = lu[f],
+        pl = lp[f]
+      const dr = rr[f],
+        ur = ru[f],
+        pr = rp[f]
+      const tl = (pl * INV_R) / dl
+      const tr = (pr * INV_R) / dr
+      const al = c[f - 1]
+      const ar = c[f < cells ? f : f - 1]
+      const el = dl * (tl * (CV_A + 0.5 * CV_B * tl) + 0.5 * ul * ul)
+      const er = dr * (tr * (CV_A + 0.5 * CV_B * tr) + 0.5 * ur * ur)
+      const sl = Math.min(ul - al, ur - ar)
+      const sr = Math.max(ul + al, ur + ar)
+      let m0: number, m1: number, m2: number, m3: number, m4: number
+      if (sl >= 0) {
+        const m = dl * ul
+        m0 = m
+        m1 = m * ul + pl
+        m2 = ul * (el + pl)
+        m3 = m * lf[f]
+        m4 = m * lb[f]
+      } else if (sr <= 0) {
+        const m = dr * ur
+        m0 = m
+        m1 = m * ur + pr
+        m2 = ur * (er + pr)
+        m3 = m * rf[f]
+        m4 = m * rb[f]
+      } else {
+        const ml = dl * (sl - ul)
+        const mr = dr * (sr - ur)
+        const star = (pr - pl + ml * ul - mr * ur) / (ml - mr)
+        if (star >= 0) {
+          const m = dl * ul
+          const k = ml / (sl - star)
+          const es = k * (el / dl + (star - ul) * (star + pl / ml))
+          m0 = m + sl * (k - dl)
+          m1 = m * ul + pl + sl * (k * star - m)
+          m2 = ul * (el + pl) + sl * (es - el)
+          m3 = m0 * lf[f]
+          m4 = m0 * lb[f]
+        } else {
+          const m = dr * ur
+          const k = mr / (sr - star)
+          const es = k * (er / dr + (star - ur) * (star + pr / mr))
+          m0 = m + sr * (k - dr)
+          m1 = m * ur + pr + sr * (k * star - m)
+          m2 = ur * (er + pr) + sr * (es - er)
+          m3 = m0 * rf[f]
+          m4 = m0 * rb[f]
+        }
+      }
+      const a = faceArea[f]
+      f0[f] = m0 * a
+      f1[f] = m1 * a
+      f2[f] = m2 * a
+      f3[f] = m3 * a
+      f4[f] = m4 * a
     }
-    const a = this.faceArea[f]
-    this.f0[f] = m0 * a
-    this.f1[f] = m1 * a
-    this.f2[f] = m2 * a
-    this.f3[f] = m3 * a
-    this.f4[f] = m4 * a
   }
 }
 

@@ -89,8 +89,19 @@ import {
   mapsChanged,
   persistLayout,
   SECTIONS,
+  sectionsFor,
   VIEWS,
 } from './layout'
+import { TwoStrokeView } from './TwoStrokeView'
+import { TwoStrokeEditor } from './TwoStrokeEditor'
+import {
+  CYCLE_LAYOUTS,
+  cycleLayout,
+  describeTwoStroke,
+  withCycleLayout,
+} from './twoStrokeFields'
+import type { CycleLayout } from './twoStrokeFields'
+import type { TwoStrokeTelemetry } from '../sim/twostroke'
 import type { LayoutState, Section, View } from './layout'
 import type { ShortcutAction } from './shortcuts'
 import { ShortcutHelp } from './ShortcutHelp'
@@ -128,6 +139,61 @@ import {
 import './bench.css'
 
 const theme = buildTheme('dark')
+/**
+ * A two-stroke's scavenging on the last cycle, its crankcase and exhaust
+ * port pressures, fuel lost through the exhaust and the power valve.
+ */
+function TwoStrokeStrip({
+  value,
+  cylinder,
+}: {
+  value: TwoStrokeTelemetry
+  cylinder: number
+}) {
+  const percent = (v: number) => Math.round(v * 100)
+  return (
+    <div
+      className="stats-strip boost-strip two-stroke-strip"
+      data-testid="scavenging"
+      title="Delivery ratio: fresh charge delivered per cycle over the swept volume at room density. Trapping: share of it kept when the exhaust closes. Scavenging: share of the trapped gas that is fresh. Estimates."
+    >
+      <div>
+        <small>DELIVERY RATIO</small>
+        <strong>{formatFixed(value.delivery[cylinder], 2)}</strong>
+      </div>
+      <div>
+        <small>TRAPPED · FRESH</small>
+        <strong>
+          {percent(value.trapping[cylinder])}
+          <span>% · </span>
+          {percent(value.scavenging[cylinder])}
+          <span>%</span>
+        </strong>
+      </div>
+      <div>
+        <small>CRANKCASE · PORT</small>
+        <strong>
+          {formatFixed(value.crankcase[cylinder] / 1e5, 2)}
+          <span> · </span>
+          {formatFixed(value.port[cylinder] / 1e5, 2)}
+          <span> bar</span>
+        </strong>
+      </div>
+      <div>
+        <small>FUEL OUT UNBURNED</small>
+        <strong>
+          {percent(value.fuelLost)}
+          <span>%</span>
+          {value.powerValve !== null && (
+            <em className="boost-flag">
+              VALVE {percent(value.powerValve)}%
+            </em>
+          )}
+        </strong>
+      </div>
+    </div>
+  )
+}
 const historyLabels = ['seconds', 'RPM']
 const pressureLabels = ['crank degrees', 'Cylinder pressure · bar']
 const listenerLabels: Record<Listener, string> = {
@@ -144,6 +210,8 @@ const numericFields: {
   max: number
   step: number
   help: string
+  /** Valve settings a two-stroke does not use. */
+  fourStroke?: true
 }[] = [
   {
     key: 'bore',
@@ -183,7 +251,7 @@ const numericFields: {
     min: 5,
     max: 20,
     step: 0.1,
-    help: 'Changes clearance volume. Knock is not modelled.',
+    help: 'Changes clearance volume. For a two-stroke this is the full-stroke ratio; Ports and pipe shows the trapped ratio from exhaust closing.',
   },
   {
     key: 'starterTorque',
@@ -204,6 +272,7 @@ const numericFields: {
     max: 20000,
     step: 10,
     help: 'Effective flow area including discharge coefficient.',
+    fourStroke: true,
   },
   {
     key: 'exhaustArea',
@@ -214,6 +283,7 @@ const numericFields: {
     max: 25000,
     step: 10,
     help: 'Exhaust flow restriction; also changes pulses.',
+    fourStroke: true,
   },
   {
     key: 'intakeClose',
@@ -224,6 +294,7 @@ const numericFields: {
     max: 610,
     step: 1,
     help: '540° is intake bottom dead centre.',
+    fourStroke: true,
   },
   {
     key: 'intakeRunnerLength',
@@ -233,7 +304,7 @@ const numericFields: {
     min: 50,
     max: 1500,
     step: 10,
-    help: 'Air momentum in the runner fills the cylinder past bottom dead centre. Longer runners move the torque peak lower.',
+    help: 'Air momentum in the runner fills the cylinder past bottom dead centre (a two-stroke: the tract from the carburettor to the reed or port). Longer runners move the torque peak lower.',
   },
   {
     key: 'ignitionAdvance',
@@ -270,7 +341,7 @@ const numericFields: {
     label: 'Rotating inertia',
     unit: 'kg·m²',
     scale: 1,
-    min: 0.01,
+    min: 0.002,
     max: 20,
     step: 0.01,
     help: 'Changes free acceleration and absorbed dyno torque.',
@@ -357,6 +428,9 @@ const conditionFields: {
     step: 5,
   },
 ]
+/** The geometry and basics fields a build uses. */
+const fieldsFor = (e: EngineDefinition) =>
+  numericFields.filter((f) => !(f.fourStroke && e.cycle === 'two-stroke'))
 const rangeText = (f: { min: number; max: number; unit: string }) =>
   `${f.min}–${f.max} ${f.unit}`.trim()
 // Field-level messages for the editor, keyed by field. Uses the same schema
@@ -390,6 +464,7 @@ const checkedFields = new Set<keyof EngineDefinition>([
   'exhaust',
   'management',
   'fuelSupply',
+  'twoStroke',
 ])
 /**
  * Starter torque needed to turn the build over, or null if it cannot be
@@ -452,6 +527,7 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
     ...describeExhaust(a.engine.exhaust, e.exhaust),
     ...describeCombustion(a.engine.combustion, e.combustion),
     ...describeMaps(a.engine.management ?? null, e.management),
+    ...describeTwoStroke(a.engine, e),
   )
   // Runs before 1.13.0 had fixed valve events.
   if (JSON.stringify(a.engine.cams ?? null) !== JSON.stringify(e.cams))
@@ -1338,7 +1414,9 @@ export function BenchPage() {
   }
   const trace = useMemo(() => {
     const values = telemetry.traces?.[selected] ?? []
-    return [values.map((_, i) => i * 2), values.map((v) => v / 100000)]
+    // 360 bins over the cycle: 720° for four-strokes, 360° for two-strokes.
+    const step = telemetry.twoStroke ? 1 : 2
+    return [values.map((_, i) => i * step), values.map((v) => v / 100000)]
   }, [telemetry, selected])
   const viewEngine =
     mode === 'audition' && auditionEngine ? auditionEngine : experiment.engine
@@ -1408,6 +1486,11 @@ export function BenchPage() {
   })
 
   const pending = changedSections(draft, experiment.engine)
+  // A section that does not apply to this build falls back to its basics.
+  const sections = sectionsFor(draft)
+  const section = sections.some((s) => s.key === layout.section)
+    ? layout.section
+    : 'basics'
   const mapsPending = mapsChanged(draft, experiment.engine)
   const conditionsPending =
     JSON.stringify(conditions) !== JSON.stringify(experiment.conditions)
@@ -1573,8 +1656,26 @@ export function BenchPage() {
             <div className="command-build">
               <h1>{viewEngine.name}</h1>
               <span className="engine-spec">
-                {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
-                <b>·</b> 1–3–4–2 <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
+                {viewEngine.cycle === 'two-stroke' ? (
+                  <>
+                    {(displacement(viewEngine) * 1e6).toFixed(0)} cc <b>·</b>{' '}
+                    {viewEngine.cylinders === 1
+                      ? 'two-stroke single'
+                      : `two-stroke twin, ${viewEngine.twoStroke!.crankPhase}°`}{' '}
+                    <b>·</b>{' '}
+                    {viewEngine.twoStroke!.intake.kind === 'reed'
+                      ? 'reed'
+                      : viewEngine.twoStroke!.intake.kind === 'rotary'
+                        ? 'disc valve'
+                        : 'piston port'}{' '}
+                    <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
+                  </>
+                ) : (
+                  <>
+                    {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
+                    <b>·</b> 1–3–4–2 <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
+                  </>
+                )}
                 {viewEngine.induction.kind !== 'none' &&
                   ` · ${inductionLabels[viewEngine.induction.kind]}`}
               </span>
@@ -1677,14 +1778,25 @@ export function BenchPage() {
                 <Paper className="stage-panel" variant="outlined">
                   {layout.view === 'bench' ? (
                     <>
-                      <EngineView
-                        engine={viewEngine}
-                        telemetry={telemetryRef}
-                        slow={slow}
-                        overlays={overlays}
-                        selected={selected}
-                        onSelect={setSelected}
-                      />
+                      {viewEngine.cycle === 'two-stroke' ? (
+                        <TwoStrokeView
+                          engine={viewEngine}
+                          telemetry={telemetryRef}
+                          slow={slow}
+                          overlays={overlays}
+                          selected={Math.min(selected, viewEngine.cylinders - 1)}
+                          onSelect={setSelected}
+                        />
+                      ) : (
+                        <EngineView
+                          engine={viewEngine}
+                          telemetry={telemetryRef}
+                          slow={slow}
+                          overlays={overlays}
+                          selected={selected}
+                          onSelect={setSelected}
+                        />
+                      )}
                       <div className="view-options">
                         <FormControlLabel
                           control={
@@ -1769,6 +1881,12 @@ export function BenchPage() {
                     </Tabs>
                   )}
                   <div hidden={layout.telemetry !== 'engine'}>
+                    {telemetry.twoStroke && (
+                      <TwoStrokeStrip
+                        value={telemetry.twoStroke}
+                        cylinder={Math.min(selected, telemetry.twoStroke.delivery.length - 1)}
+                      />
+                    )}
                     {telemetry.induction.kind !== 'none' && (
                       <div className="stats-strip boost-strip" data-testid="boost">
                         <div>
@@ -2008,6 +2126,7 @@ export function BenchPage() {
                     <KnockStrip
                       knock={telemetry.knock}
                       temperatures={telemetry.temperatures}
+                      twoStroke={!!telemetry.twoStroke}
                     />
                     <StressPanel
                       stress={telemetry.stress}
@@ -2050,11 +2169,11 @@ export function BenchPage() {
                     orientation={wide ? 'vertical' : 'horizontal'}
                     variant="scrollable"
                     scrollButtons={false}
-                    value={layout.section}
+                    value={section}
                     aria-label="Workshop sections"
                     onChange={(_, section: Section) => changeLayout({ section })}
                   >
-                    {SECTIONS.map((s) => (
+                    {sections.map((s) => (
                       <Tab
                         key={s.key}
                         value={s.key}
@@ -2075,7 +2194,7 @@ export function BenchPage() {
                 )}
                 <Paper className="editor-panel workshop-panel" variant="outlined">
                   <div className="panel-heading">
-                    <h2>{SECTIONS.find((s) => s.key === layout.section)!.label}</h2>
+                    <h2>{SECTIONS.find((s) => s.key === section)!.label}</h2>
                     <span className="mark-legend">
                       <i className="mark pending" /> unapplied
                       {base && (
@@ -2087,7 +2206,7 @@ export function BenchPage() {
                       )}
                     </span>
                   </div>
-                  <div hidden={layout.section !== 'build'}>
+                  <div hidden={section !== 'build'}>
                     <div className="preset-buttons">
                       {starterBuilds.map((b) => (
                         <Button
@@ -2164,9 +2283,31 @@ export function BenchPage() {
                       Restore previous build
                     </Button>
                   </div>
-                  <div hidden={layout.section !== 'basics'}>
+                  <div hidden={section !== 'basics'}>
+                    <TextField
+                      select
+                      size="small"
+                      fullWidth
+                      label="Cycle and layout"
+                      value={cycleLayout(draft)}
+                      disabled={activeTest}
+                      helperText={
+                        draft.cycle === 'two-stroke'
+                          ? 'Ports, crankcase and pipe are under Ports and pipe. Camshafts and forced induction do not apply.'
+                          : 'Two-stroke layouts fire every revolution through ports in the cylinder wall.'
+                      }
+                      onChange={(e) =>
+                        setDraft((d) => withCycleLayout(d, e.target.value as CycleLayout))
+                      }
+                    >
+                      {CYCLE_LAYOUTS.map((l) => (
+                        <MenuItem key={l.key} value={l.key}>
+                          {l.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
                     <div className="field-grid">
-                      {numericFields
+                      {fieldsFor(draft)
                         .filter((f, i) => advanced || i < 5 || draftErrors[f.key])
                         .map((f) => {
                           // With maps on, timing and mixture come from the tables.
@@ -2220,7 +2361,7 @@ export function BenchPage() {
                     >
                       {advanced
                         ? 'Hide advanced parameters'
-                        : `Show ${numericFields.length - 5} advanced parameters (valves, runners, timing, mixture, inertia, limits)`}
+                        : `Show ${fieldsFor(draft).length - 5} advanced parameters (${draft.cycle === 'two-stroke' ? 'runner' : 'valves, runners'}, timing, mixture, inertia, limits)`}
                     </Button>
                     <p className="derived-capacity">
                       Derived capacity{' '}
@@ -2245,9 +2386,10 @@ export function BenchPage() {
                       </p>
                     )}
                   </div>
-                  <div hidden={layout.section !== 'fuel'}>
+                  <div hidden={section !== 'fuel'}>
                     <FuelSystemEditor
                       value={draft.fuelSystem}
+                      twoStroke={draft.cycle === 'two-stroke'}
                       disabled={activeTest}
                       onChange={(update) =>
                         setDraft((d) => ({
@@ -2265,14 +2407,21 @@ export function BenchPage() {
                       }
                     />
                   </div>
-                  <div hidden={layout.section !== 'cams'}>
+                  <div hidden={section !== 'cams'}>
                     <CamEditor
                       engine={draft}
                       disabled={activeTest}
                       onChange={(update) => setDraft((d) => update(d))}
                     />
                   </div>
-                  <div hidden={layout.section !== 'combustion'}>
+                  <div hidden={section !== 'ports'}>
+                    <TwoStrokeEditor
+                      engine={draft}
+                      disabled={activeTest}
+                      onChange={(update) => setDraft((d) => update(d))}
+                    />
+                  </div>
+                  <div hidden={section !== 'combustion'}>
                     <CombustionEditor
                       value={draft.combustion}
                       disabled={activeTest}
@@ -2284,7 +2433,7 @@ export function BenchPage() {
                       }
                     />
                   </div>
-                  <div hidden={layout.section !== 'induction'}>
+                  <div hidden={section !== 'induction'}>
                     <InductionEditor
                       value={draft.induction}
                       disabled={activeTest}
@@ -2294,9 +2443,10 @@ export function BenchPage() {
                       }
                     />
                   </div>
-                  <div hidden={layout.section !== 'exhaust'}>
+                  <div hidden={section !== 'exhaust'}>
                     <ExhaustEditor
                       value={draft.exhaust}
+                      twoStroke={draft.cycle === 'two-stroke'}
                       disabled={activeTest}
                       onChange={(update) =>
                         setDraft((d) => ({ ...d, exhaust: update(d.exhaust) }))
@@ -2331,14 +2481,14 @@ export function BenchPage() {
                       <MenuItem value="spark">Spark (ignition cut)</MenuItem>
                     </TextField>
                   </div>
-                  <div hidden={layout.section !== 'parts'}>
+                  <div hidden={section !== 'parts'}>
                     <PartsEditor
                       engine={draft}
                       disabled={activeTest}
                       onChange={(update) => setDraft((d) => update(d))}
                     />
                   </div>
-                  <div hidden={layout.section !== 'conditions'}>
+                  <div hidden={section !== 'conditions'}>
                     <div className="field-grid">
                       {conditionFields.map((f) => (
                         <NumberField

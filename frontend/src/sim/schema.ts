@@ -589,6 +589,8 @@ export function scaledProportions(e: EngineDefinition) {
 }
 /** Settings far below the scaled proportions, which commonly stop idling. */
 export function undersizedForEngine(e: EngineDefinition) {
+  // Two-strokes have ports, not valves, and much lighter cranks.
+  if (e.cycle === 'two-stroke') return []
   const s = scaledProportions(e)
   return (['intakeArea', 'exhaustArea', 'inertia'] as const).filter(
     (k) => e[k] < s[k] * 0.4,

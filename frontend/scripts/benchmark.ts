@@ -1,12 +1,29 @@
 import { performance } from 'node:perf_hooks'
-import { EngineCore } from '../src/sim/core'
-import { normalConditions, roadEngine, sportEngine } from '../src/sim/schema'
+import { createCore } from '../src/sim/cores'
+import {
+  normalConditions,
+  raceTwoStroke,
+  roadEngine,
+  sportEngine,
+} from '../src/sim/schema'
+import type { EngineDefinition } from '../src/sim/schema'
 import { DynoTest } from '../src/sim/dyno'
-for (const rpm of [0, 1000, 4000, 7500, 8400]) {
-  const c = new EngineCore(
-    { ...sportEngine, revLimit: 8500, mechanicalLimit: 9000 },
-    normalConditions,
-  )
+const twin: EngineDefinition = {
+  ...raceTwoStroke,
+  name: 'Two-stroke twin',
+  layout: 'inline-2',
+  cylinders: 2,
+  firingOrder: [1, 2],
+}
+const cases: [string, EngineDefinition, number[]][] = [
+  ['four-stroke', { ...sportEngine, revLimit: 8500, mechanicalLimit: 9000 }, [0, 1000, 4000, 7500, 8400]],
+  // Two-strokes carry a one-dimensional pipe per cylinder (pipe.ts).
+  ['two-stroke single', { ...raceTwoStroke, revLimit: 14000, mechanicalLimit: 15000 }, [0, 4000, 9000, 12500]],
+  ['two-stroke twin', { ...twin, revLimit: 14000, mechanicalLimit: 15000 }, [0, 4000, 9000, 12500]],
+]
+for (const [engine, definition, speeds] of cases)
+for (const rpm of speeds) {
+  const c = createCore(definition, normalConditions)
   c.setControls({
     ignition: true,
     throttle: 1,
@@ -24,15 +41,16 @@ for (const rpm of [0, 1000, 4000, 7500, 8400]) {
   console.log(
     JSON.stringify({
       host: 'Node',
+      engine,
       rpm,
-      cylinders: 4,
+      cylinders: definition.cylinders,
       blockFrames: 128,
       budgetMs: 128 / 48,
       medianMs: blocks[1000],
       p99Ms: blocks[1980],
       maximumMs: blocks.at(-1),
       maxAngularSubsteps: c.maxSubsteps,
-      millisecondsPerStepPerCylinder: blocks[1000] / 128 / 4,
+      millisecondsPerStepPerCylinder: blocks[1000] / 128 / definition.cylinders,
     }),
   )
 }

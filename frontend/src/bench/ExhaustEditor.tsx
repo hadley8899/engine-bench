@@ -14,16 +14,27 @@ export function ExhaustEditor({
   value,
   onChange,
   disabled,
+  twoStroke,
 }: {
   value: Exhaust
   onChange: (update: (current: Exhaust) => Exhaust) => void
   disabled?: boolean
+  /** A two-stroke's pipe is set under Ports and pipe: no header or collector. */
+  twoStroke?: boolean
 }) {
   const errors = exhaustErrors(value)
   return (
     <div className="induction-editor" data-testid="exhaust-editor">
+      {twoStroke && (
+        <p className="cranking-note">
+          The pipe from the port (header, cones and stinger) is set in Ports
+          and pipe. These settings shape only the sound after the stinger.
+        </p>
+      )}
       <div className="field-grid">
-        {exhaustFields.map((f) => (
+        {exhaustFields
+          .filter((f) => !twoStroke || f.key !== 'headerLength')
+          .map((f) => (
           <NumberField
             key={f.key}
             size="small"
@@ -39,6 +50,7 @@ export function ExhaustEditor({
             }
           />
         ))}
+        {!twoStroke && (
         <TextField
           select
           size="small"
@@ -58,6 +70,7 @@ export function ExhaustEditor({
             </MenuItem>
           ))}
         </TextField>
+        )}
         <TextField
           select
           size="small"

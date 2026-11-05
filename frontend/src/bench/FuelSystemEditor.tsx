@@ -15,10 +15,13 @@ export function FuelSystemEditor({
   value,
   onChange,
   disabled,
+  twoStroke,
 }: {
   value: FuelSystem
   onChange: (update: (current: FuelSystem) => FuelSystem) => void
   disabled?: boolean
+  /** A two-stroke has no inlet valve port to inject into. */
+  twoStroke?: boolean
 }) {
   const errors = fuelErrors(value)
   const fields = value as Record<string, unknown>
@@ -38,8 +41,9 @@ export function FuelSystemEditor({
         }
       >
         {(Object.keys(fuelLabels) as FuelSystemKind[]).map((k) => (
-          <MenuItem key={k} value={k}>
+          <MenuItem key={k} value={k} disabled={twoStroke && k === 'port'}>
             {fuelLabels[k]}
+            {twoStroke && k === 'port' && ' (four-strokes only)'}
           </MenuItem>
         ))}
       </TextField>

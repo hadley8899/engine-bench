@@ -1194,3 +1194,53 @@
   font: inherit;
   cursor: pointer;
 }
+
+/* Two-stroke ports and pipe editor. */
+.two-stroke-editor {
+  display: grid;
+  gap: 10px;
+}
+.two-stroke-editor h3 {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9fb3bd;
+}
+.two-stroke-editor .port-diagram,
+.two-stroke-editor .pipe-profile {
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  display: block;
+}
+.port-timing {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.port-timing div {
+  display: flex;
+  flex-direction: column;
+}
+.port-timing dt {
+  color: #9fb3bd;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.port-timing dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.chamber-fields {
+  display: grid;
+  gap: 10px;
+}
+.chamber-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

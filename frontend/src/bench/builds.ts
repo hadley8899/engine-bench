@@ -4,6 +4,8 @@ import {
   exhaustDefaults,
   fuelSystemDefaults,
   inductionDefaults,
+  mopedTwoStroke,
+  raceTwoStroke,
   roadEngine,
   sportEngine,
 } from '../sim/schema'
@@ -116,6 +118,33 @@ export const starterBuilds: StarterBuild[] = [
         silencer: 'straight',
         tailpipeLength: 1.2,
       },
+    },
+  },
+  {
+    label: '125 race two-stroke',
+    description:
+      'A two-stroke single: reed valve, five transfers, a bridged exhaust port with a power valve and an expansion chamber that comes on the pipe near 11,000 RPM.',
+    engine: raceTwoStroke,
+  },
+  {
+    label: '50 moped two-stroke',
+    description:
+      'A small two-stroke single with a piston-port intake, two transfers and a mild pipe: easy to start, gentle and thirsty.',
+    engine: mopedTwoStroke,
+  },
+  {
+    label: '250 twin two-stroke',
+    description:
+      'Two 125 cylinders on a 180° crank, each with its own expansion chamber: fires every half revolution.',
+    engine: {
+      ...raceTwoStroke,
+      name: 'Workshop 250 • Twin two-stroke',
+      layout: 'inline-2',
+      cylinders: 2,
+      firingOrder: [1, 2],
+      inertia: 0.009,
+      starterTorque: 45,
+      revLimit: 12000,
     },
   },
 ]

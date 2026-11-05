@@ -19,6 +19,7 @@ export type Section =
   | 'basics'
   | 'fuel'
   | 'cams'
+  | 'ports'
   | 'combustion'
   | 'induction'
   | 'exhaust'
@@ -34,6 +35,10 @@ export const SECTIONS: {
     key: 'basics',
     label: 'Geometry and basics',
     fields: [
+      'cycle',
+      'layout',
+      'cylinders',
+      'firingOrder',
       'bore',
       'stroke',
       'rodLength',
@@ -53,6 +58,7 @@ export const SECTIONS: {
   },
   { key: 'fuel', label: 'Fuel system', fields: ['fuelSystem', 'fuelSupply'] },
   { key: 'cams', label: 'Camshaft', fields: ['cams', 'camSwitch'] },
+  { key: 'ports', label: 'Ports and pipe', fields: ['twoStroke'] },
   { key: 'combustion', label: 'Combustion and knock', fields: ['combustion'] },
   { key: 'induction', label: 'Forced induction', fields: ['induction'] },
   { key: 'exhaust', label: 'Exhaust and limiter', fields: ['exhaust', 'limiterCut'] },
@@ -61,6 +67,17 @@ export const SECTIONS: {
 ]
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * Sections that apply to a build: two-strokes have ports and a pipe but
+ * no camshafts or forced induction; four-strokes have no ports section.
+ */
+export function sectionsFor(e: EngineDefinition) {
+  const two = e.cycle === 'two-stroke'
+  return SECTIONS.filter((s) =>
+    two ? s.key !== 'cams' && s.key !== 'induction' : s.key !== 'ports',
+  )
+}
 
 /** Sections whose fields differ between two builds. */
 export function changedSections(a: EngineDefinition, b: EngineDefinition) {

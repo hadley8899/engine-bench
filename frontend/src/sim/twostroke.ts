@@ -47,6 +47,7 @@ import {
   CV_A,
   CV_B,
   enthalpy,
+  GAMMA,
   internalEnergy,
   massFlow,
   omegaToRpm,
@@ -58,6 +59,13 @@ import {
   wiebe,
 } from './physics'
 
+/**
+ * Choked flow through an effective area, kg/s: physics.massFlow's sonic
+ * branch (its result for zero downstream pressure) without the powers.
+ */
+const CHOKED = Math.sqrt(GAMMA) * (2 / (GAMMA + 1)) ** ((GAMMA + 1) / (2 * (GAMMA - 1)))
+const choked = (upstream: number, temperature: number, area: number) =>
+  ((area * upstream) / Math.sqrt(R * temperature)) * CHOKED
 /** Port discharge coefficient (sharp-edged port window). */
 const PORT_DISCHARGE = 0.7
 /** Share of a bridged exhaust port's width the bridge blocks. */
@@ -84,8 +92,9 @@ export const SCAVENGING = {
 const FMEP_STATIC = 30000
 const FMEP_LINEAR = 2000
 const FMEP_QUADRATIC = 250
-/** Idle speed the idle air holds, RPM. */
+/** Idle speed the idle air holds, RPM, and the idle screw's slide opening. */
 const IDLE_RPM = 1400
+const IDLE_OPENING = 0.08
 /** The charge fails to light when less than this share of it is fresh. */
 const DILUTION_MISFIRE = 0.3
 /** Crankcase gas relaxes to the crankcase wall with this time constant, s. */
@@ -121,9 +130,18 @@ export type TwoStrokeTelemetry = {
   powerValve: number | null
   /** Reed petal opening 0–1 per cylinder, or null without reeds. */
   reed: number[] | null
-  /** Pressure along cylinder 1's pipe, Pa, from the port to the outlet. */
-  pipe: number[]
+  /**
+   * Pressure along each cylinder's pipe, Pa, from the port to the outlet,
+   * captured at WAVE_SNAPSHOTS evenly spaced crank angles over that
+   * cylinder's last revolution: snapshot k (taken at k × 360/24° after top
+   * dead centre) is cells k·n to k·n + n − 1.
+   */
+  pipeWave: number[][]
+  /** Cells per pipe snapshot. */
+  pipeCells: number
 }
+/** Pipe snapshots per revolution, for the animated cutaway. */
+export const WAVE_SNAPSHOTS = 24
 
 interface Cylinder {
   mass: number
@@ -192,8 +210,12 @@ interface Cylinder {
   reed: number
   /** Charge spat back into the intake: it returns first, with its fuel. */
   pushed: number
+  pushedFresh: number
   pushedFuel: number
   pipe: Pipe
+  /** Pipe pressures at each snapshot angle over the last revolution. */
+  wave: Float32Array
+  waveSlot: number
   /** Port flows this step: mass, energy, fresh air and fuel into the pipe. */
   portMass: number
   portEnergy: number
@@ -579,13 +601,20 @@ export class TwoStrokeCore {
         transfer: 0,
         reed: 0,
         pushed: 0,
+        pushedFresh: 0,
         pushedFuel: 0,
         pipe: new Pipe(segments, conditions.pressure, T),
+        wave: new Float32Array(0),
+        waveSlot: -1,
         portMass: 0,
         portEnergy: 0,
         portFresh: 0,
         portFuel: 0,
       })
+    }
+    for (const cyl of this.cylinders) {
+      cyl.wave = new Float32Array(WAVE_SNAPSHOTS * cyl.pipe.cells)
+      cyl.wave.fill(conditions.pressure)
     }
   }
 
@@ -642,6 +671,7 @@ export class TwoStrokeCore {
         thermal: cyl.thermal,
         gas: cyl.gas,
         pipe: samePipe ? old.pipe : fresh,
+        wave: samePipe ? old.wave : cyl.wave,
         volume: cyl.volume,
         ccVolume: cyl.ccVolume,
       })
@@ -696,12 +726,15 @@ export class TwoStrokeCore {
     if (this.controls.ignition && rpm > 300 && this.controls.throttle < 0.01)
       this.idleTrim = clamp(
         this.idleTrim + (IDLE_RPM - rpm) * IDLE_INTEGRAL * this.dt,
-        0,
+        -IDLE_OPENING * 0.75,
         0.3,
       )
     else if (!this.controls.ignition) this.idleTrim = 0
+    // The idle screw holds the slide slightly open; the trim and a gentle
+    // proportional term add to it. A two-stroke's light crank would hunt
+    // with the four-stroke's gain.
     const idle = this.controls.ignition
-      ? clamp(0.06 + this.idleTrim + (IDLE_RPM - rpm) * 0.0003, 0, 0.5)
+      ? clamp(IDLE_OPENING + this.idleTrim + (IDLE_RPM - rpm) * 0.00008, IDLE_OPENING / 4, 0.5)
       : 0
     const throttle = idle + (1 - idle) * this.controls.throttle
     const maps = e.management
@@ -816,22 +849,27 @@ export class TwoStrokeCore {
           if (flow >= 0) {
             flow = Math.min(
               flow,
-              massFlow(this.manifold as Pascals, 0 as Pascals, intakeTemperature, inlet) *
-                this.airDensityRatio,
+              choked(this.manifold, intakeTemperature, inlet) * this.airDensityRatio,
             )
             const dm = flow * dt
             cyl.ccMass += dm
             cyl.ccEnergy += dm * intakeEnthalpy
             this.ledger.inMass += dm
             this.ledger.inEnergy += dm * intakeEnthalpy
-            cyl.ccFresh += dm
+            // Charge spat back returns first, with its own fresh share and fuel.
             const back = Math.min(dm, cyl.pushed)
             let fuelIn = 0
+            let freshIn = dm - back
             if (back > 0) {
-              fuelIn = (cyl.pushedFuel * back) / cyl.pushed
+              const share = back / cyl.pushed
+              fuelIn = cyl.pushedFuel * share
+              const fresh = cyl.pushedFresh * share
+              freshIn += fresh
               cyl.pushed -= back
               cyl.pushedFuel -= fuelIn
+              cyl.pushedFresh -= fresh
             }
+            cyl.ccFresh += freshIn
             if (!this.direct) fuelIn += (dm - back) * fuel.fuelPerAir
             cyl.ccFuel += fuelIn
             airIn += dm - back
@@ -841,6 +879,7 @@ export class TwoStrokeCore {
             const share = dm / cyl.ccMass
             cyl.pushed += dm
             cyl.pushedFuel += cyl.ccFuel * share
+            cyl.pushedFresh += cyl.ccFresh * share
             cyl.ccFresh -= cyl.ccFresh * share
             cyl.ccFuel -= cyl.ccFuel * share
             cyl.ccMass -= dm
@@ -868,7 +907,7 @@ export class TwoStrokeCore {
           if (flow >= 0) {
             flow = Math.min(
               flow,
-              massFlow(ccPressure as Pascals, 0 as Pascals, ccTemperature, transfer),
+              choked(ccPressure, ccTemperature, transfer),
               (cyl.ccMass * 0.08) / dt,
             )
             const dm = flow * dt
@@ -900,7 +939,7 @@ export class TwoStrokeCore {
             // Blowback: cylinder gas pushed down the transfers.
             flow = Math.max(
               flow,
-              -massFlow(pressure as Pascals, 0 as Pascals, temperature * moles, transfer),
+              -choked(pressure, temperature * moles, transfer),
               (-cyl.mass * 0.08) / dt,
             )
             const dm = -flow * dt
@@ -1117,6 +1156,13 @@ export class TwoStrokeCore {
       cyl.pipe.advance(this.dt, cyl.portMass * k, cyl.portEnergy * k, cyl.portFresh * k, cyl.portFuel * k)
       cyl.portMass = cyl.portEnergy = cyl.portFresh = cyl.portFuel = 0
       audio += cyl.pipe.outletFlow
+      // Snapshot the pipe as the crank passes each display angle.
+      const slot = Math.floor((cyl.phase / TAU) * WAVE_SNAPSHOTS) % WAVE_SNAPSHOTS
+      if (slot !== cyl.waveSlot) {
+        cyl.waveSlot = slot
+        const cells = cyl.pipe.cells
+        for (let k = 0; k < cells; k++) cyl.wave[slot * cells + k] = cyl.pipe.pressureAt(k)
+      }
     }
     this.manifoldMass = Math.max(this.manifoldMass - intakeMass, 1e-9)
     this.manifold = (this.manifoldMass * R * intakeTemperature) / this.manifoldVolume
@@ -1398,9 +1444,6 @@ export class TwoStrokeCore {
     for (let i = 0; i < count; i++) this.step()
   }
   telemetry(): Telemetry {
-    const pipe = this.cylinders[0].pipe
-    const along: number[] = []
-    for (let i = 0; i < pipe.cells; i++) along.push(pipe.pressureAt(i))
     const e = this.engine
     return {
       time: this.time,
@@ -1462,7 +1505,8 @@ export class TwoStrokeCore {
         fuelLost: this.fuelDelivered > 0 ? clamp(this.fuelLost / this.fuelDelivered, 0, 1) : 0,
         powerValve: this.ts.powerValve ? this.powerValve : null,
         reed: this.ts.intake.kind === 'reed' ? this.cylinders.map((c) => c.reed) : null,
-        pipe: along,
+        pipeWave: this.cylinders.map((c) => Array.from(c.wave)),
+        pipeCells: this.cylinders[0].pipe.cells,
       },
     }
   }

@@ -102,7 +102,10 @@ export function PartsEditor({
   return (
     <div className="induction-editor" data-testid="parts-editor">
       <div className="field-grid">
-        {internals.map((f) => {
+        {internals
+          // A two-stroke's ports have no valves or springs.
+          .filter((f) => f.key !== 'valveSprings' || engine.cycle !== 'two-stroke')
+          .map((f) => {
           const value = engine.parts[f.key]
           return (
             <TextField
