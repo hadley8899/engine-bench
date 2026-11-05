@@ -48,12 +48,23 @@ test('status messages appear on every tab and take you to the fix', async ({
   await page.getByRole('button', { name: 'Start engine', exact: true }).click()
   await expect.poll(() => rpm(page)).toBeGreaterThan(500)
   await openSection(page, 'Parts')
+  // Messages never move the page: the strip keeps one line's height.
+  const tabsAt = () =>
+    page
+      .getByRole('tablist', { name: 'Bench modes' })
+      .evaluate((e) => e.getBoundingClientRect().top + window.scrollY)
+  const before = await tabsAt()
   await page.getByRole('slider', { name: /Throttle/ }).focus()
   await page.keyboard.press('End')
   await expect(page.getByTestId('status-limiter')).toContainText(
     'Rev limiter cycling',
     { timeout: 15000 },
   )
+  expect(await tabsAt()).toBe(before)
+  // The full messages open over the page.
+  await page.getByTestId('status-strip').getByRole('button', { name: /Details|more/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Engine messages' })).toContainText('Rev limiter cycling')
+  await page.keyboard.press('Escape')
   await page.getByRole('slider', { name: /Throttle/ }).press('Home')
   await page.getByRole('button', { name: 'Emergency stop' }).click()
   // A starter too weak to turn the engine sends you to the setting.

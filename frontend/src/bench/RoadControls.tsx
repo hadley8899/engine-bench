@@ -58,10 +58,18 @@ export function RoadControls({
         <>
           <TextField
             select
+            fullWidth
             size="small"
             label="Vehicle"
+            className="vehicle-select"
             value={vehicleKey(road) ?? 'custom'}
             disabled={disabled}
+            slotProps={{
+              select: {
+                renderValue: (key) =>
+                  key === 'custom' ? 'Custom settings' : vehicles[key as VehicleKey].label,
+              },
+            }}
             onChange={(e) => {
               const key = e.target.value as VehicleKey
               onChange({ ...vehicles[key].road, gear: Math.min(road.gear, vehicles[key].road.ratios.length) })

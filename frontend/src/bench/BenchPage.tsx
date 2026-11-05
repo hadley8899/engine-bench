@@ -1692,6 +1692,7 @@ export function BenchPage() {
             </div>
             <Chip
               size="small"
+              className="engine-status"
               data-testid="engine-status"
               label={status.label}
               color={status.color}

@@ -465,3 +465,12 @@ From the user's notes on the two-strokes.
 - Built-in browser pane (development server): the three appear under famous engines, load, and show their shortfall in the preset note.
 - Vitest: 220 pass. Lint: the one existing warning. No browser tests were rerun: only preset data and tests changed.
 
+
+## Steady page while messages change (5 November 2026)
+
+User report: the page jumped as status messages appeared, moving controls under the pointer, and a long vehicle name gave the Drive panel a sideways scroll.
+
+- The status strip is now one line of fixed height (38 px). It shows the most serious message (errors, then warnings, then information) with its action, cut to one line; Details or "+N more" opens every message and the latest notice over the page. Chromium (`firstuse.spec.ts`): the mode tabs stay at the same page position when the limiter message appears, and the full message opens in the popover. The command bar's state chip has a fixed width, so a change of state never reflows the bar.
+- Road load's vehicle selector fills the Drive panel and shows only the vehicle's name, truncated if needed ("suits this engine" stays in the list); the Drive panel never scrolls sideways. Checked in the built-in browser pane: with the road motorcycle selected the panel's content is exactly its width (285 px).
+- The brief knock warning when a two-stroke starts is real but harmless: a few knocking cycles on the first firings (peak intensity 0.25–0.37 on the racing presets), no damage, then a normal idle.
+- Chromium: status messages, recipe validation, road load (both), the two-stroke single and the over-boost failure tests pass. Lint: the one existing warning.
