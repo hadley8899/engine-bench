@@ -39,4 +39,6 @@ services:
         php -r 'require "tests/bootstrap.php";'
         php artisan migrate --no-interaction
         php artisan db:seed --no-interaction
-        php artisan serve --host=0.0.0.0 --port=8000
+        # Not artisan serve: it replaces this isolated environment with any
+        # keys in backend/.env (the development database).
+        cd public && exec php -S 0.0.0.0:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php

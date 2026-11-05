@@ -38,7 +38,9 @@ function fingerprint(engine: EngineDefinition) {
 
 describe('four-stroke results', () => {
   it('are bit-for-bit those of model 1.13.0', { timeout: 120000 }, () => {
-    const builds = [roadEngine, sportEngine, ...realEngines.map((p) => p.engine)]
+    const builds = [roadEngine, sportEngine, ...realEngines.map((p) => p.engine)].filter(
+      (e) => e.cycle === 'four-stroke',
+    )
     expect(builds.map(fingerprint)).toEqual([
       'db02abfde3179af1',
       'ac36a0fb65cc513d',

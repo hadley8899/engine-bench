@@ -171,7 +171,9 @@ class BenchStorageController extends Controller
         if ($revision->snapshot_hash !== $snapshotHash) {
             throw ValidationException::withMessages(['revision' => 'The run must reference a saved revision with exactly its engine and conditions.']);
         }
-        $plain = json_encode($run['samples'], JSON_THROW_ON_ERROR);
+        // Runs with a closed-throttle run-down keep it beside the samples;
+        // earlier runs stored the samples array alone.
+        $plain = json_encode(isset($run['rundown']) ? ['samples' => $run['samples'], 'rundown' => $run['rundown']] : $run['samples'], JSON_THROW_ON_ERROR);
         $compressed = gzencode($plain, 6);
         if ($compressed === false || strlen($compressed) > BenchDocuments::MAX_COMPRESSED_BYTES) {
             throw ValidationException::withMessages(['run.samples' => 'Compressed samples exceed the 256 KiB storage cap.']);

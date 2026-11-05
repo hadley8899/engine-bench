@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { realEngines } from '../bench/presets'
-import { EngineCore } from './core'
+import { createCore } from './cores'
 import { displacement, normalConditions } from './schema'
 import type { EngineDefinition } from './schema'
 
@@ -65,9 +65,15 @@ const published: Record<
     ],
     kw: [6600, 88],
   },
+  // Only the rated power is published; 39.3 Nm is that point.
+  RD350LC: {
+    cc: 347,
+    points: [[8500, 39.3, 4]],
+    kw: [8500, 35],
+  },
 }
 function steady(engine: EngineDefinition, rpm: number) {
-  const core = new EngineCore(engine, normalConditions)
+  const core = createCore(engine, normalConditions)
   core.sound = false
   core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
   // Boost needs longer to settle than a naturally aspirated charge.

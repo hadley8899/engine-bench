@@ -1,10 +1,10 @@
 # Engine Bench — Delivery Plan
 
-Updated: 4 November 2026
+Updated: 5 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0), and so is Stage 9, the UI revision (its first-use check with an unfamiliar user moved to the end of the plan). Phase 2's human first-use check remains open and does not block later work.
+Stage 10, two-stroke engines, is complete (model 1.14.0). Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0), and so is Stage 9, the UI revision (its first-use check with an unfamiliar user moved to the end of the plan). Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
@@ -12,7 +12,7 @@ Direction set by the user on 2 November 2026: make the bench fun and interesting
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
 3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
 4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
-The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November). Next come two-stroke engines (Stage 10), other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
+The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November), and so are two-stroke engines (Stage 10, 5 November). Next come other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
 
 ## Product direction
 
@@ -348,16 +348,16 @@ Completed 5 November 2026. The audit is in `docs/UI_AUDIT.md`. Engine state and 
 
 Acceptance: a new user can start an engine, make a change, run a test and compare it without help. Every existing workflow keeps working, and browser tests cover the new layout in Chromium and Firefox.
 
-### 10. Two-stroke engines
+### 10. Two-stroke engines — complete
 
-Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 November 2026. The design proposal, open questions and verification approach are in `docs/TWO_STROKE.md`.
+Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 November 2026. Built on 5 November 2026 (model 1.14.0, engine schema 2). The design, decisions and verification approach are in `docs/TWO_STROKE.md`; the model as built, its calibration and limits are in `docs/SIMULATION.md`.
 
-- [ ] Generalise the core and schema for cylinder count and cycle length (new engine `schemaVersion` with migration), with identical four-stroke results.
-- [ ] Add a piston-ported, crankcase-scavenged two-stroke single: port geometry with derived timing, crankcase volume, two-zone scavenging with short-circuit losses, and a straight pipe. Include the editor, port-timing display, 3D cutaway with ports in the liner, sound, dyno and persistence.
-- [ ] Prototype and benchmark a quasi-1D pipe solver. Record whether it fits the AudioWorklet budget or needs the worker/ring-buffer fallback.
-- [ ] Add segmented expansion chambers (header, cones, belly, baffle, stinger) with an editor, a 3D shape drawn from the segments, a tuned-RPM estimate and sound from the stinger.
-- [ ] Add reed and rotary-disc intake, then twins and a power valve.
-- [ ] Add sourced two-stroke presets once their trends are reproduced.
+- [x] Generalise the core and schema for cylinder count and cycle length (new engine `schemaVersion` with migration), with identical four-stroke results.
+- [x] Add a piston-ported, crankcase-scavenged two-stroke single: port geometry with derived timing, crankcase volume, two-zone scavenging with short-circuit losses, and a straight pipe. Include the editor, port-timing display, 3D cutaway with ports in the liner, sound, dyno and persistence.
+- [x] Prototype and benchmark a quasi-1D pipe solver. Record whether it fits the AudioWorklet budget or needs the worker/ring-buffer fallback. (Single: about a third of the budget; twin: about 60% with peaks near the limit. No fallback built; see `docs/SIMULATION.md`.)
+- [x] Add segmented expansion chambers (header, cones, belly, baffle, stinger) with an editor, a 3D shape drawn from the segments, a tuned-RPM estimate and sound from the stinger.
+- [x] Add reed and rotary-disc intake, then twins and a power valve. (Parallel twins at 180° or 360°; V twins move to Stage 11.)
+- [x] Add sourced two-stroke presets once their trends are reproduced. (Yamaha RD350LC, within 5% of its rated power; `docs/PRESETS.md`. Racing 125s wait: the model's charging falls short of them.)
 
 Acceptance: port timing is derived from geometry and validated; mass and energy balance across crankcase, cylinder and pipe; supported trends hold (pipe length moves the torque peak, exhaust-port height moves and narrows the band, a tuned chamber beats a straight pipe at its tuned speed); the two-stroke works through the editor, animation, audio, dyno and persistence; four-stroke results are unchanged.
 

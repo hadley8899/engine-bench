@@ -29,12 +29,17 @@ class DynoRun extends Model
 
     public function document(): array
     {
+        $stored = json_decode(gzdecode(base64_decode($this->sample_blob, true), 1048576), true, 512, JSON_THROW_ON_ERROR);
+        // A run with a run-down stores both; earlier runs store the samples alone.
+        $withRundown = is_array($stored) && array_key_exists('samples', $stored);
+
         return [
             'schemaVersion' => $this->schema_version, 'modelVersion' => $this->model_version,
             'id' => $this->client_run_id, 'runtime' => $this->runtime,
             'engine' => $this->engine, 'conditions' => $this->conditions, 'procedure' => $this->procedure,
             'status' => $this->status, 'reason' => $this->reason, 'warnings' => $this->warnings,
-            'samples' => json_decode(gzdecode(base64_decode($this->sample_blob, true), 1048576), true, 512, JSON_THROW_ON_ERROR),
+            'samples' => $withRundown ? $stored['samples'] : $stored,
+            ...($withRundown ? ['rundown' => $stored['rundown']] : []),
         ];
     }
 }

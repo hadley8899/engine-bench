@@ -290,6 +290,62 @@ const ae86: EngineDefinition = {
   parts: stockParts,
 }
 
+/**
+ * Yamaha RD350LC (1980–1982): sourced bore × stroke, capacity, trapped
+ * compression and rated power (docs/PRESETS.md); ports, reeds, carburettors,
+ * crank phase and the expansion chambers are inferred or calibrated.
+ */
+const rd350: EngineDefinition = {
+  ...roadEngine,
+  name: 'Yamaha RD350LC (4L0)',
+  cycle: 'two-stroke',
+  layout: 'inline-2',
+  cylinders: 2,
+  firingOrder: [1, 2],
+  bore: 0.064,
+  stroke: 0.054,
+  rodLength: 0.11,
+  // 6.2:1 is Yamaha's trapped ratio, from exhaust closing at 87° BBDC.
+  compression: 10.7,
+  intakeRunnerLength: 0.2,
+  ignitionAdvance: 18,
+  burnDuration: 48,
+  lambda: 0.9,
+  inertia: 0.012,
+  revLimit: 9500,
+  limiterCut: 'spark',
+  mechanicalLimit: 10500,
+  starterTorque: 50,
+  induction: { kind: 'none' },
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.028, chokes: 2, acceleratorPump: false },
+  combustion: { burnRate: 'predictive', fuel: 'ron95', knockControl: false },
+  management: null,
+  fuelSupply: null,
+  exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.35 },
+  parts: stockParts,
+  cams: null,
+  camSwitch: null,
+  twoStroke: {
+    exhaustPort: { height: 0.0289, width: 0.06, bridge: true },
+    transfers: { count: 5, height: 0.0415, width: 0.085 },
+    intake: { kind: 'reed', area: 0.0016, stiffness: 500 },
+    crankcaseCompression: 1.35,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.18, diameter: 0.044 },
+      diffuser: [
+        { length: 0.2, diameter: 0.07 },
+        { length: 0.23, diameter: 0.11 },
+      ],
+      belly: { length: 0.135 },
+      baffle: [{ length: 0.25, diameter: 0.026 }],
+      stinger: { length: 0.22, diameter: 0.024 },
+    },
+    powerValve: null,
+    crankPhase: 180,
+  },
+}
+
 export const realEngines: RealEngine[] = [
   {
     label: 'VW Golf GTI Mk5 2.0 TFSI',
@@ -395,5 +451,12 @@ export const realEngines: RealEngine[] = [
       'The AE86’s 16-valve 4A-GE: 1.6 litres, no turbo, a light short stroke and a 7,600 RPM redline. Small numbers, big reputation.',
     rated: '88 kW at 6,600 RPM · 149 Nm at 5,200 RPM (Toyota, JDM net)',
     engine: ae86,
+  },
+  {
+    label: 'Yamaha RD350LC',
+    description:
+      'The 1980 RD350LC “Elsie”: a liquid-cooled 347 cc two-stroke twin on a 180° crank with reed valves and an expansion chamber per cylinder. Nothing much below 7,000 RPM, then it comes on the pipe.',
+    rated: '35 kW (47 hp) at 8,500 RPM (Yamaha, claimed)',
+    engine: rd350,
   },
 ]

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Run } from '../src/sim/schema'
+import { openMode, openSection } from './layout'
 
 // Only the isolated API/test database on :8003 is allowed for these writes.
 if (process.env.BENCH_STORAGE_E2E === '1' &&
@@ -13,13 +14,17 @@ test('guest experiment survives sign-in; revisions, immutable history and reruns
   const name = `Browser ${test.info().project.name} ${Date.now()}`
   const experiment = async () => page.evaluate(() => JSON.parse(sessionStorage.getItem('engine-bench:guest-experiment:1')!))
   await page.goto('/')
+  await openSection(page, 'Starting build')
   await page.getByLabel('Build name', { exact: true }).fill(name)
   await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
+  await openMode(page, 'Dyno')
   await page.getByLabel('End RPM', { exact: true }).fill('2500')
   await page.getByRole('button', { name: 'Quick test', exact: true }).click()
   await expect(page.getByTestId('run-summary')).toContainText('COMPLETE')
   const baseline: Run = (await experiment()).baseline
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('88')
+  await openMode(page, 'Library')
   await page.getByRole('link', { name: 'Sign in to save builds & runs' }).click()
   await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
   await page.getByLabel('Password', { exact: true }).fill('password')
@@ -33,8 +38,10 @@ test('guest experiment survives sign-in; revisions, immutable history and reruns
   await expect(page.getByRole('button', { name: 'Save as new build', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: 'Save as new build', exact: true }).click()
   await expect(page.getByText(`Saved ${name}, revision 1`, { exact: false })).toBeVisible()
+  await openSection(page, 'Geometry')
   await page.getByLabel('Bore (mm)', { exact: true }).fill('90')
   await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
+  await openMode(page, 'Library')
   await page.getByRole('button', { name: 'Save new revision', exact: true }).click()
   await expect(page.getByText(`Saved ${name}, revision 2`, { exact: false })).toBeVisible()
   await page.getByRole('button', { name: 'Save baseline run', exact: true }).click()
@@ -76,5 +83,45 @@ test('guest experiment survives sign-in; revisions, immutable history and reruns
     await page.setViewportSize({ width: 1440, height: 1100 })
     await page.locator('.saved-library').screenshot({ path: '/tmp/engine-bench-library.png' })
   }
+  expect(errors).toEqual([])
+})
+
+test('a two-stroke build and its run save, reload and load back', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  const name = `Two-stroke ${test.info().project.name} ${Date.now()}`
+  await page.goto('/login')
+  await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
+  await page.getByLabel('Password', { exact: true }).fill('password')
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await page.waitForURL((url) => url.pathname === '/')
+  await openSection(page, 'Starting build')
+  await page.getByRole('button', { name: '125 race two-stroke', exact: true }).click()
+  await page.getByLabel('Build name', { exact: true }).fill(name)
+  await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
+  await openMode(page, 'Dyno')
+  await page.getByLabel('Start RPM', { exact: true }).fill('6000')
+  await page.getByLabel('End RPM', { exact: true }).fill('9000')
+  await page.getByRole('button', { name: 'Quick test', exact: true }).click()
+  await expect(page.getByTestId('run-summary')).toContainText('COMPLETE', { timeout: 60000 })
+  await openMode(page, 'Library')
+  await page.getByLabel('Save to workspace').click()
+  await page.getByRole('option', { name: /personal/ }).click()
+  await page.getByRole('button', { name: 'Save as new build', exact: true }).click()
+  await expect(page.getByText(`Saved ${name}, revision 1`, { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: 'Save baseline run', exact: true }).click()
+  await expect(page.getByText('Baseline saved with revision 1.', { exact: false })).toBeVisible()
+  // Load the Road build, then the saved two-stroke back from the server.
+  await openSection(page, 'Starting build')
+  await page.getByRole('button', { name: 'Road 2.0', exact: true }).click()
+  await page.reload()
+  await openMode(page, 'Library')
+  const build = page.locator('.library-entry').filter({ hasText: name }).filter({ has: page.getByRole('button', { name: 'Load build', exact: true }) })
+  await build.getByRole('button', { name: 'Load build', exact: true }).click()
+  await expect(page.getByTestId('command-bar')).toContainText('two-stroke single')
+  await openSection(page, 'Ports and pipe')
+  await expect(page.getByTestId('port-timing')).toContainText('83° ATDC')
+  const history = page.locator('.run-entry').filter({ hasText: name })
+  await expect(history).toHaveCount(1)
   expect(errors).toEqual([])
 })

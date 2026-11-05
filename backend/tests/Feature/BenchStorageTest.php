@@ -177,6 +177,17 @@ it('round trips compressed samples exactly and leaves saved runs unchanged after
     $this->withToken($token)->patchJson('/api/auth/runs/'.$runUuid, ['run' => $fixture])->assertStatus(405);
 });
 
+it('keeps a completed run\'s run-down with its samples', function () {
+    [, , $token] = createAuthenticatedCompanyUser();
+    $uuid = $this->withToken($token)->postJson('/api/auth/builds', benchRecipe())->assertCreated()->json('build.uuid');
+    $fixture = benchFixture();
+    $fixture['id'] = 'rundown-run';
+    $fixture['rundown'] = array_slice($fixture['samples'], 0, 3);
+    $runUuid = $this->withToken($token)->postJson('/api/auth/runs', ['build_uuid' => $uuid, 'revision' => 1, 'run' => $fixture])->assertCreated()->json('saved_run.uuid');
+    expect(DynoRun::query()->where('uuid', $runUuid)->firstOrFail()->document())->toEqual($fixture);
+    $this->withToken($token)->getJson('/api/auth/runs/'.$runUuid)->assertOk()->assertJsonPath('run.rundown', $fixture['rundown']);
+});
+
 it('makes retries idempotent and rejects reused IDs with different content', function () {
     [, , $token] = createAuthenticatedCompanyUser();
     $uuid = $this->withToken($token)->postJson('/api/auth/builds', benchRecipe())->assertCreated()->json('build.uuid');

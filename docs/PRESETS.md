@@ -157,3 +157,41 @@ No manufacturer torque curve was found; calibrated to the two Japanese rated poi
 ### Calibration and deviation
 
 At 5,200 RPM the preset makes 149 Nm against the rated 149 Nm. At 6,600 RPM it makes 130 Nm (90 kW) against 127 Nm (88 kW). A standard sweep gives 91.3 kW at about 6,380 RPM and 150 Nm at about 4,810. Not represented: T-VIS, the intake runner valve that improved low-speed torque.
+
+## Yamaha RD350LC (4L0)
+
+`frontend/src/bench/presets.ts`, added with model 1.14.0 (5 November 2026). The first two-stroke preset: a liquid-cooled 347 cc parallel twin. No manufacturer curve or port timing was found, so only the rated power point is calibrated.
+
+### Sources
+
+1. Wikipedia, [*Yamaha RD350LC*](https://en.wikipedia.org/wiki/Yamaha_RD350LC) (revision of 25 May 2026): 347 cc parallel-twin two-stroke, 64 × 54 mm, 6.2:1, 49 bhp (37 kW), 1980–1982 models codenamed 4L0. The infobox figures carry no citation.
+2. Shannons, [*1980 Yamaha RD350LC: Race Developed*](https://www.shannons.com.au/club/bike-news/bike-reviews/1980-yamaha-rd350lc-race-developed/): claimed 47 hp at 8,500 RPM (it also lists a 64.8 mm bore, taken as a typing error against the other sources).
+3. 2smoto, [model note on the RD350 YPVS](https://www.2smoto.com/m_news.asp?id=8222): Yamaha's compression figures for these engines are corrected (trapped) ratios, calculated from exhaust-port closing.
+
+### Values
+
+| Field | Value | Basis |
+| --- | --- | --- |
+| Layout, bore × stroke, capacity | Parallel twin, 64 × 54 mm, 347 cc | Sourced (1) |
+| Compression | 6.2:1 trapped; 10.7:1 full stroke | Trapped sourced (1, 3); full-stroke ratio follows from the inferred exhaust port |
+| Rated output | 35 kW (47 hp) at 8,500 RPM | Sourced (2); (1) gives 37 kW without a speed |
+| Crank | 180° | Inferred (common for the type; not stated in the sources) |
+| Intake | Reed valves, 1,600 mm² open, 500 Hz petals | Inferred |
+| Carburettors | One 28 mm carburettor per cylinder | Inferred |
+| Ports | Exhaust opens 87° ATDC (186°), bridged, 60 mm; five transfers open 116° ATDC (128°), 85 mm total | Inferred, typical road-twin timing; widths calibrated |
+| Expansion chambers | 1.0 m from the port to the stinger (1.2 m overall), tuned near 9,200 RPM by the round-trip rule | Calibrated |
+| Rod length, ignition (18° BTDC), burn, λ 0.9, inertia, primary compression 1.35, limits | As in the file | Inferred |
+
+### Calibration and deviation
+
+Steady full load in normal air, held 2 s and averaged over the last second:
+
+| RPM | 4,000 | 5,500 | 7,000 | 7,500 | 8,000 | 8,500 | 9,000 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Preset, Nm | 20.9 | 22.4 | 25.7 | 31.8 | 38.1 | 37.5 | 35.2 |
+| Preset, kW | 8.8 | 12.9 | 18.8 | 25.0 | 32.0 | 33.4 | 33.2 |
+
+At 8,500 RPM the preset makes 33.4 kW against the claimed 35 kW (−4.6%); `src/sim/presets.test.ts` holds it within 6% and 4 Nm of the rated point. The torque comes on sharply above 7,000 RPM, as the chambers start to work, which matches the bike's reputation but has not been checked against a measured curve. Highest part stress over the range is 63% of its limit.
+
+Not represented: the YPVS power valve (later models), the separate oil injection, auxiliary exhaust ports and the airbox. The model's two-stroke scavenging constants are estimates (see `docs/SIMULATION.md`).
+

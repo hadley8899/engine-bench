@@ -1,6 +1,6 @@
 # Two-stroke engines — design note
 
-Status: proposal, not implemented. Requested by the user on 1 November 2026; on 2 November 2026 it moved behind bench usability, tuning and limits, real-engine presets and camshafts (PLAN.md Stage 10): build two-stroke engines and experiment with ports and exhaust shapes. This note records the intended model, editor and order of work so the design can be reviewed before code changes. Update it as decisions are made; move implemented behaviour into `docs/SIMULATION.md`.
+Status: implemented in model 1.14.0 (Stage 10, 5 November 2026). Requested by the user on 1 November 2026. This note keeps the design and records the decisions; `docs/SIMULATION.md` ("Two-stroke engines") describes the model as built, its calibration and its limits.
 
 ## Why it is a different engine, not a new preset
 
@@ -86,9 +86,12 @@ Validation rejects impossible layouts: transfers that open before the exhaust, p
 
 References for the model: G. P. Blair, *Design and Simulation of Two-Stroke Engines* (SAE, 1996), and G. Jennings, *Two-Stroke Tuner's Handbook* (1973), for port time-area and expansion-chamber design practice; Benson and Brandham's two-zone scavenging model (1969). Implement from the published equations and record what is adapted. Recheck licences for any code, data or sounds used.
 
-## Open questions
+## Decisions (5 November 2026)
 
-- Single cylinder first (recommended), or a twin from the start?
-- Which engines matter most: a moped, a race single, a dirt bike, an outboard or snowmobile twin?
-- Should the pipe solver also go into four-strokes (headers and collectors) as soon as it works, or stay two-stroke only at first?
-- Oil premix ratio would need a lubrication or smoke model to have any effect. Leave it out until then rather than add a control with no effect.
+- Single first, then twins (180° and 360° parallel twins). V twins move to Stage 11's layouts.
+- Engines: a fictional 50 cc moped and 125 cc race single and a 250 twin as starting builds, and the Yamaha RD350LC road twin as the first sourced preset. A 125 cc race single (for example the Rotax 122) waits: published compression and power figures disagree, and the model's charging falls short of racing 125s (see SIMULATION.md).
+- The pipe solver stays two-stroke only for now; four-stroke headers and collectors keep their sound-only model until it is tried there.
+- Oil premix is left out: without a lubrication or smoke model it would have no effect.
+- Not in the original note, added because a crankcase-pumped engine needed them: a throttle orifice with a lumped intake tract (instead of the four-stroke's imposed manifold pressure), transfer-duct momentum, an idle screw, and an optional bridged exhaust port (up to 1.05 × bore wide).
+- Transfer port angles and a separate boost port are not settings: the transfer count (2, 3 with a boost port, 5) sets the scavenging estimate.
+- Pipe cells of 3 cm with second-order reconstruction, chosen for cost (sensitivity in SIMULATION.md). The single fits the AudioWorklet budget comfortably and the twin with little margin; the worker ring-buffer fallback was not needed for the measured hosts and was not built.
