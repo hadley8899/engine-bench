@@ -442,6 +442,6 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - Chromium (`tests/twostroke.spec.ts`): the 125 single loads, shows ports and pipe, a port edit updates the derived timing and rebuilds, the cutaway renders (screenshots reviewed: ports in the liner, the chamber drawn under the engine and coloured by pressure), the engine starts and revs, and a quick test completes; a four-stroke becomes a two-stroke twin with a rotary disc and straight pipe and back.
 - Persistence: `tests/storage.spec.ts` (isolated API and test database) saves a two-stroke build and its run, reloads and loads them back. The older storage test needed the Stage 9 tabs and exposed a real bug, now fixed: saved runs lost their closed-throttle run-down. The backend now stores it beside the samples (older runs still read), with a Pest test. Both storage tests pass.
 - Test isolation fix: `php artisan serve` replaces the e2e container's environment with any keys in `backend/.env`, so once the development setup had written that file, the storage tests' API used the development database. The e2e API now runs PHP's built-in server directly. No test data reached the development database (checked: no builds there).
-- Backend: 35 Pest tests pass (Docker).
+- Backend: 35 Pest tests pass (Docker). Vitest: 199 pass. Full Chromium suite: 35 pass in 16.2 minutes (the two storage tests are skipped there and pass through `scripts/test-storage-browser.sh`).
 - Not verified: listening to the two-stroke sound (the user's judgement, as for Stage 5) and the first-use check.
 
