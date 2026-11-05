@@ -10,7 +10,9 @@ import { ToastProvider } from './components/ToastProvider'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeModeProvider>
-      <BrowserRouter>
+      {/* Navigate at once: as transitions, page changes wait behind the
+          bench's frequent telemetry updates while an engine runs. */}
+      <BrowserRouter useTransitions={false}>
         <AuthProvider>
           <ToastProvider>
             <App />

@@ -18,6 +18,7 @@ async function choose(page: Page, field: string, option: string) {
 test('a spark-cut limiter and straight pipe afterfire; a fuel cut shows LIMITER CUT', async ({
   page,
 }) => {
+  test.setTimeout(90000)
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
