@@ -4,7 +4,7 @@ Updated: 4 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0), and so is Stage 9, the UI revision. Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0), and so is Stage 9, the UI revision (its first-use check with an unfamiliar user moved to the end of the plan). Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
@@ -12,7 +12,7 @@ Direction set by the user on 2 November 2026: make the bench fun and interesting
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
 3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
 4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
-The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026). Next come two-stroke engines (Stage 10), other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
+The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November). Next come two-stroke engines (Stage 10), other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
 
 ## Product direction
 
@@ -342,7 +342,7 @@ First pass done 4 November 2026. The page was about 8,800 px tall at 1024 px wid
 - [x] Reorganise the engine workshop into understandable groups with progressive disclosure: everyday settings first, detailed parameters on demand. Show at a glance what differs from the starting build.
 - [x] Make status consistent: one place for engine state, warnings and notices, with stall, limiter, knock, fuel-limit and (later) failure messages saying what to do next.
 - [x] Recheck narrow and mobile layouts, keyboard and gamepad use, and accessible names for every control.
-- [x] Repeat the first-use check. The user played with the revised bench on 5 November 2026 and kept it ("everything feels 100% better"). Their two findings were fixed the same day: the first ~20% of throttle did nothing at idle (idle air now adds to the throttle), and failures now say how to prevent them. A scripted walkthrough (`tests/firstuse.spec.ts`) checks that start, change, test and compare are reachable from visible labels. A check with someone who has never seen the bench is carried forward with Phase 2's and does not block later work.
+- [x] First-use check: moved to the end of the plan by the user on 5 November 2026 (see Stage 13). The user played with the revised bench that day and kept it ("everything feels 100% better"); their findings (a low-throttle dead zone, failures without prevention hints, and an invalid-cam crash) were fixed the same day. A scripted walkthrough (`tests/firstuse.spec.ts`) checks that start, change, test and compare are reachable from visible labels.
 
 Completed 5 November 2026. The audit is in `docs/UI_AUDIT.md`. Engine state and problems now appear in one status strip under the command bar on every tab (failure, starter, stall, limiter, fuel limit, knock, model warnings and the latest notice); each problem says what to do next and most offer a button to the setting. Knock and fuel-limit messages are held for 1.5 s like the limiter. B, W, M, D and Y switch tabs; arrow keys move along the tab lists. On screens under 900 px the Drive panel comes first with gauges, throttle and ignition, and More drive controls shows the rest. Browser checks run in Chromium only, by the user's standing decision that Chromium is enough.
 
@@ -432,6 +432,7 @@ The user reported on 2 November 2026 that the 3D graphics need improving and con
 - [ ] Show Stage 6 state on the model: per-cylinder heat, a glowing exhaust manifold and turbine housing, knock flashes, failed components and the fitted parts.
 - [ ] Set and measure a frame budget on representative hardware, use device-dependent quality levels and keep a WebGL-free fallback.
 
+- [ ] Last: repeat the one-minute first-use check with someone who has never seen the bench (start an engine, make a change, run a test and compare without help). Open since Phase 2; moved here from Stage 9 by the user on 5 November 2026.
 Acceptance: the model stays consistent with the active definition and telemetry, inspection mode stays clearly labelled, and browser tests cover rendering with and without WebGL.
 
 ## Verification and progress tracking

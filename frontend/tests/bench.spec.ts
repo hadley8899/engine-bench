@@ -769,7 +769,6 @@ test('the K20A preset switches to its VTEC high cam when revved', async ({
 test('cam profiles convert exactly, take a race grade and phase from the maps', async ({
   page,
 }) => {
-  test.setTimeout(90000)
   await page.goto('/')
   await openSection(page, 'Camshaft')
   const editor = page.getByTestId('cam-editor')

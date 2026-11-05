@@ -14,6 +14,17 @@ cd frontend
 npm run dev
 ```
 
+For the guest bench alone (no accounts or saved library), Docker is not needed:
+
+```bash
+cd frontend
+cp -n .env.example .env
+npm ci
+npm run dev
+```
+
+The same steps work on macOS, including Apple silicon: the Compose images (`php:8.4-cli`, `mysql:8.4`, Mailpit) are multi-architecture, and Docker Desktop or OrbStack provides Compose.
+
 Open `http://localhost:5175`. The bench works without signing in. The first setup creates missing local environment files, installs dependencies, creates the application key if needed and migrates the project's database. It preserves existing environments/data and does not seed accounts automatically. The frontend can also run on its own for guest simulation; accounts require the backend.
 
 Default ports: frontend 5175, API 8002 and the Mailpit development inbox 8027. Root `.env` controls Compose names/ports/database settings; `frontend/.env` controls frontend branding, port and API proxy; `backend/.env` holds the backend application key/settings. Keep URLs and proxy ports aligned. MySQL and SMTP are not published to the host; the API and Mailpit bind to localhost. This Compose setup is for local development.
@@ -55,6 +66,7 @@ npm test
 npm run schemas
 npm run benchmark
 npx playwright install chromium firefox
+npm run test:browser -- --project=chromium
 npm run test:browser
 # From the project root:
 docker compose exec -T backend php artisan test --compact
@@ -64,7 +76,7 @@ docker compose exec -T backend composer validate --strict
 
 Backend tests use a separate database ending in `_test`; the bootstrap forces the testing connection and refuses main database names. Never run destructive migration/reset commands against the local account database or another project.
 
-`npm run schemas` exports identical Zod JSON Schema definitions to `frontend/schemas/` and `backend/resources/schemas/` for Laravel validation. Storage requests are capped at 1 MiB; run samples are stored as one gzip blob capped at 256 KiB compressed (plus base64 storage overhead), with at most 5,000 samples. The Vitest suite checks geometry, flow, combustion, environment, start/stall/limiter, repeatability and dyno snapshots. Playwright exercises the real worker/AudioWorklet and offline PCM, live/quick agreement, editing, input validation, guest persistence and narrow layouts in Chromium/Firefox; the gamepad test emulates a standard controller input. The storage browser script starts a separate API on 8003 and Vite on 5180 against `engine_bench_browser_test`, runs real sign-in/revision/history/rerun checks, then stops the test API. It does not reset or seed the development database. The storage test is skipped in the default browser command. Performance measurements are hardware-specific; they are not a guarantee for every machine.
+`npm run schemas` exports identical Zod JSON Schema definitions to `frontend/schemas/` and `backend/resources/schemas/` for Laravel validation. Storage requests are capped at 1 MiB; run samples are stored as one gzip blob capped at 256 KiB compressed (plus base64 storage overhead), with at most 5,000 samples. The Vitest suite checks geometry, flow, combustion, environment, start/stall/limiter, repeatability and dyno snapshots. Playwright exercises the real worker/AudioWorklet and offline PCM, live/quick agreement, editing, input validation, guest persistence and narrow layouts in Chromium/Firefox; the gamepad test emulates a standard controller input. The storage browser script starts a separate API on 8003 and Vite on 5180 against `engine_bench_browser_test`, runs real sign-in/revision/history/rerun checks, then stops the test API. It does not reset or seed the development database. The storage test is skipped in the default browser command. The browser tests start `npm run dev` on port 5175 themselves, or reuse one that is already running; they need no backend. Run one Playwright command at a time, and do not edit source files during a run: Vite reloads the page and tests fail spuriously. The Chromium suite (bench, stage 5, stage 6 and first-use specs) takes about 15 minutes; `npx playwright test tests/firstuse.spec.ts --project=chromium` is a quicker check of the layout, status strip, keyboard, phone and validation. Chromium is the routinely checked browser; Firefox is configured but not run for every change. WebGL in the test browser uses SwiftShader (software rendering), so 3D-heavy tests are slow and two have 90 s limits. `npm test` (Vitest, about 70 s) needs no browser. Performance measurements are hardware-specific; they are not a guarantee for every machine.
 
 ## Source map
 

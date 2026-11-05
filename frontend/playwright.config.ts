@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests',
-  timeout: 45000,
+  // SwiftShader WebGL and several live engines make heavy tests run near
+  // 45 s under full-suite load.
+  timeout: 90000,
   workers: 1,
   reporter: 'list',
   use: {

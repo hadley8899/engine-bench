@@ -78,4 +78,4 @@ Long topics remain long (Camshaft with profiles and phasers, Parts and limits); 
 
 ## Open after this audit
 
-- A first-use check with someone unfamiliar with the bench (Phase 2 and Stage 9), which needs a person; the scripted walkthrough in `tests/firstuse.spec.ts` only checks that the steps are reachable from visible labels.
+- A first-use check with someone unfamiliar with the bench, which needs a person; the user moved it to the end of the plan on 5 November 2026; the scripted walkthrough in `tests/firstuse.spec.ts` only checks that the steps are reachable from visible labels.
