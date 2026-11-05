@@ -19,11 +19,94 @@ const phaseColours = {
   Compression: 0x9d6bff,
 }
 const wrapRev = (a: number) => ((a % TAU) + TAU) % TAU
-/** Suction blue, ambient grey, pressure orange: ±0.8 bar spans the scale. */
+/**
+ * A pipe centreline: straight out of the port (+z), a quarter bend down,
+ * a straight drop, a quarter bend sideways (±x) and straight on.
+ */
+class PipePath {
+  private parts: { length: number; at: (s: number) => [THREE.Vector3, THREE.Vector3] }[] = []
+  constructor(start: THREE.Vector3, bend: number, drop: number, side: number) {
+    const lead = bend * 0.6
+    const p1 = start.clone().add(new THREE.Vector3(0, 0, lead))
+    const c1 = p1.clone().add(new THREE.Vector3(0, -bend, 0))
+    const p2 = c1.clone().add(new THREE.Vector3(0, 0, bend))
+    const p3 = p2.clone().add(new THREE.Vector3(0, -drop, 0))
+    const c2 = p3.clone().add(new THREE.Vector3(side * bend, 0, 0))
+    const p4 = c2.clone().add(new THREE.Vector3(0, -bend, 0))
+    const straight = (from: THREE.Vector3, dir: THREE.Vector3, length: number) => ({
+      length,
+      at: (s: number): [THREE.Vector3, THREE.Vector3] => [from.clone().addScaledVector(dir, s), dir.clone()],
+    })
+    // Quarter arcs about a centre, from one radius vector to another.
+    const arc = (centre: THREE.Vector3, from: THREE.Vector3, to: THREE.Vector3) => ({
+      length: (Math.PI / 2) * bend,
+      at: (s: number): [THREE.Vector3, THREE.Vector3] => {
+        const k = s / ((Math.PI / 2) * bend)
+        const a = (k * Math.PI) / 2
+        const v = from.clone().multiplyScalar(Math.cos(a)).addScaledVector(to, Math.sin(a))
+        const t = to.clone().multiplyScalar(Math.cos(a)).addScaledVector(from, -Math.sin(a))
+        return [centre.clone().addScaledVector(v, bend), t.normalize()]
+      },
+    })
+    this.parts.push(straight(start, new THREE.Vector3(0, 0, 1), lead))
+    this.parts.push(arc(c1, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)))
+    this.parts.push(straight(p2, new THREE.Vector3(0, -1, 0), drop))
+    this.parts.push(arc(c2, new THREE.Vector3(-side, 0, 0), new THREE.Vector3(0, -1, 0)))
+    this.parts.push(straight(p4, new THREE.Vector3(side, 0, 0), 1e6))
+  }
+  /** Position and unit tangent at arc length s. */
+  at(s: number): [THREE.Vector3, THREE.Vector3] {
+    for (const part of this.parts) {
+      if (s <= part.length) return part.at(s)
+      s -= part.length
+    }
+    return this.parts[this.parts.length - 1].at(s)
+  }
+}
+/** A tube swept along a path with a radius that varies with arc length. */
+function sweptTube(
+  path: PipePath,
+  length: number,
+  rings: number,
+  around: number,
+  radiusAt: (s: number) => number,
+) {
+  const positions: number[] = []
+  const indices: number[] = []
+  let normal = new THREE.Vector3(1, 0, 0)
+  for (let k = 0; k <= rings; k++) {
+    const s = (k / rings) * length
+    const [p, t] = path.at(s)
+    // Carry the frame along the path so the rings do not twist.
+    normal = normal.sub(t.clone().multiplyScalar(normal.dot(t))).normalize()
+    if (normal.lengthSq() < 0.5) normal = new THREE.Vector3(0, 1, 0).cross(t).normalize()
+    const binormal = t.clone().cross(normal)
+    const r = radiusAt(s)
+    for (let j = 0; j <= around - 1; j++) {
+      const a = (j / (around - 1)) * TAU
+      const v = normal.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(binormal, Math.sin(a) * r)
+      positions.push(p.x + v.x, p.y + v.y, p.z + v.z)
+    }
+  }
+  for (let k = 0; k < rings; k++)
+    for (let j = 0; j < around - 1; j++) {
+      const a = k * around + j
+      const b = a + around
+      indices.push(a, b, a + 1, b, b + 1, a + 1)
+    }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(positions.length).fill(0.5), 3))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  return geometry
+}
+/** Suction blue, ambient dark grey, pressure orange-red: ±0.5 bar spans the scale. */
 function pressureColour(gauge: number, out: THREE.Color) {
-  const k = Math.max(-1, Math.min(1, gauge / 80000))
-  if (k < 0) out.setRGB(0.42 + 0.58 * k * 0.6, 0.47 + 0.2 * -k, 0.52 + 0.48 * -k)
-  else out.setRGB(0.47 + 0.53 * k, 0.47 - 0.05 * k, 0.5 - 0.42 * k)
+  const k = Math.max(-1, Math.min(1, gauge / 50000))
+  if (k < 0)
+    out.setRGB(0.22 - 0.12 * -k, 0.24 + 0.16 * -k, 0.28 + 0.67 * -k, THREE.SRGBColorSpace)
+  else out.setRGB(0.22 + 0.78 * k, 0.24 + 0.2 * k, 0.28 - 0.2 * k, THREE.SRGBColorSpace)
   return out
 }
 
@@ -129,7 +212,8 @@ export function TwoStrokeView({
     const ports: { mat: THREE.MeshStandardMaterial; top: number; kind: string; cylinder: number }[] = []
     const reeds: THREE.Group[] = []
     const discs: THREE.Group[] = []
-    const pipeMeshes: { geometry: THREE.LatheGeometry; cells: number[] }[] = []
+    const pipeMeshes: { geometry: THREE.BufferGeometry; cells: number[]; around: number }[] = []
+    const pipeObjects: THREE.Object3D[] = []
     const portWindow = (
       x: number,
       centre: number,
@@ -240,60 +324,75 @@ export function TwoStrokeView({
         m.rotation.y = Math.PI / 2
         discs.push(disc)
       }
-      // Exhaust pipe: a bend out of the port, then the segments along the
-      // side (a single's to the right; a twin's outwards from each cylinder).
+      // Exhaust pipe swept along its centreline: forward out of the port,
+      // down past the crankcase, then along beneath the engine (a single's
+      // to the right; a twin's outwards). The centreline is as long as the
+      // simulated pipe and the radius follows its segments.
       const segments = pipeSegments(ts.pipe)
-      const total = segments.reduce((s, g) => s + g.length, 0)
-      const direction = n === 1 || i === 1 ? 1 : -1
+      const total = segments.reduce((sum, g) => sum + g.length, 0)
+      const widest = Math.max(...segments.map((g) => Math.max(g.start, g.end)))
+      const side = n === 1 || i === 1 ? 1 : -1
       const portY = (exhaustTop + bottomDead) / 2
-      const bend = Math.min(0.9 * u, segments[0].length * 0.6)
-      const headerMat = new THREE.MeshStandardMaterial({ color: 0x9a8f86, metalness: 0.9, roughness: 0.35 })
-      const stub = mesh(new THREE.CylinderGeometry(segments[0].start / 2, segments[0].start / 2, bend, 24), headerMat, x, portY, radius + bend / 2)
-      stub.rotation.x = Math.PI / 2
-      const points: THREE.Vector2[] = []
-      const cells: number[] = []
-      const step = Math.max(0.005, total / 160)
-      let along = bend
-      let start = 0
-      for (const g of segments) {
-        for (let s = 0; s <= g.length - 1e-9; s += step) {
-          if (start + s < bend) continue
-          points.push(new THREE.Vector2((g.start + (g.end - g.start) * (s / g.length)) / 2, start + s - bend))
-          cells.push(start + s)
-          along = start + s
+      const bend = Math.max(segments[0].start * 1.4, 0.35 * u)
+      const level = crankY - ccRadius - widest * 0.6 - 0.1 * u
+      const path = new PipePath(
+        new THREE.Vector3(x, portY, radius * 1.3),
+        bend,
+        Math.max(0, portY - level - 2 * bend),
+        side,
+      )
+      const radiusAt = (at: number) => {
+        let start = 0
+        for (const g of segments) {
+          if (at <= start + g.length || g === segments[segments.length - 1])
+            return (g.start + (g.end - g.start) * Math.min(1, Math.max(0, (at - start) / g.length))) / 2
+          start += g.length
         }
-        start += g.length
+        return segments[segments.length - 1].end / 2
       }
-      points.push(new THREE.Vector2(segments[segments.length - 1].end / 2, total - bend))
-      cells.push(total)
-      void along
-      const lathe = new THREE.LatheGeometry(points, 28)
-      const colours = new Float32Array(lathe.attributes.position.count * 3).fill(0.5)
-      lathe.setAttribute('color', new THREE.BufferAttribute(colours, 3))
-      const pipeMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.55, roughness: 0.4, side: THREE.DoubleSide })
-      const pipe = mesh(lathe, pipeMat, x, portY, radius + bend)
-      pipe.rotation.z = -direction * (Math.PI / 2)
-      pipeMeshes.push({ geometry: lathe, cells: cells.map((c) => c / total) })
+      const rings = Math.max(48, Math.round(total / 0.006))
+      const sweep = sweptTube(path, total, rings, 24, radiusAt)
+      const pipeMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.8, envMapIntensity: 0.25, side: THREE.DoubleSide })
+      mesh(sweep, pipeMat, 0, 0, 0)
+      pipeMeshes.push({ geometry: sweep, cells: Array.from({ length: rings + 1 }, (_, k) => k / rings), around: 24 })
+      pipeObjects.push(scene.children[scene.children.length - 1])
     }
-    // Framing: the cylinder, or the whole pipe.
-    const pipeLength = pipeSegments(ts.pipe).reduce((s, g) => s + g.length, 0)
-    const extent = Math.max(deck + u, pipeLength + spacing * n)
-    const camera = new THREE.PerspectiveCamera(37, 1, 0.005 * extent, 20 * extent)
+    // Framing: the cylinder and crankcase, the pipe, or everything.
+    const engineBox = new THREE.Box3(
+      new THREE.Vector3(-(n - 1) * spacing / 2 - u, crankY - r * 2.4, -r * 2.4),
+      new THREE.Vector3((n - 1) * spacing / 2 + u, deck + 0.9 * u, r * 2.4),
+    )
+    const pipeBox = new THREE.Box3()
+    for (const o of pipeObjects) pipeBox.expandByObject(o)
+    const allBox = engineBox.clone().union(pipeBox)
+    const extent = allBox.getSize(new THREE.Vector3()).length()
+    const camera = new THREE.PerspectiveCamera(37, 1, 0.002 * extent, 30 * extent)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     const fit = (name: string) => {
-      const engineCentre = new THREE.Vector3(0, deck * 0.45, 0)
-      const target = name === 'Pipe' ? new THREE.Vector3((pipeLength / 2) * (n === 1 ? 1 : 0), deck * 0.4, radius + 0.6 * u) : engineCentre
-      const span = name === 'Pipe' ? pipeLength * 0.75 + spacing * n : name === 'Overview' ? extent * 0.65 : deck * 1.1 + spacing * (n - 1)
-      const direction = name === 'Pipe' ? new THREE.Vector3(0.25, 0.55, 1) : new THREE.Vector3(0.5, 0.35, 1)
-      camera.position.copy(target).addScaledVector(direction.normalize(), span * 1.7)
+      const box = name === 'Pipe' ? pipeBox : name === 'Overview' ? allBox : engineBox
+      const target = box.getCenter(new THREE.Vector3())
+      const radius = box.getSize(new THREE.Vector3()).length() / 2
+      const direction = new THREE.Vector3(0.55, 0.35, 1).normalize()
+      const vertical = THREE.MathUtils.degToRad(camera.fov)
+      const horizontal = 2 * Math.atan(Math.tan(vertical / 2) * camera.aspect)
+      const distance = (radius / Math.sin(Math.min(vertical, horizontal) / 2)) * 1.02
+      camera.position.copy(target).addScaledVector(direction, distance)
       controls.target.copy(target)
-      controls.minDistance = 0.3 * deck
+      controls.minDistance = 0.2 * extent
       controls.maxDistance = 4 * extent
       controls.update()
     }
-    cameraPreset.current = fit
-    fit('Cylinder')
+    // Resizing keeps a chosen view framed until the user orbits away.
+    let fitted: string | null = 'Cylinder'
+    const leave = () => {
+      fitted = null
+    }
+    controls.addEventListener('start', leave)
+    cameraPreset.current = (name) => {
+      fitted = name
+      fit(name)
+    }
     scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture
     scene.add(new THREE.HemisphereLight(0xc9d7df, 0x10161a, 0.7))
     const key = new THREE.DirectionalLight(0xfff5e8, 2.6)
@@ -316,6 +415,7 @@ export function TwoStrokeView({
       renderer.setSize(w, h)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
+      if (fitted) fit(fitted)
     })
     resize.observe(host)
     const up = new THREE.Vector3(0, 1, 0)
@@ -389,12 +489,12 @@ export function TwoStrokeView({
         if (wave && cells > 0 && wave.length === cells * WAVE_SNAPSHOTS) {
           const slot = Math.floor((phase / TAU) * WAVE_SNAPSHOTS) % WAVE_SNAPSHOTS
           const rows = pipeMeshes[i].cells
-          const segmentsAround = 29
+          const segmentsAround = pipeMeshes[i].around
           for (let row = 0; row < rows.length; row++) {
             const cell = Math.min(cells - 1, Math.floor(rows[row] * cells))
             pressureColour(wave[slot * cells + cell] - 101325, colour)
             for (let k = 0; k < segmentsAround; k++) {
-              const v = k * rows.length + row
+              const v = row * segmentsAround + k
               if (v * 3 + 2 < attribute.array.length) attribute.setXYZ(v, colour.r, colour.g, colour.b)
             }
           }
@@ -409,6 +509,7 @@ export function TwoStrokeView({
       cancelAnimationFrame(frame)
       resize.disconnect()
       cameraPreset.current = null
+      controls.removeEventListener('start', leave)
       controls.dispose()
       renderer.domElement.removeEventListener('pointerup', click)
       for (const m of meshes) {
