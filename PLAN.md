@@ -379,7 +379,7 @@ Gas exchange and cams:
 - [ ] Add valve ramps and realistic cam acceleration profiles in place of half-sine lift, so a cam's aggressiveness can differ at the same duration and lift.
 - [ ] Make valve float progressive (lost power and erratic seating) before it bends a valve, and give valve-to-piston room per engine (valve reliefs), rather than half the clearance height for every build.
 
-- [ ] Raise two-stroke charging towards tuned racing engines: the race 125 traps 60% of a full delivered charge and its pipe's suction wave reaches only 0.83 bar, giving about 5.3 bar BMEP where racing 125s make 9–13. Then add the Yamaha YZ125, YZ250 and Aprilia RS125 (user request, 5 November 2026; `docs/PRESETS.md`, "Two-strokes that wait").
+- [ ] Raise two-stroke charging towards tuned racing engines: the race 125 traps 60% of a full delivered charge and its pipe's suction wave reaches only 0.83 bar, giving about 5.3 bar BMEP where racing 125s make 9–13. Then add the Yamaha YZ125, YZ250 and Aprilia RS125 (user request, 5 November 2026; `docs/PRESETS.md`, "Two-strokes that wait"). Investigated 5 November (`docs/SIMULATION.md`, "Charging investigation"): the pipe under-reflects at steep area changes, but two fixes tried became unstable in steady flow, and even full-strength reflections with race hardware reach only about 15 of the 20–22 Nm. Next: a properly well-balanced quasi-1D scheme validated against the Webster solution and a steady-flow test, then the remaining charging gap (auxiliary exhaust ports, scavenging constants, friction).
 
 Forced induction and combustion:
 

@@ -241,6 +241,6 @@ Not represented: the restrictor itself, the separate oil injection, the airbox a
 
 Requested by the user on 5 November 2026:
 
-- **Yamaha YZ125 and YZ250, Aprilia RS125.** Bore, stroke and compression are published (YZ125: 54.0 × 54.5 mm, 8.2–10.7:1 depending on year), but manufacturers do not publish their power, and magazine dyno figures put them at roughly 9–13 bar brake mean effective pressure. The model's race single reaches about 5.3 bar because its trapping and pipe suction fall short (`docs/SIMULATION.md`, two-stroke calibration). They wait until that gap is fixed rather than shipping engines that make half their power.
+- **Yamaha YZ125 and YZ250, Aprilia RS125.** Bore, stroke and compression are published (YZ125: 54.0 × 54.5 mm, 8.2–10.7:1 depending on year), but manufacturers do not publish their power, and magazine dyno figures put them at roughly 9–13 bar brake mean effective pressure. The model's race single reaches about 5.3 bar because its trapping and pipe suction fall short (`docs/SIMULATION.md`, two-stroke calibration). They wait until that gap is fixed rather than shipping engines that make half their power. The 5 November investigation found no quick fix: with race-like hardware the model reaches about 15 Nm against the 20–22 Nm these engines make, so a preset now would make roughly 70% of its real torque.
 - **Aprilia RS250 and Honda RS250R.** 90° V-twins, which need Stage 11's layouts.
 
