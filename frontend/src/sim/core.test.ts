@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { crankingTorque, EngineCore } from './core'
+import { EngineCore } from './core'
+import { crankingTorque } from './cores'
 import { DynoTest } from './dyno'
 import {
   atmosphere,

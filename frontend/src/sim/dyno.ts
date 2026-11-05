@@ -1,4 +1,5 @@
-import { EngineCore } from './core'
+import { createCore } from './cores'
+import type { Core } from './cores'
 import { defaultProcedure, MODEL_VERSION, validateProcedure } from './schema'
 import type { Conditions, EngineDefinition, Procedure, Run } from './schema'
 import { omegaToRpm } from './physics'
@@ -15,7 +16,7 @@ const RUNDOWN_FLOOR = 1000
  * the run-down (engine braking), then the engine is released to idle.
  */
 export class DynoTest {
-  readonly core: EngineCore
+  readonly core: Core
   readonly run: Run
   private frame = 0
   private stageTime = 0
@@ -42,7 +43,7 @@ export class DynoTest {
     indestructible = false,
   ) {
     validateProcedure(procedure, engine)
-    this.core = new EngineCore(engine, conditions)
+    this.core = createCore(engine, conditions)
     this.core.setControls({
       ignition: true,
       throttle: 1,

@@ -261,13 +261,13 @@ export function formatLimit(key: LimitKey, value: number) {
  */
 export class Stress {
   /** Running extremes of the current cycle, per cylinder. */
-  readonly peak = new Float64Array(4)
-  readonly compression = new Float64Array(4)
-  readonly tension = new Float64Array(4)
+  readonly peak: Float64Array
+  readonly compression: Float64Array
+  readonly tension: Float64Array
   /** Extremes of each cylinder's last completed cycle. */
-  private lastPeak = new Float64Array(4)
-  private lastCompression = new Float64Array(4)
-  private lastTension = new Float64Array(4)
+  private lastPeak: Float64Array
+  private lastCompression: Float64Array
+  private lastTension: Float64Array
   /** Reciprocating mass × crank radius, kg·m, and crank radius / rod length. */
   readonly inertiaForce: number
   readonly rodRatio: number
@@ -283,6 +283,13 @@ export class Stress {
   constructor(e: EngineDefinition) {
     const parts = (this.parts = e.parts)
     this.engine = e
+    const n = e.cylinders
+    this.peak = new Float64Array(n)
+    this.compression = new Float64Array(n)
+    this.tension = new Float64Array(n)
+    this.lastPeak = new Float64Array(n)
+    this.lastCompression = new Float64Array(n)
+    this.lastTension = new Float64Array(n)
     const area = (Math.PI * e.bore ** 2) / 4
     const r = e.stroke / 2
     this.rodRatio = r / e.rodLength
@@ -321,12 +328,14 @@ export class Stress {
       (k) =>
         (k !== 'turboSpeed' || this.limit.turboSpeed > 0) &&
         (k !== 'valveClearance' || !!e.cams) &&
+        // A two-stroke's ports have no valves to float.
+        (k !== 'valveFloat' || e.cycle === 'four-stroke') &&
         (k !== 'turbineTemperature' || induction.kind === 'turbo'),
     )
     for (const k of this.keys) {
-      this.ratio.set(k, new Float64Array(4))
-      this.value.set(k, new Float64Array(4))
-      this.exposure.set(k, new Float64Array(4))
+      this.ratio.set(k, new Float64Array(n))
+      this.value.set(k, new Float64Array(n))
+      this.exposure.set(k, new Float64Array(n))
     }
   }
   /** Fold a cylinder's finished cycle in and start the next. */
@@ -360,7 +369,7 @@ export class Stress {
       const values = this.value.get(k)!
       const ratios = this.ratio.get(k)!
       const exposure = this.exposure.get(k)!
-      const count = PER_CYLINDER[k] ? 4 : 1
+      const count = PER_CYLINDER[k] ? this.engine.cylinders : 1
       for (let i = 0; i < count; i++) {
         let v: number
         switch (k) {
@@ -420,7 +429,7 @@ export class Stress {
       limits: this.keys.map((key) => {
         const ratios = this.ratio.get(key)!
         let worst = 0
-        const count = PER_CYLINDER[key] ? 4 : 1
+        const count = PER_CYLINDER[key] ? this.engine.cylinders : 1
         for (let i = 1; i < count; i++) if (ratios[i] > ratios[worst]) worst = i
         return {
           key,

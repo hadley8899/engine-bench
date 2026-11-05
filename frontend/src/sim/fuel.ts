@@ -155,7 +155,7 @@ export class FuelDelivery {
   private fuelDensity: number
   /** Most fuel the injectors (at their duty limit) and pump deliver, kg/s. */
   private maxFuel = Infinity
-  /** All four injectors held open, kg/s. */
+  /** Every injector held open (one per cylinder), kg/s. */
   private injectorCapacity = Infinity
   private pumpCapacity = Infinity
   private limitedFor = 0
@@ -172,7 +172,8 @@ export class FuelDelivery {
     if (supply) {
       this.pumpCapacity = (supply.pumpFlow / 3.6e6) * grade.density
       if (c.kind !== 'carburettor')
-        this.injectorCapacity = ((4 * supply.injectorFlow) / 6e7) * grade.density
+        this.injectorCapacity =
+          ((engine.cylinders * supply.injectorFlow) / 6e7) * grade.density
       this.maxFuel = Math.min(
         this.pumpCapacity,
         this.injectorCapacity * supply.maxDuty,

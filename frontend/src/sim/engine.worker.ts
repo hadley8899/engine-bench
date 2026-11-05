@@ -1,4 +1,4 @@
-import { EngineCore } from './core'
+import { createCore } from './cores'
 import { DynoTest } from './dyno'
 import { PushTest } from './push'
 import type { HostEvent, HostMessage } from './messages'
@@ -19,7 +19,7 @@ scope.onmessage = ({ data }) => {
         data.frames > 48000
       )
         throw new Error('Diagnostic probe must contain 0–48000 frames')
-      const core = new EngineCore(data.engine, data.conditions)
+      const core = createCore(data.engine, data.conditions)
       core.setControls(data.controls)
       for (let i = 0; i < data.frames; i++) core.step()
       scope.postMessage({ type: 'probe', value: core.telemetry() })

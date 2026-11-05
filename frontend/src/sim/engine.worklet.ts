@@ -1,4 +1,5 @@
-import { EngineCore } from './core'
+import { continueCore, createCore } from './cores'
+import type { Core } from './cores'
 import { DynoTest } from './dyno'
 import { normalConditions, roadEngine } from './schema'
 import type { EngineDefinition, Conditions } from './schema'
@@ -16,7 +17,7 @@ declare class AudioWorkletProcessor {
 }
 
 export class EngineProcessor extends AudioWorkletProcessor {
-  private core = new EngineCore(roadEngine, normalConditions)
+  private core: Core = createCore(roadEngine, normalConditions)
   private dyno: DynoTest | null = null
   private running = false
   private frame = 0
@@ -42,7 +43,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
     super()
     const initial = options?.processorOptions?.initial
     if (initial) {
-      this.use(new EngineCore(initial.engine, initial.conditions))
+      this.use(createCore(initial.engine, initial.conditions))
       this.core.setControls({
         throttle: initial.throttle,
         ignition: initial.autostart,
@@ -58,8 +59,8 @@ export class EngineProcessor extends AudioWorkletProcessor {
             throw new Error('Live updates are paused during an automatic test.')
           this.use(
             this.running
-              ? EngineCore.continueFrom(this.core, data.engine, data.conditions)
-              : new EngineCore(data.engine, data.conditions),
+              ? continueCore(this.core, data.engine, data.conditions)
+              : createCore(data.engine, data.conditions),
           )
         } catch (error) {
           this.send({ type: 'error', message: String(error) })
@@ -72,7 +73,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
           this.core.setListener(data.value)
         }
         if (data.type === 'configure') {
-          this.use(new EngineCore(data.engine, data.conditions))
+          this.use(createCore(data.engine, data.conditions))
           this.running = false
           this.dyno = null
           this.accumulator = 0
@@ -85,7 +86,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
         if (data.type === 'start') {
           // Starting a failed engine rebuilds it from its last build first.
           if (this.core.stress.failure)
-            this.use(new EngineCore(this.core.engine, this.core.conditions))
+            this.use(createCore(this.core.engine, this.core.conditions))
           this.running = true
           this.started = this.core.time
           this.automaticStarter = data.automaticStarter ?? true
@@ -99,7 +100,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
           if (this.dyno) this.send({ type: 'run', value: this.dyno.run })
           this.dyno = null
           this.running = false
-          this.use(new EngineCore(this.core.engine, this.core.conditions))
+          this.use(createCore(this.core.engine, this.core.conditions))
           this.sendTelemetry()
         }
         if (data.type === 'dyno') {
@@ -121,7 +122,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
             data.frames > 48000
           )
             throw new Error('Diagnostic probe must contain 0–48000 frames')
-          const core = new EngineCore(data.engine, data.conditions)
+          const core = createCore(data.engine, data.conditions)
           core.setControls(data.controls)
           for (let i = 0; i < data.frames; i++) core.step()
           this.send({ type: 'probe', value: core.telemetry() })
@@ -133,7 +134,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
     }
   }
   /** Every core the bench plays keeps the chosen listening position. */
-  private use(core: EngineCore) {
+  private use(core: Core) {
     core.setListener(this.listener)
     if (!this.dyno || this.dyno.core !== core)
       core.setControls({ indestructible: this.indestructible })
@@ -182,7 +183,7 @@ export class EngineProcessor extends AudioWorkletProcessor {
           // aborted one stops, as an emergency stop should.
           if (!complete) {
             this.running = false
-            this.use(new EngineCore(this.core.engine, this.core.conditions))
+            this.use(createCore(this.core.engine, this.core.conditions))
           }
           this.sendTelemetry()
         }

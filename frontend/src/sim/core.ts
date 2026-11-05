@@ -24,6 +24,7 @@ import { partsInertia, Stress, VALVE_SPRINGS } from './parts'
 import { clearanceRatio, emptyEvents, valveEvents } from './cams'
 import type { StressTelemetry } from './parts'
 import type { FuelTelemetry } from './fuel'
+import type { TwoStrokeTelemetry } from './twostroke'
 import {
   atmosphere,
   clamp,
@@ -44,9 +45,9 @@ import {
 } from './physics'
 
 /** Calibration constants; see docs/SIMULATION.md for their basis. */
-const EXHAUST_BACKFLOW_TEMPERATURE = 650
-const WALL_HEAT = 3
-const WALL_ABOVE_COOLANT = 80
+export const EXHAUST_BACKFLOW_TEMPERATURE = 650
+export const WALL_HEAT = 3
+export const WALL_ABOVE_COOLANT = 80
 const FMEP_STATIC = 60000
 const FMEP_LINEAR = 4200
 const FMEP_QUADRATIC = 430
@@ -54,27 +55,27 @@ const FMEP_QUADRATIC = 430
  * Douaud–Eyzat ignition delay, τ = A·(ON/100)^3.402·p^-1.7·exp(3800/T) with
  * p in atm, scaled by a calibration factor for this model's lumped end gas.
  */
-const KNOCK_DELAY = 17.68e-3 * 3.3
+export const KNOCK_DELAY = 17.68e-3 * 3.3
 /** (γ − 1)/γ for isentropic compression of the unburned end gas. */
-const END_GAS_EXPONENT = 0.248
+export const END_GAS_EXPONENT = 0.248
 /** The knock window closes once this much of the charge has burned. */
-const KNOCK_WINDOW_BURN = 0.98
+export const KNOCK_WINDOW_BURN = 0.98
 /** Unburned share at onset that a knock sensor detects. */
-const KNOCK_SENSED = 0.03
+export const KNOCK_SENSED = 0.03
 /** ECU retard per detected knock event, its limit and recovery rate. */
-const RETARD_STEP = 2
-const RETARD_LIMIT = 12
-const RETARD_RECOVERY = 1.5
+export const RETARD_STEP = 2
+export const RETARD_LIMIT = 12
+export const RETARD_RECOVERY = 1.5
 /** Latest spark a map may ask for, degrees before top dead centre. */
-const MIN_ADVANCE = -10
+export const MIN_ADVANCE = -10
 /** Steps between ECU map lookups. */
-const MAP_INTERVAL = 16
+export const MAP_INTERVAL = 16
 /** Steps between component temperature updates. */
-const THERMAL_INTERVAL = 48
+export const THERMAL_INTERVAL = 48
 /** C in S_T/S_L = 1 + C·(Ū_p/S_L)^0.7, with turbulence intensity taken as ∝ Ū_p. */
 const TURBULENCE = 2.5
 /** Idle-air integral gain, throttle per RPM-second. */
-const IDLE_INTEGRAL = 0.0003
+export const IDLE_INTEGRAL = 0.0003
 
 export type Controls = {
   throttle: number
@@ -128,6 +129,8 @@ export type Telemetry = {
   }
   /** Part loads against their estimated limits, and any failure. */
   stress: StressTelemetry
+  /** Scavenging, crankcase and pipe state of a two-stroke; null otherwise. */
+  twoStroke: TwoStrokeTelemetry | null
 }
 export type EcuTelemetry = {
   /** Maps in use; otherwise the single values apply. */
@@ -255,7 +258,7 @@ export class EngineCore {
   private input = new AcousticInput()
   private chargeFuel: number
   private oxygen: number
-  private traces = Array.from({ length: 4 }, () => new Float32Array(360))
+  private traces: Float32Array[]
   private phases: number[]
   private airDensityRatio: number
   private pistonArea: number
@@ -314,12 +317,18 @@ export class EngineCore {
   /** Phases the valve-to-piston clearance was last evaluated at (NaN: never). */
   private clearancePhase = [NaN, NaN, 0]
   private clearance = 0
-  private crowns = [0, 0, 0, 0]
-  private knocks = [0, 0, 0, 0]
+  private crowns: number[]
+  private knocks: number[]
 
   constructor(engine: EngineDefinition, conditions: Conditions) {
     this.engine = validateEngine(engine)
+    if (this.engine.cycle !== 'four-stroke')
+      throw new Error('EngineCore runs four-strokes; use createCore.')
     this.conditions = conditionsSchema.parse(conditions)
+    const count = engine.cylinders
+    this.traces = Array.from({ length: count }, () => new Float32Array(360))
+    this.crowns = new Array<number>(count).fill(0)
+    this.knocks = new Array<number>(count).fill(0)
     this.pistonArea = (Math.PI * engine.bore ** 2) / 4
     this.stress = new Stress(this.engine)
     this.inertia = engine.inertia + partsInertia(this.engine)
@@ -338,7 +347,7 @@ export class EngineCore {
     this.grade = FUELS[engine.combustion.fuel]
     BurnedGas.prepare(this.grade)
     this.chargeFuel =
-      (displacement(engine) / 4) * (1.2 / this.grade.stoichiometric)
+      (displacement(engine) / count) * (1.2 / this.grade.stoichiometric)
     this.runnerResidual = engine.combustion.burnRate === 'predictive'
     this.sparkAdvance = engine.ignitionAdvance
     this.targetLambda = engine.lambda
@@ -361,7 +370,8 @@ export class EngineCore {
     // Runner diameter about 0.39 × bore, and never narrower than the valve.
     const runnerArea = Math.max(0.15 * this.pistonArea, 1.2 * engine.intakeArea)
     this.runnerGain = runnerArea / engine.intakeRunnerLength
-    this.exhaustReference = ((displacement(engine) / 4) * 1.2 * 6000) / 120
+    this.exhaustReference =
+      ((displacement(engine) / count) * 1.2 * 6000) / 120
     this.runnerVolume = Math.min(
       runnerArea * engine.intakeRunnerLength,
       (this.pistonArea * engine.stroke) / 2,
@@ -378,9 +388,10 @@ export class EngineCore {
     )
     this.fuel = new FuelDelivery(engine, air.density)
     this.lambda = engine.lambda
+    // Firing intervals are even: 180° apart on the inline-four.
     this.phases = Array.from(
-      { length: 4 },
-      (_, c) => engine.firingOrder.indexOf((c + 1) as 1 | 2 | 3 | 4) * Math.PI,
+      { length: count },
+      (_, c) => engine.firingOrder.indexOf(c + 1) * (CYCLE / count),
     )
     for (const phase of this.phases) {
       const g = geometry(engine, wrap(-phase))
@@ -692,7 +703,7 @@ export class EngineCore {
     for (let sub = 0; sub < n; sub++) {
       const da = this.omega * dt
       let indicated = 0
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < this.cylinders.length; i++) {
         const cyl = this.cylinders[i]
         const phase = wrap(this.angle - this.phases[i])
         const deg = (phase * 180) / Math.PI
@@ -1113,7 +1124,7 @@ export class EngineCore {
       for (const cyl of this.cylinders)
         cyl.retard = Math.max(0, cyl.retard - RETARD_RECOVERY * this.dt)
     if (this.sample % THERMAL_INTERVAL === 0) {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < this.cylinders.length; i++) {
         const cyl = this.cylinders[i]
         cyl.thermal.update(
           THERMAL_INTERVAL * this.dt,
@@ -1362,12 +1373,13 @@ export class EngineCore {
       road: this.controls.road
         ? { speed: this.vehicle.speed * 3.6, gear: this.controls.road.gear }
         : null,
+      twoStroke: null,
     }
   }
 }
 
 /** Laminar flame speed, m/s (Metghalchi–Keck, residual dilution 1 − 2.06·x^0.77). */
-function laminarFlame(
+export function laminarFlame(
   fit: { base: number; curve: number; peak: number },
   phi: number,
   temperature: number,
@@ -1382,27 +1394,6 @@ function laminarFlame(
   )
 }
 /** Turbulent flame speed, S_T = S_L·(1 + C·(u′/S_L)^0.7), m/s. */
-function turbulentFlame(laminar: number, pistonSpeed: number) {
+export function turbulentFlame(laminar: number, pistonSpeed: number) {
   return laminar * (1 + TURBULENCE * (pistonSpeed / laminar) ** 0.7)
-}
-
-/**
- * Peak torque needed to turn the engine slowly with ignition off: the
- * resisting torque over one cycle at 150 RPM. A starter below this may still
- * start the engine on flywheel momentum, so treat it as a guide, not a rule.
- */
-export function crankingTorque(
-  engine: EngineDefinition,
-  conditions: Conditions,
-) {
-  const core = new EngineCore(engine, conditions)
-  core.setControls({ ignition: false, holdRpm: 150 })
-  // Skip the first step's step-change from rest, then measure one 720° cycle.
-  for (let i = 0; i < 480; i++) core.step()
-  let peak = 0
-  for (let i = 0; i < 38400; i++) {
-    core.step()
-    peak = Math.max(peak, -core.absorbedTorque)
-  }
-  return peak
 }

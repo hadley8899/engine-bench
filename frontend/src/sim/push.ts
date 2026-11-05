@@ -1,4 +1,5 @@
-import { EngineCore } from './core'
+import { createCore } from './cores'
+import type { Core } from './cores'
 import { powerKw } from './physics'
 import type { Conditions, EngineDefinition, RadiansPerSecond } from './schema'
 import type { Failure, LimitKey } from './parts'
@@ -79,7 +80,7 @@ export function validatePush(p: PushSettings, e: EngineDefinition) {
  * repeatable for the same build, conditions and settings.
  */
 export class PushTest {
-  readonly core: EngineCore
+  readonly core: Core
   readonly result: PushResult
   private frame = 0
   private stepFrames: number
@@ -100,7 +101,7 @@ export class PushTest {
     indestructible = false,
   ) {
     validatePush(settings, engine)
-    this.core = new EngineCore(engine, conditions)
+    this.core = createCore(engine, conditions)
     this.core.sound = false
     this.core.setControls({
       ignition: true,

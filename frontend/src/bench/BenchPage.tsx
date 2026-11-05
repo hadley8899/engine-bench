@@ -23,7 +23,7 @@ import { Link } from 'react-router'
 import { ZodError } from 'zod'
 import { buildTheme } from '../theme'
 import { useAuth } from '../auth/useAuth'
-import { crankingTorque, EngineCore } from '../sim/core'
+import { crankingTorque, createCore } from '../sim/cores'
 import type { Telemetry } from '../sim/core'
 import type { HostEvent } from '../sim/messages'
 import {
@@ -550,7 +550,7 @@ export function BenchPage() {
   const [draft, setDraft] = useState(initialDraft.engine)
   const [conditions, setConditions] = useState(initialDraft.conditions)
   const [telemetry, setTelemetry] = useState<Telemetry>(() =>
-    new EngineCore(experiment.engine, experiment.conditions).telemetry(),
+    createCore(experiment.engine, experiment.conditions).telemetry(),
   )
   const telemetryRef = useRef<Telemetry | null>(telemetry)
   const [running, setRunning] = useState(false)
@@ -748,7 +748,7 @@ export function BenchPage() {
       if (activeRef.current)
         audio.current?.send({ type: 'reconfigure', engine, conditions: env })
       else {
-        const t = new EngineCore(engine, env).telemetry()
+        const t = createCore(engine, env).telemetry()
         setTelemetry(t)
         telemetryRef.current = t
       }
@@ -1013,7 +1013,7 @@ export function BenchPage() {
     setConditions(env)
     setSlow(false)
     setHistory([[], []])
-    const t = new EngineCore(engine, env).telemetry()
+    const t = createCore(engine, env).telemetry()
     setTelemetry(t)
     telemetryRef.current = t
     audio.current?.send({ type: 'configure', engine, conditions: env })
@@ -1053,7 +1053,7 @@ export function BenchPage() {
     setLimiterVisible(false)
     setHeld({ knock: false, fuelLimited: false })
     setHistory([[], []])
-    const t = new EngineCore(roadEngine, normalConditions).telemetry()
+    const t = createCore(roadEngine, normalConditions).telemetry()
     setTelemetry(t)
     telemetryRef.current = t
     setError('')

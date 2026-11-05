@@ -34,8 +34,12 @@ import { z } from 'zod'
  * cam phasers driven by cam maps, a high-lift profile switch, and valve
  * float and valve-to-piston clearance from the profiles. Builds without
  * cam profiles keep 1.12.0's fixed events and results.
+ * 1.14.0: two-stroke engines (engine schema 2): piston-controlled ports,
+ * crankcase scavenging, two-zone scavenging with short-circuit loss, reed
+ * and rotary-disc intakes, a power valve and a one-dimensional exhaust pipe
+ * or expansion chamber. Four-stroke builds keep 1.13.0 results.
  */
-export const MODEL_VERSION = 'eb-0d-1.13.0'
+export const MODEL_VERSION = 'eb-0d-1.14.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -51,6 +55,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.10.0',
   'eb-0d-1.11.0',
   'eb-0d-1.12.0',
+  'eb-0d-1.13.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -278,7 +283,7 @@ export const managementSchema = z
 export type Management = z.infer<typeof managementSchema>
 /**
  * Fuel delivery capacity. Injector flow is per injector at its rated
- * pressure (4 injectors); a carburettor has none and is limited by the
+ * pressure (one per cylinder); a carburettor has none and is limited by the
  * pump alone. For direct injection the pump is the high-pressure pump.
  */
 export const fuelSupplySchema = z.strictObject({
@@ -372,13 +377,127 @@ export const stockParts: Parts = {
   valveSprings: 'stock',
 }
 
+/**
+ * Two-stroke intake control. A piston port opens when the skirt's lower
+ * edge rises past the port, so its timing is symmetric about top dead
+ * centre; a reed opens on crankcase depression; a rotary disc opens and
+ * closes at set crank angles.
+ */
+export const twoStrokeIntakeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('piston'),
+    /** Port's lower edge above the skirt's lower edge at bottom dead centre, m. */
+    height: z.number().min(0.002).max(0.15),
+    width: z.number().min(0.005).max(0.2),
+  }),
+  z.strictObject({
+    kind: z.literal('reed'),
+    /** Flow area with the petals fully open, m². */
+    area: z.number().min(0.00005).max(0.02),
+    /** Petal natural frequency, Hz: stiffer petals need more depression. */
+    stiffness: z.number().min(150).max(1500),
+  }),
+  z.strictObject({
+    kind: z.literal('rotary'),
+    /** Disc opens this many degrees before top dead centre. */
+    open: z.number().min(90).max(180),
+    /** Disc closes this many degrees after top dead centre. */
+    close: z.number().min(20).max(110),
+    area: z.number().min(0.00005).max(0.02),
+  }),
+])
+export type TwoStrokeIntake = z.infer<typeof twoStrokeIntakeSchema>
+export type TwoStrokeIntakeKind = TwoStrokeIntake['kind']
+const diameter = z.number().min(0.008).max(0.25)
+/** One cone of an expansion chamber: its length and the diameter it ends at. */
+const coneSchema = z.strictObject({
+  length: z.number().min(0.01).max(0.8),
+  diameter,
+})
+/**
+ * Exhaust pipe from the port. Either a straight pipe or an expansion
+ * chamber built from segments; the pressure waves in either are simulated.
+ */
+export const twoStrokePipeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('straight'),
+    length: z.number().min(0.1).max(3),
+    diameter: z.number().min(0.01).max(0.15),
+  }),
+  z.strictObject({
+    kind: z.literal('chamber'),
+    header: z.strictObject({
+      length: z.number().min(0.02).max(0.8),
+      diameter,
+    }),
+    /** Diverging cones; each must be wider than the one before. */
+    diffuser: z.array(coneSchema).min(1).max(3),
+    /** Parallel middle section at the diffuser's last diameter. */
+    belly: z.strictObject({ length: z.number().min(0).max(0.8) }),
+    /** Converging cones; each must be narrower than the one before. */
+    baffle: z.array(coneSchema).min(1).max(2),
+    stinger: z.strictObject({
+      length: z.number().min(0.03).max(0.8),
+      diameter,
+    }),
+  }),
+])
+export type TwoStrokePipe = z.infer<typeof twoStrokePipeSchema>
+/**
+ * A crankcase-scavenged, loop-scavenged (Schnürle) two-stroke. Port
+ * heights are measured down from the deck with the piston's crown flush
+ * with it at top dead centre; port timing is derived from them.
+ */
+export const twoStrokeSchema = z.strictObject({
+  exhaustPort: z.strictObject({
+    /** Top edge below the deck, m. */
+    height: z.number().min(0.005).max(0.2),
+    /**
+     * Chordal width, m: at most 0.75 × bore for an open port, or 1.05 ×
+     * bore with a central bridge, which keeps the rings in but blocks a
+     * tenth of the width.
+     */
+    width: z.number().min(0.005).max(0.3),
+    bridge: z.boolean(),
+  }),
+  transfers: z.strictObject({
+    /** Two, three (with a boost port) or five ports: better scavenging. */
+    count: z.union([z.literal(2), z.literal(3), z.literal(5)]),
+    /** Top edge below the deck, m; below the exhaust port's. */
+    height: z.number().min(0.005).max(0.2),
+    /** Total width of all transfer ports, m. */
+    width: z.number().min(0.005).max(0.4),
+  }),
+  intake: twoStrokeIntakeSchema,
+  /** Crankcase volume at top dead centre over its volume at bottom dead centre. */
+  crankcaseCompression: z.number().min(1.15).max(1.9),
+  pipe: twoStrokePipeSchema,
+  /**
+   * An exhaust power valve lowers the port's effective top edge by `drop`
+   * below `rpm`, and opens fully over the 1,000 RPM above it.
+   */
+  powerValve: z
+    .strictObject({
+      rpm: z.number().int().min(2000).max(15000),
+      drop: z.number().min(0.001).max(0.02),
+    })
+    .nullable(),
+  /** Crank angle between a twin's cylinders: 180° alternate, 360° together. */
+  crankPhase: z.union([z.literal(180), z.literal(360)]),
+})
+export type TwoStroke = z.infer<typeof twoStrokeSchema>
+
+/** Engine schema 2 adds the cycle; schema 1 builds read as four-strokes. */
+export const ENGINE_SCHEMA_VERSION = 2
+
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   name: z.string().trim().min(1).max(80),
-  layout: z.literal('inline-4'),
-  cylinders: z.literal(4),
+  cycle: z.enum(['four-stroke', 'two-stroke']).default('four-stroke'),
+  layout: z.enum(['inline-4', 'single', 'inline-2']),
+  cylinders: z.union([z.literal(1), z.literal(2), z.literal(4)]),
   bore: z.number().min(0.02).max(0.3),
   stroke: z.number().min(0.02).max(0.3),
   rodLength: z.number().min(0.03).max(0.6),
@@ -391,7 +510,7 @@ export const engineSchema = z.strictObject({
   ignitionAdvance: z.number().min(5).max(38),
   burnDuration: z.number().min(35).max(75),
   lambda: z.number().min(0.8).max(1.15),
-  inertia: z.number().min(0.01).max(20),
+  inertia: z.number().min(0.002).max(20),
   revLimit: z.number().int().min(1000).max(20000),
   /**
    * What the electronic limiter cuts. Spark cut lets fuel through unburned.
@@ -419,12 +538,13 @@ export const engineSchema = z.strictObject({
   camSwitch: camSwitchSchema.nullable().default(null),
   // Builds saved before 1.13.0 have fixed valve events.
   cams: camsSchema.nullable().default(null),
-  firingOrder: z.tuple([
-    z.literal(1),
-    z.literal(3),
-    z.literal(4),
-    z.literal(2),
-  ]),
+  /** Cylinder numbers in firing order: 1–3–4–2 for the inline-four. */
+  firingOrder: z.array(z.number().int().min(1).max(4)).min(1).max(4),
+  /**
+   * Ports, crankcase and pipe of a two-stroke; null for four-strokes,
+   * whose valve, runner and cam settings a two-stroke ignores.
+   */
+  twoStroke: twoStrokeSchema.nullable().default(null),
 })
 export const conditionsSchema = z.strictObject({
   temperature: z.number().min(263.15).max(313.15),
@@ -484,7 +604,131 @@ export function validateEngine(value: unknown): EngineDefinition {
     throw new Error(
       'A build with cam profiles uses their high-lift switch, not the two-stage cam.',
     )
-  return e
+  const order = [...e.firingOrder].sort((a, b) => a - b)
+  if (
+    order.length !== e.cylinders ||
+    order.some((n, i) => n !== i + 1)
+  )
+    throw new Error('The firing order must name each cylinder once.')
+  if (e.cycle === 'four-stroke') {
+    if (e.layout !== 'inline-4' || e.cylinders !== 4)
+      throw new Error('Four-strokes are inline-fours in this model version.')
+    if (e.firingOrder.join() !== '1,3,4,2')
+      throw new Error('The inline-four fires 1–3–4–2.')
+    if (e.twoStroke)
+      throw new Error('A four-stroke has valves, not two-stroke ports.')
+  } else twoStrokeProblems(e)
+  // Schema 1 builds are four-strokes; they read as schema 2 unchanged.
+  return { ...e, schemaVersion: ENGINE_SCHEMA_VERSION }
+}
+/**
+ * Diameters along a two-stroke's pipe from the port: each entry is a
+ * segment's length and its start and end diameters.
+ */
+export function pipeSegments(pipe: TwoStrokePipe) {
+  if (pipe.kind === 'straight')
+    return [
+      {
+        role: 'pipe',
+        length: pipe.length,
+        start: pipe.diameter,
+        end: pipe.diameter,
+      },
+    ]
+  const out: { role: string; length: number; start: number; end: number }[] = [
+    {
+      role: 'header',
+      length: pipe.header.length,
+      start: pipe.header.diameter,
+      end: pipe.header.diameter,
+    },
+  ]
+  let d = pipe.header.diameter
+  for (const cone of pipe.diffuser) {
+    out.push({ role: 'diffuser', length: cone.length, start: d, end: cone.diameter })
+    d = cone.diameter
+  }
+  if (pipe.belly.length > 0)
+    out.push({ role: 'belly', length: pipe.belly.length, start: d, end: d })
+  for (const cone of pipe.baffle) {
+    out.push({ role: 'baffle', length: cone.length, start: d, end: cone.diameter })
+    d = cone.diameter
+  }
+  out.push({
+    role: 'stinger',
+    length: pipe.stinger.length,
+    start: pipe.stinger.diameter,
+    end: pipe.stinger.diameter,
+  })
+  return out
+}
+function twoStrokeProblems(e: EngineDefinition) {
+  const t = e.twoStroke
+  if (!t) throw new Error('A two-stroke needs its ports, crankcase and pipe.')
+  if (
+    !(
+      (e.layout === 'single' && e.cylinders === 1) ||
+      (e.layout === 'inline-2' && e.cylinders === 2)
+    )
+  )
+    throw new Error('Two-strokes are singles or inline twins in this model version.')
+  if (e.induction.kind !== 'none')
+    throw new Error(
+      'Forced induction is not modelled on a crankcase-scavenged two-stroke.',
+    )
+  if (e.fuelSystem.kind === 'port')
+    throw new Error(
+      'A two-stroke has no inlet valve port to inject into: use a carburettor, throttle body or direct injection.',
+    )
+  if (e.cams || e.camSwitch)
+    throw new Error('A two-stroke has ports, not camshafts.')
+  if (e.management?.intakeCam || e.management?.exhaustCam)
+    throw new Error('A two-stroke has no cam phasers to map.')
+  const ex = t.exhaustPort.height
+  const drop = t.powerValve?.drop ?? 0
+  if (t.transfers.height <= ex + drop + 0.001)
+    throw new Error(
+      'The transfer ports must open after the exhaust port (top edge at least 1 mm lower, power valve closed included).',
+    )
+  // Rings sit about 3 mm below the crown; the crown reaches the stroke.
+  if (t.transfers.height > e.stroke - 0.003 || ex + drop > e.stroke - 0.004)
+    throw new Error('Ports must open before the piston reaches bottom dead centre.')
+  if (ex < 0.25 * e.stroke)
+    throw new Error(
+      'The exhaust port would overlap the ring land near top dead centre: lower it to at least a quarter of the stroke.',
+    )
+  if (t.exhaustPort.width > (t.exhaustPort.bridge ? 1.05 : 0.75) * e.bore + 1e-9)
+    throw new Error(
+      t.exhaustPort.bridge
+        ? 'A bridged exhaust port wider than 1.05 × bore would snag the rings.'
+        : 'An exhaust port wider than 0.75 × bore would snag the rings: narrow it or add a bridge.',
+    )
+  if (t.transfers.width > 1.6 * e.bore + 1e-9)
+    throw new Error('The transfer ports cannot be wider in total than 1.6 × bore.')
+  if (t.intake.kind === 'piston') {
+    if (t.intake.height > 0.9 * e.stroke)
+      throw new Error('The piston-port intake would never open: lower its edge.')
+    if (t.intake.width > 0.75 * e.bore + 1e-9)
+      throw new Error('A piston intake port wider than 0.75 × bore would snag the rings.')
+  }
+  const pipe = t.pipe
+  if (pipe.kind === 'chamber') {
+    let d = pipe.header.diameter
+    for (const cone of pipe.diffuser) {
+      if (cone.diameter <= d)
+        throw new Error('Each diffuser cone must end wider than it starts.')
+      d = cone.diameter
+    }
+    for (const cone of pipe.baffle) {
+      if (cone.diameter >= d)
+        throw new Error('Each baffle cone must end narrower than it starts.')
+      d = cone.diameter
+    }
+    if (pipe.stinger.diameter > d + 1e-9)
+      throw new Error('The stinger cannot be wider than the end of the baffle.')
+    if (pipe.stinger.diameter > pipe.header.diameter + 1e-9)
+      throw new Error('The stinger cannot be wider than the header.')
+  }
 }
 export function validateProcedure(p: Procedure, e: EngineDefinition) {
   procedureSchema.parse(p)
@@ -497,8 +741,9 @@ export function validateProcedure(p: Procedure, e: EngineDefinition) {
     throw new Error('End RPM must be below the estimated mechanical limit.')
 }
 export const roadEngine: EngineDefinition = {
-  schemaVersion: 1,
+  schemaVersion: ENGINE_SCHEMA_VERSION,
   name: 'Workshop 2.0 • Road',
+  cycle: 'four-stroke',
   layout: 'inline-4',
   cylinders: 4,
   bore: 0.086,
@@ -527,6 +772,7 @@ export const roadEngine: EngineDefinition = {
   camSwitch: null,
   cams: null,
   firingOrder: [1, 3, 4, 2],
+  twoStroke: null,
 }
 export const sportEngine: EngineDefinition = {
   ...roadEngine,
@@ -542,6 +788,93 @@ export const sportEngine: EngineDefinition = {
   revLimit: 7600,
   mechanicalLimit: 8000,
   fuelSupply: { injectorFlow: 290, maxDuty: 0.85, pumpFlow: 120 },
+}
+/**
+ * Fictional two-strokes in the proportions of their classes. Four-stroke
+ * valve, runner and cam fields keep the Road build's values and are not
+ * used. A 125 cc race single: reed valve, five transfers, a power valve
+ * and an expansion chamber tuned near 11,000 RPM.
+ */
+export const raceTwoStroke: EngineDefinition = {
+  ...roadEngine,
+  name: 'Workshop 125 • Race two-stroke',
+  cycle: 'two-stroke',
+  layout: 'single',
+  cylinders: 1,
+  firingOrder: [1],
+  bore: 0.054,
+  stroke: 0.0545,
+  rodLength: 0.11,
+  compression: 13,
+  intakeRunnerLength: 0.18,
+  ignitionAdvance: 16,
+  burnDuration: 45,
+  lambda: 0.88,
+  inertia: 0.005,
+  revLimit: 12500,
+  limiterCut: 'spark',
+  mechanicalLimit: 13500,
+  starterTorque: 30,
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.036, chokes: 1, acceleratorPump: false },
+  exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.3 },
+  combustion: { burnRate: 'predictive', fuel: 'ron98', knockControl: false },
+  fuelSupply: null,
+  twoStroke: {
+    exhaustPort: { height: 0.0275, width: 0.054, bridge: true },
+    transfers: { count: 5, height: 0.0395, width: 0.075 },
+    intake: { kind: 'reed', area: 0.0012, stiffness: 600 },
+    crankcaseCompression: 1.35,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.11, diameter: 0.04 },
+      diffuser: [
+        { length: 0.12, diameter: 0.058 },
+        { length: 0.13, diameter: 0.085 },
+        { length: 0.1, diameter: 0.11 },
+      ],
+      belly: { length: 0.12 },
+      baffle: [{ length: 0.18, diameter: 0.024 }],
+      stinger: { length: 0.2, diameter: 0.021 },
+    },
+    powerValve: { rpm: 8500, drop: 0.004 },
+    crankPhase: 180,
+  },
+}
+/** A 50 cc moped: piston-port intake, two transfers and a mild pipe. */
+export const mopedTwoStroke: EngineDefinition = {
+  ...raceTwoStroke,
+  name: 'Workshop 50 • Moped two-stroke',
+  bore: 0.04,
+  stroke: 0.0397,
+  rodLength: 0.085,
+  compression: 10,
+  intakeRunnerLength: 0.15,
+  ignitionAdvance: 18,
+  burnDuration: 50,
+  lambda: 0.9,
+  inertia: 0.006,
+  revLimit: 8000,
+  mechanicalLimit: 9500,
+  starterTorque: 20,
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.014, chokes: 1, acceleratorPump: false },
+  combustion: { burnRate: 'predictive', fuel: 'ron95', knockControl: false },
+  exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'chambered', tailpipeLength: 0.3 },
+  twoStroke: {
+    exhaustPort: { height: 0.0215, width: 0.026, bridge: false },
+    transfers: { count: 2, height: 0.0275, width: 0.04 },
+    intake: { kind: 'piston', height: 0.026, width: 0.024 },
+    crankcaseCompression: 1.45,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.15, diameter: 0.024 },
+      diffuser: [{ length: 0.25, diameter: 0.06 }],
+      belly: { length: 0.1 },
+      baffle: [{ length: 0.15, diameter: 0.018 }],
+      stinger: { length: 0.15, diameter: 0.014 },
+    },
+    powerValve: null,
+    crankPhase: 180,
+  },
 }
 export const normalConditions: Conditions = {
   temperature: 293.15,

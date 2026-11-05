@@ -288,6 +288,11 @@ export class Acoustics {
   private gain = 1
   private chamberGain = 0
   private runnerLength = 0.3
+  /**
+   * A two-stroke's pipe is simulated (pipe.ts), so its waves are already in
+   * the stinger flow that drives the sound; the header comb is skipped.
+   */
+  private simulatedPipe = false
   /** Knock ping: the end gas rings the cylinder's first circumferential mode. */
   private pingHz = 6800
   private pingPhase = 0
@@ -301,6 +306,7 @@ export class Acoustics {
   /** Applies an edited definition; filter and pipe state are kept. */
   configure(engine: EngineDefinition) {
     this.exhaust = engine.exhaust
+    this.simulatedPipe = engine.cycle === 'two-stroke'
     const s = SILENCERS[engine.exhaust.silencer]
     this.gain = s.gain * (engine.exhaust.catalyst ? 0.8 : 1)
     this.silencer.tune(s.cutoff)
@@ -444,8 +450,11 @@ export class Acoustics {
     }
     this.popAge += DT
     this.afterfire = this.popAge < 0.2
-    let wave = this.header.process(source)
-    if (this.exhaust.collector === '4-2-1') wave = this.secondary.process(wave)
+    let wave = source
+    if (!this.simulatedPipe) {
+      wave = this.header.process(wave)
+      if (this.exhaust.collector === '4-2-1') wave = this.secondary.process(wave)
+    }
     if (this.exhaust.catalyst) wave = this.catalyst.process(wave)
     if (this.chamberGain > 0) {
       const position = this.chamberWrite - this.chamberDelay
