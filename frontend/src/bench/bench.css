@@ -970,17 +970,19 @@
 .bench-app [hidden] {
   display: none !important;
 }
-.command-bar {
+.bench-top {
   position: sticky;
   top: 0;
   z-index: 20;
+  background: #101a21;
+  border-bottom: 1px solid #27343c;
+}
+.command-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 10px max(24px, calc((100vw - 1500px) / 2));
-  background: #101a21;
-  border-bottom: 1px solid #27343c;
 }
 .command-build {
   display: flex;
@@ -1054,8 +1056,8 @@
 }
 .drive-panel {
   position: sticky;
-  top: 72px;
-  max-height: calc(100vh - 84px);
+  top: calc(var(--top, 60px) + 12px);
+  max-height: calc(100vh - var(--top, 60px) - 24px);
   overflow-y: auto;
 }
 .telemetry-tabs {
@@ -1069,7 +1071,7 @@
 }
 .section-tabs {
   position: sticky;
-  top: 72px;
+  top: calc(var(--top, 60px) + 12px);
 }
 .section-tabs .MuiTab-root {
   align-items: flex-start;
@@ -1106,7 +1108,12 @@
   }
   .command-bar {
     padding: 8px 16px;
+  }
+  .bench-top {
     position: static;
+  }
+  .status-strip {
+    padding: 0 16px 8px;
   }
   .command-spacer {
     display: none;
@@ -1129,4 +1136,35 @@
 }
 .section-tabs:not(.MuiTabs-vertical) .MuiTab-root.Mui-selected {
   box-shadow: inset 0 -2px #f0b66c;
+}
+.status-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 max(24px, calc((100vw - 1500px) / 2)) 8px;
+}
+.status-strip .MuiAlert-root {
+  padding: 0 12px;
+  font-size: 13px;
+}
+.bench-app .status-strip .bench-notice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+}
+.drive-more {
+  margin-top: 8px;
+}
+.drive-panel.compact .control-sliders > :not(:first-child),
+.drive-panel.compact .hold-controls,
+.drive-panel.compact .road-controls,
+.drive-panel.compact .listen-row,
+.drive-panel.compact .drive-resets {
+  display: none;
+}
+@media (max-width: 900px) {
+  .drive-panel {
+    order: -1;
+  }
 }

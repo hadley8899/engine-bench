@@ -4,7 +4,7 @@ Updated: 4 November 2026
 
 ## Active delivery goal
 
-Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0). Phase 2's human first-use check remains open and does not block later work.
+Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0), and so is Stage 9, the UI revision. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
@@ -12,7 +12,7 @@ Direction set by the user on 2 November 2026: make the bench fun and interesting
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
 3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
 4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
-Next is the UI revision (Stage 9), brought forward by the user on 4 November 2026. Then come two-stroke engines (Stage 10), other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
+The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026). Next come two-stroke engines (Stage 10), other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
 
 ## Product direction
 
@@ -331,18 +331,20 @@ Parts and limits:
 
 Acceptance: earlier builds' results are unchanged. More duration moves torque up the rev range, and more overlap roughens idle and helps a tuned top end. Phasing broadens the torque curve. Presets with variable timing match their sourced curves at least as well as before. A big cam with stock springs floats valves sooner, and contact failures are repeatable.
 
-### 9. UI revision
+### 9. UI revision — complete
 
 Requested by the user on 3 November 2026: the interface has become hard to understand, and the bench controls pane on the right is very long. Brought forward ahead of two-stroke engines by the user on 4 November 2026, because the long controls pane made the bench hard to use. Agreed layout: a fixed command bar (build, status, pending edits, apply, stop), mode tabs (Bench, Workshop, Maps, Dyno, Library), a drive panel that stays visible in every mode, bench telemetry in sub-tabs, and a workshop that shows one section at a time with markers for sections changed from the starting build. New feature stages add their controls into this structure.
 
 First pass done 4 November 2026. The page was about 8,800 px tall at 1024 px wide, with the right-hand pane at about 6,600 px (the workshop alone about 5,200 px). It now has a sticky command bar, Bench/Workshop/Maps/Dyno/Library tabs, a Drive panel that stays beside every tab, telemetry sub-tabs (engine data, cylinders and stress, traces) and a workshop that shows one of nine sections at a time, with an amber dot for unapplied edits and a ring for sections changed from the starting build. Most tabs now fit in about 1,100 px at 1440 × 900. A failure switches to the bench's Cylinders and stress tab and shows in the status chip. This is a layout change only; the controls, their effects and the model are unchanged.
 
-- [ ] Audit every control, readout and notice on the bench, workshop, maps and library: what it does, how often it is used and which tasks need it. Use that audit to drive the new structure.
+- [x] Audit every control, readout and notice on the bench, workshop, maps and library: what it does, how often it is used and which tasks need it. Use that audit to drive the new structure.
 - [x] Split the bench controls pane into task-based areas, for example drive (start, ignition, throttle, load), dyno test, test-cell conditions, sound and display. Keep the controls needed every run visible and move the rest behind clear tabs or sections.
 - [x] Reorganise the engine workshop into understandable groups with progressive disclosure: everyday settings first, detailed parameters on demand. Show at a glance what differs from the starting build.
-- [ ] Make status consistent: one place for engine state, warnings and notices, with stall, limiter, knock, fuel-limit and (later) failure messages saying what to do next.
-- [ ] Recheck narrow and mobile layouts, keyboard and gamepad use, and accessible names for every control.
-- [ ] Repeat the one-minute first-use check with an unfamiliar user, which is still open from Phase 2.
+- [x] Make status consistent: one place for engine state, warnings and notices, with stall, limiter, knock, fuel-limit and (later) failure messages saying what to do next.
+- [x] Recheck narrow and mobile layouts, keyboard and gamepad use, and accessible names for every control.
+- [ ] Repeat the one-minute first-use check with an unfamiliar user, which is still open from Phase 2. A scripted walkthrough (`tests/firstuse.spec.ts`) checks that start, change, test and compare are reachable from visible labels; the check with a person stays open and, as in Phase 2, does not block later work.
+
+Completed 5 November 2026. The audit is in `docs/UI_AUDIT.md`. Engine state and problems now appear in one status strip under the command bar on every tab (failure, starter, stall, limiter, fuel limit, knock, model warnings and the latest notice); each problem says what to do next and most offer a button to the setting. Knock and fuel-limit messages are held for 1.5 s like the limiter. B, W, M, D and Y switch tabs; arrow keys move along the tab lists. On screens under 900 px the Drive panel comes first with gauges, throttle and ignition, and More drive controls shows the rest. Browser checks run in Chromium only, by the user's standing decision that Chromium is enough.
 
 Acceptance: a new user can start an engine, make a change, run a test and compare it without help. Every existing workflow keeps working, and browser tests cover the new layout in Chromium and Firefox.
 

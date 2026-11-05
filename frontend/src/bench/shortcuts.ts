@@ -13,6 +13,11 @@ export type ShortcutAction =
   | 'neutral'
   | 'listener'
   | 'help'
+  | 'bench'
+  | 'workshop'
+  | 'maps'
+  | 'dyno'
+  | 'library'
 
 /** Keys and what they do; Space (throttle) is handled separately. */
 export const SHORTCUTS: { key: string; action: ShortcutAction; label: string }[] = [
@@ -27,6 +32,11 @@ export const SHORTCUTS: { key: string; action: ShortcutAction; label: string }[]
   { key: 'q', action: 'gearDown', label: 'Change down (road load)' },
   { key: 'n', action: 'neutral', label: 'Neutral (road load)' },
   { key: 'v', action: 'listener', label: 'Next listening position' },
+  { key: 'b', action: 'bench', label: 'Bench tab' },
+  { key: 'w', action: 'workshop', label: 'Workshop tab' },
+  { key: 'm', action: 'maps', label: 'Maps tab' },
+  { key: 'd', action: 'dyno', label: 'Dyno tab' },
+  { key: 'y', action: 'library', label: 'Library tab' },
   { key: '?', action: 'help', label: 'Show these shortcuts' },
 ]
 

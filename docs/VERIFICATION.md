@@ -411,3 +411,13 @@ The first Stage 6 slice: fuel grades, a predictive burn rate, an end-gas knock e
 - 375 px wide (mobile emulation): no horizontal overflow; the command bar wraps and the Drive panel follows the main content.
 - Chromium (bench, stage 5 and stage 6 specs, 28 tests): 27 pass. Tests open the tab or workshop section before each step through `tests/layout.ts`. The remaining failure is the sign-in navigation step in the pull test, which also fails on the previous commit when no API is running locally. The 3D cutaway mounts only on the Bench tab; its look was not reviewed (no WebGL in the automated browser).
 - Not yet done: the control audit, a single place for every warning (stall, limiter and starter alerts stay in the Drive panel), keyboard and gamepad rechecks, and the first-use check with an unfamiliar user.
+
+## Stage 9 complete: audit, status strip, phone and keyboard (5 November)
+
+- Audit recorded in `docs/UI_AUDIT.md`. Layout and messages only: no simulation, schema or result changes.
+- Status strip: in the built-in browser pane the rev limiter message appeared under the command bar at full throttle; `tests/firstuse.spec.ts` checks the limiter message from the workshop's Parts section and that the starter message's **Open geometry** button opens the starter torque field.
+- Keyboard and gamepad: the same spec switches tabs with W and with arrow keys, and drives the throttle from the Maps tab with a mocked standard gamepad.
+- Accessible names: the spec finds no visible button, input, combobox, switch, tab, slider or link without a name on any tab or workshop section (an approximation of the accessible-name rules: aria-label, aria-labelledby, label or text).
+- Phone (390 × 844): the throttle label is in the first screen, dyno load is behind More drive controls, and there is no horizontal overflow. The Playwright Chromium screenshot also showed the 3D cutaway rendering on the phone layout.
+- First use: the scripted walkthrough starts the engine, captures a baseline, edits compression (marker and chip appear), rebuilds and compares. A check with an unfamiliar person is still open.
+- Full Chromium run (bench, stage 5, stage 6 and first-use specs, 32 tests): 30 pass. The sign-in navigation step fails without a local API, as on earlier commits; the cam-profile test timed out under full-suite load and passed alone in 39 s, so its limit is now 90 s.

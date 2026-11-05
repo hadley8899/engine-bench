@@ -81,6 +81,8 @@ import { describeExhaust, exhaustErrors } from './exhaustFields'
 import { Gauges } from './Gauges'
 import { RoadControls } from './RoadControls'
 import { useShortcuts } from './shortcuts'
+import { StatusStrip } from './StatusStrip'
+import type { StatusMessage } from './StatusStrip'
 import {
   changedSections,
   loadLayout,
@@ -567,6 +569,23 @@ export function BenchPage() {
     })
   }, [])
   const wide = useMediaQuery('(min-width: 900px)')
+  /** On narrow screens the Drive panel shows throttle and ignition until opened. */
+  const [driveOpen, setDriveOpen] = useState(false)
+  /** The sticky command bar and status; panels below stick under it. */
+  const top = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = top.current
+    if (!element) return
+    const set = () =>
+      element.parentElement?.style.setProperty(
+        '--top',
+        `${element.offsetHeight}px`,
+      )
+    set()
+    const resize = new ResizeObserver(set)
+    resize.observe(element)
+    return () => resize.disconnect()
+  }, [])
   // A failure stops the engine: show what broke.
   const failureTitle = telemetry.stress.failure?.title
   const [shownFailure, setShownFailure] = useState(failureTitle)
@@ -590,6 +609,10 @@ export function BenchPage() {
   const [callbackMs, setCallbackMs] = useState(0)
   const lastFuelCut = useRef(-Infinity)
   const [limiterVisible, setLimiterVisible] = useState(false)
+  // Knock and fuel limits come and go each cycle: hold them like the limiter.
+  const lastKnock = useRef(-Infinity)
+  const lastFuelLimit = useRef(-Infinity)
+  const [held, setHeld] = useState({ knock: false, fuelLimited: false })
   const starterHeld = useRef(false)
   const startupGeneration = useRef(0)
   const audio = useRef<BenchAudio | null>(null)
@@ -712,10 +735,20 @@ export function BenchPage() {
     worker.current = engineWorker
     const receive = (event: HostEvent) => {
       if (event.type === 'telemetry') {
-        if (event.value.limited) lastFuelCut.current = performance.now()
+        const now = performance.now()
+        if (event.value.limited) lastFuelCut.current = now
         setLimiterVisible(
-          performance.now() - lastFuelCut.current < 1500 &&
-            event.value.rpm > 100,
+          now - lastFuelCut.current < 1500 && event.value.rpm > 100,
+        )
+        if (Math.max(...event.value.knock.index) >= 1) lastKnock.current = now
+        if (event.value.fuel.fuelLimited) lastFuelLimit.current = now
+        const knock = now - lastKnock.current < 1500 && event.value.rpm > 100
+        const fuelLimited =
+          now - lastFuelLimit.current < 1500 && event.value.rpm > 100
+        setHeld((h) =>
+          h.knock === knock && h.fuelLimited === fuelLimited
+            ? h
+            : { knock, fuelLimited },
         )
         telemetryRef.current = event.value
         setTelemetry(event.value)
@@ -956,6 +989,8 @@ export function BenchPage() {
     liveOrigin.current = null
     activeRunId.current = null
     lastFuelCut.current = -Infinity
+    lastKnock.current = -Infinity
+    lastFuelLimit.current = -Infinity
     setExperiment((prev) => ({
       ...prev,
       previous: null,
@@ -975,6 +1010,7 @@ export function BenchPage() {
     indestructibleRef.current = false
     setIndestructible(false)
     setLimiterVisible(false)
+    setHeld({ knock: false, fuelLimited: false })
     setHistory([[], []])
     const t = new EngineCore(roadEngine, normalConditions).telemetry()
     setTelemetry(t)
@@ -1307,6 +1343,8 @@ export function BenchPage() {
     changeRoad({ ...road, gear: Math.max(0, Math.min(road.ratios.length, gear)) })
   useShortcuts((action: ShortcutAction) => {
     if (action === 'help') return setShowShortcuts(true)
+    if (VIEWS.some((v) => v.key === action))
+      return changeLayout({ view: action as View })
     if (action === 'stop') return stop()
     if (action === 'listener')
       return updatePrefs({
@@ -1360,6 +1398,111 @@ export function BenchPage() {
                 ? { label: 'RUNNING', color: 'success' }
                 : { label: 'READY TO START', color: 'default' }
 
+  const sparkCut =
+    experiment.engine.limiterCut === 'spark' ||
+    experiment.engine.fuelSystem.kind === 'carburettor'
+  const worstKnock = telemetry.knock.index.indexOf(
+    Math.max(...telemetry.knock.index),
+  )
+  const meanRetard =
+    telemetry.knock.retard.reduce((a, b) => a + b, 0) /
+    telemetry.knock.retard.length
+  const messages: StatusMessage[] = []
+  if (failure)
+    messages.push({
+      key: 'failure',
+      severity: 'error',
+      text: (
+        <>
+          {failure.title}
+          {failure.cylinder ? ` in cylinder ${failure.cylinder}` : ''}. The
+          engine has stopped; rebuild it from Cylinders and stress, or turn
+          on Indestructible to explore without failures.
+        </>
+      ),
+      action: {
+        label: 'Show what broke',
+        onClick: () => changeLayout({ view: 'bench', telemetry: 'cylinders' }),
+      },
+    })
+  if (telemetry.starterStalled)
+    messages.push({
+      key: 'starter',
+      severity: 'warning',
+      text: (
+        <>
+          The {experiment.engine.starterTorque} Nm starter can't turn this
+          engine over. Turning it over slowly takes about{' '}
+          {Math.ceil(benchCranking / 10) * 10} Nm. Raise Starter torque in the
+          engine workshop and rebuild.
+        </>
+      ),
+      action: {
+        label: 'Open geometry',
+        onClick: () => changeLayout({ view: 'workshop', section: 'basics' }),
+      },
+    })
+  else if (
+    running &&
+    mode === 'manual' &&
+    telemetry.rpm < 100 &&
+    telemetry.time > 1.2 &&
+    !failure
+  )
+    messages.push({
+      key: 'stalled',
+      severity: 'info',
+      text: (
+        <>
+          Engine stalled. Press Start engine to unload the dyno and restart.
+          {benchUndersized.length > 0 &&
+            ` For an engine this size the ${benchUndersized.join(', ')} ${benchUndersized.length > 1 ? 'are' : 'is'} very small, so it can fire on the starter but not keep itself running. Use “Scale to this size” in the engine workshop.`}
+        </>
+      ),
+    })
+  if (limiterVisible)
+    messages.push({
+      key: 'limiter',
+      severity: 'warning',
+      text: (
+        <>
+          Rev limiter cycling —{' '}
+          {sparkCut
+            ? 'spark cut: unburned fuel can pop in a hot exhaust'
+            : 'electronic fuel cut'}
+          . Release throttle or add load. Mechanical capability is unchanged.
+        </>
+      ),
+    })
+  if (held.fuelLimited)
+    messages.push({
+      key: 'fuel',
+      severity: 'warning',
+      text: 'Fuel limited: the injectors or pump cannot deliver enough fuel, so the engine runs lean. Fit larger injectors or a bigger pump, or lower the boost.',
+      action: {
+        label: 'Open fuel system',
+        onClick: () => changeLayout({ view: 'workshop', section: 'fuel' }),
+      },
+    })
+  if (held.knock)
+    messages.push({
+      key: 'knock',
+      severity: telemetry.knock.control ? 'info' : 'warning',
+      text: telemetry.knock.control
+        ? `Knock in cylinder ${worstKnock + 1}: the ECU is pulling about ${meanRetard.toFixed(1)}° of timing. Higher-octane fuel, less boost or less advance would let it keep its timing.`
+        : `Knock in cylinder ${worstKnock + 1} with no knock control: sustained knock damages pistons. Turn on knock control, use higher-octane fuel, or lower boost or timing.`,
+      action: {
+        label: 'Open combustion',
+        onClick: () => changeLayout({ view: 'workshop', section: 'combustion' }),
+      },
+    })
+  if (telemetry.warning && !failure)
+    messages.push({
+      key: 'warning',
+      severity: 'warning',
+      text: telemetry.warning,
+    })
+
   return (
     <ThemeProvider theme={theme}>
       <div className="bench-app">
@@ -1383,75 +1526,78 @@ export function BenchPage() {
             )}
           </div>
         </header>
-        <div className="command-bar" data-testid="command-bar">
-          <div className="command-build">
-            <h1>{viewEngine.name}</h1>
-            <span className="engine-spec">
-              {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
-              <b>·</b> 1–3–4–2 <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
-              {viewEngine.induction.kind !== 'none' &&
-                ` · ${inductionLabels[viewEngine.induction.kind]}`}
-            </span>
-          </div>
-          <Chip
-            size="small"
-            data-testid="engine-status"
-            label={status.label}
-            color={status.color}
-            onClick={
-              telemetry.stress.failure
-                ? () => changeLayout({ view: 'bench', telemetry: 'cylinders' })
-                : undefined
-            }
-          />
-          {dirty && (
+        <div className="bench-top" ref={top}>
+          <div className="command-bar" data-testid="command-bar">
+            <div className="command-build">
+              <h1>{viewEngine.name}</h1>
+              <span className="engine-spec">
+                {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
+                <b>·</b> 1–3–4–2 <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
+                {viewEngine.induction.kind !== 'none' &&
+                  ` · ${inductionLabels[viewEngine.induction.kind]}`}
+              </span>
+            </div>
             <Chip
               size="small"
-              variant="outlined"
-              color={invalid ? 'error' : 'warning'}
-              data-testid="pending-edits"
-              label={
-                invalid
-                  ? 'Edits out of range'
-                  : liveUpdates
-                    ? 'Applying edits'
-                    : `${pendingCount} unapplied ${pendingCount === 1 ? 'change' : 'changes'}`
+              data-testid="engine-status"
+              label={status.label}
+              color={status.color}
+              onClick={
+                telemetry.stress.failure
+                  ? () => changeLayout({ view: 'bench', telemetry: 'cylinders' })
+                  : undefined
               }
-              onClick={() => changeLayout({ view: 'workshop' })}
             />
-          )}
-          <span className="command-spacer" />
-          <FormControlLabel
-            className="live-toggle"
-            control={
-              <Switch
-                checked={liveUpdates}
-                onChange={(e) => {
-                  liveOrigin.current = null
-                  setLiveUpdates(e.target.checked)
-                  persistLiveUpdates(e.target.checked)
-                }}
+            {dirty && (
+              <Chip
+                size="small"
+                variant="outlined"
+                color={invalid ? 'error' : 'warning'}
+                data-testid="pending-edits"
+                label={
+                  invalid
+                    ? 'Edits out of range'
+                    : liveUpdates
+                      ? 'Applying edits'
+                      : `${pendingCount} unapplied ${pendingCount === 1 ? 'change' : 'changes'}`
+                }
+                onClick={() => changeLayout({ view: 'workshop' })}
               />
-            }
-            label="Live updates"
-          />
-          <Button
-            variant={dirty ? 'contained' : 'outlined'}
-            disabled={(!dirty && !liveUpdates) || invalid || activeTest}
-            onClick={apply}
-          >
-            Stop & rebuild engine
-          </Button>
-          <Button
-            variant="contained"
-            disabled={(running && telemetry.rpm > 100) || activeTest || busy}
-            onClick={() => void start()}
-          >
-            Start engine
-          </Button>
-          <Button variant="outlined" color="error" onClick={() => stop()}>
-            Emergency stop
-          </Button>
+            )}
+            <span className="command-spacer" />
+            <FormControlLabel
+              className="live-toggle"
+              control={
+                <Switch
+                  checked={liveUpdates}
+                  onChange={(e) => {
+                    liveOrigin.current = null
+                    setLiveUpdates(e.target.checked)
+                    persistLiveUpdates(e.target.checked)
+                  }}
+                />
+              }
+              label="Live updates"
+            />
+            <Button
+              variant={dirty ? 'contained' : 'outlined'}
+              disabled={(!dirty && !liveUpdates) || invalid || activeTest}
+              onClick={apply}
+            >
+              Stop & rebuild engine
+            </Button>
+            <Button
+              variant="contained"
+              disabled={(running && telemetry.rpm > 100) || activeTest || busy}
+              onClick={() => void start()}
+            >
+              Start engine
+            </Button>
+            <Button variant="outlined" color="error" onClick={() => stop()}>
+              Emergency stop
+            </Button>
+          </div>
+          <StatusStrip messages={messages} notice={notice} />
         </div>
         <main>
           {error && (
@@ -2515,7 +2661,10 @@ export function BenchPage() {
                 </div>
               </section>
             </div>
-            <aside className="drive-panel" aria-label="Drive">
+            <aside
+              className={`drive-panel${!wide && !driveOpen ? ' compact' : ''}`}
+              aria-label="Drive"
+            >
               <Paper className="control-panel" variant="outlined">
                 <div className="panel-heading">
                   <h2>Drive</h2>
@@ -2665,43 +2814,6 @@ export function BenchPage() {
                   speed={telemetry.road?.speed ?? null}
                   disabled={busy || activeTest || mode === 'audition'}
                 />
-                {limiterVisible && (
-                  <Alert severity="warning">
-                    Rev limiter cycling —{' '}
-                    {experiment.engine.limiterCut === 'spark' ||
-                    experiment.engine.fuelSystem.kind === 'carburettor'
-                      ? 'spark cut: unburned fuel can pop in a hot exhaust'
-                      : 'electronic fuel cut'}
-                    . Release throttle or add load. Mechanical capability is
-                    unchanged.
-                  </Alert>
-                )}
-                {running &&
-                  mode === 'manual' &&
-                  telemetry.rpm < 100 &&
-                  telemetry.time > 1.2 &&
-                  !telemetry.starterStalled && (
-                    <Alert severity="info">
-                      Engine stalled. Press Start engine to unload the dyno and
-                      restart.
-                      {benchUndersized.length > 0 &&
-                        ` For an engine this size the ${benchUndersized.join(', ')} ${benchUndersized.length > 1 ? 'are' : 'is'} very small, so it can fire on the starter but not keep itself running. Use “Scale to this size” in the engine workshop.`}
-                    </Alert>
-                  )}
-                {telemetry.starterStalled && (
-                  <Alert severity="warning">
-                    The {experiment.engine.starterTorque} Nm starter can't turn
-                    this engine over. Turning it over slowly takes about{' '}
-                    {Math.ceil(benchCranking / 10) * 10} Nm. Raise Starter
-                    torque in the engine workshop and rebuild.
-                  </Alert>
-                )}
-                {telemetry.warning && (
-                  <Alert severity="warning">{telemetry.warning}</Alert>
-                )}
-                <p className="bench-notice" role="status">
-                  {notice}
-                </p>
                 <div className="listen-row">
                   <TextField
                     select
@@ -2749,7 +2861,13 @@ export function BenchPage() {
                     ))}
                   </TextField>
                 </div>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Stack
+                  className="drive-resets"
+                  direction="row"
+                  spacing={1}
+                  flexWrap="wrap"
+                  useFlexGap
+                >
                   <Button
                     disabled={activeTest}
                     title="Stop and rebuild the current build"
@@ -2767,6 +2885,16 @@ export function BenchPage() {
                     Full reset
                   </Button>
                 </Stack>
+                {!wide && (
+                  <Button
+                    size="small"
+                    className="drive-more"
+                    aria-expanded={driveOpen}
+                    onClick={() => setDriveOpen((v) => !v)}
+                  >
+                    {driveOpen ? 'Fewer drive controls' : 'More drive controls'}
+                  </Button>
+                )}
               </Paper>
             </aside>
           </div>
