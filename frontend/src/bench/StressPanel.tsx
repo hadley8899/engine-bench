@@ -59,6 +59,9 @@ export function StressPanel({
           <strong>{failure.title}</strong>
           {failure.cylinder ? ` · cylinder ${failure.cylinder}` : ''}
           <div>{failure.detail}</div>
+          <div className="failure-prevent" data-testid="failure-prevent">
+            <strong>To prevent it:</strong> {failure.prevent}
+          </div>
           <div className="failure-note">
             The engine stopped. Rebuild restores your last build with new
             parts; Start does the same.

@@ -132,6 +132,24 @@ describe('definitions and physical invariants', () => {
 })
 
 describe('engine integration', () => {
+  it('the first few per cent of throttle raise the idle speed', () => {
+    const core = new EngineCore(roadEngine, normalConditions)
+    core.sound = false
+    core.setControls({ ignition: true, starter: true })
+    advance(core, 1.2)
+    core.setControls({ starter: false })
+    advance(core, 3)
+    const idle = core.telemetry().rpm
+    // Idle air adds to the throttle, and the idle trim holds while the
+    // pedal is pressed, so a small opening is not cancelled out.
+    core.setControls({ throttle: 0.05 })
+    advance(core, 3)
+    const small = core.telemetry().rpm
+    core.setControls({ throttle: 0.1 })
+    advance(core, 3)
+    expect(small).toBeGreaterThan(idle + 80)
+    expect(core.telemetry().rpm).toBeGreaterThan(small + 80)
+  }, 30000)
   it('starts from rest, settles to an idle and accelerates with throttle', () => {
     const core = new EngineCore(roadEngine, normalConditions)
     expect(core.telemetry().rpm).toBe(0)

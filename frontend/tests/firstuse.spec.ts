@@ -179,3 +179,23 @@ test('on a phone the Drive panel leads with throttle and opens for the rest', as
     ),
   ).toBe(true)
 })
+
+test('an out-of-range cam value blocks the rebuild instead of breaking the page', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await openSection(page, 'Starting build')
+  await page.getByRole('button', { name: 'Honda Civic Type R FD2 K20A' }).click()
+  await openSection(page, 'Camshaft')
+  await page.getByLabel('Switch speed (RPM)').fill('500')
+  await expect(page.getByText(/Can't rebuild until.*Camshaft/).first()).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Stop & rebuild engine' }),
+  ).toBeDisabled()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await page.getByLabel('Switch speed (RPM)').fill('5200')
+  await expect(page.getByText(/Can't rebuild until/)).toHaveCount(0)
+  expect(errors).toEqual([])
+})

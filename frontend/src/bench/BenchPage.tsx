@@ -381,6 +381,27 @@ function engineErrors(e: EngineDefinition) {
     errors.rodLength = `Must be at least ${(e.stroke * MIN_ROD_STROKE * 1000).toFixed(1)} mm (${MIN_ROD_STROKE} × stroke)`
   return errors
 }
+/** Build fields whose errors the editors already list by name. */
+const checkedFields = new Set<keyof EngineDefinition>([
+  'name',
+  ...numericFields.map((f) => f.key),
+  'induction',
+  'fuelSystem',
+  'exhaust',
+  'management',
+  'fuelSupply',
+])
+/**
+ * Starter torque needed to turn the build over, or null if it cannot be
+ * estimated. A render-time estimate must never take the page down.
+ */
+function safeCranking(e: EngineDefinition, c: Conditions) {
+  try {
+    return crankingTorque(e, c)
+  } catch {
+    return null
+  }
+}
 function conditionErrors(c: Conditions) {
   const errors: Partial<Record<keyof Conditions, string>> = {}
   for (const issue of conditionsSchema.safeParse(c).error?.issues ?? []) {
@@ -637,6 +658,16 @@ export function BenchPage() {
     JSON.stringify(draft) !== JSON.stringify(experiment.engine) ||
     JSON.stringify(conditions) !== JSON.stringify(experiment.conditions)
   const draftErrors = useMemo(() => engineErrors(draft), [draft])
+  /** A cross-field rule the field checks do not show, or empty. */
+  const draftProblem = useMemo(() => {
+    if (Object.keys(draftErrors).length) return ''
+    try {
+      validateEngine(draft)
+      return ''
+    } catch (e) {
+      return e instanceof Error ? e.message.replace(/\.$/, '') : 'Build'
+    }
+  }, [draft, draftErrors])
   const envErrors = useMemo(() => conditionErrors(conditions), [conditions])
   const invalidLabels = [
     ...(draftErrors.name ? ['Build name'] : []),
@@ -646,11 +677,21 @@ export function BenchPage() {
     ...Object.keys(exhaustErrors(draft.exhaust)),
     ...(draftErrors.management ? ['Engine maps'] : []),
     ...(draftErrors.fuelSupply ? ['Fuel supply'] : []),
+    // Every other part of the build: cams, the two-stage cam, combustion,
+    // parts, and the checks validateEngine makes across fields.
+    ...new Set(
+      (Object.keys(draftErrors) as (keyof EngineDefinition)[])
+        .filter((k) => !checkedFields.has(k))
+        .map(
+          (k) => SECTIONS.find((s) => s.fields.includes(k))?.label ?? String(k),
+        ),
+    ),
+    ...(draftProblem ? [draftProblem] : []),
     ...conditionFields.filter((f) => envErrors[f.key]).map((f) => f.label),
   ]
   const invalid = invalidLabels.length > 0
   const draftCranking = useMemo(
-    () => (invalid ? null : crankingTorque(draft, conditions)),
+    () => (invalid ? null : safeCranking(draft, conditions)),
     [draft, conditions, invalid],
   )
   const undersizedLabels = (e: EngineDefinition) =>
@@ -660,7 +701,7 @@ export function BenchPage() {
   const draftUndersized = invalid ? [] : undersizedLabels(draft)
   const benchUndersized = undersizedLabels(experiment.engine)
   const benchCranking = useMemo(
-    () => crankingTorque(experiment.engine, experiment.conditions),
+    () => safeCranking(experiment.engine, experiment.conditions) ?? 0,
     [experiment.engine, experiment.conditions],
   )
   const invalidNote = invalid && (
@@ -1417,7 +1458,8 @@ export function BenchPage() {
           {failure.title}
           {failure.cylinder ? ` in cylinder ${failure.cylinder}` : ''}. The
           engine has stopped; rebuild it from Cylinders and stress, or turn
-          on Indestructible to explore without failures.
+          on Indestructible to explore without failures. To prevent it:{' '}
+          {failure.prevent.charAt(0).toLowerCase() + failure.prevent.slice(1)}
         </>
       ),
       action: {

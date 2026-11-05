@@ -163,7 +163,14 @@ export function PushPanel({
               : result.status === 'aborted'
                 ? `Stopped: ${result.reason}`
                 : result.reason}
-            {result.failure && <> {result.failure.detail}</>}
+            {result.failure && (
+              <>
+                {' '}
+                {result.failure.detail} To prevent it:{' '}
+                {result.failure.prevent.charAt(0).toLowerCase() +
+                  result.failure.prevent.slice(1)}
+              </>
+            )}
           </p>
           <div className="push-scroll">
             <table className="push-results">

@@ -70,6 +70,16 @@ export function persistDraft(engine: EngineDefinition, conditions: Conditions) {
   }
 }
 
+/** Forget unapplied edits, or the whole guest experiment as well. */
+export function clearGuestState(everything: boolean) {
+  try {
+    sessionStorage.removeItem(draftKey)
+    if (everything) sessionStorage.removeItem(key)
+  } catch {
+    /* Nothing stored to clear. */
+  }
+}
+
 const liveKey = 'engine-bench:live-updates:1'
 /** Per-viewer preference; falls back to off when storage is unavailable. */
 export function loadLiveUpdates() {

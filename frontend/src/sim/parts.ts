@@ -190,6 +190,8 @@ export type Failure = {
   cylinder: number | null
   title: string
   detail: string
+  /** What would prevent it on this build, as hints to try. */
+  prevent: string
   time: number
 }
 export type StressTelemetry = {
@@ -276,9 +278,11 @@ export class Stress {
   private exposure = new Map<LimitKey, Float64Array>()
   failure: Failure | null = null
   private parts: Parts
+  private engine: EngineDefinition
 
   constructor(e: EngineDefinition) {
     const parts = (this.parts = e.parts)
+    this.engine = e
     const area = (Math.PI * e.bore ** 2) / 4
     const r = e.stroke / 2
     this.rodRatio = r / e.rodLength
@@ -499,6 +503,65 @@ export class Stress {
         `Exhaust entering the turbine reached ${shown}, beyond the estimated limit of ${limit}, and cracked the housing.`,
       ],
     }
-    return { key, cylinder, title: text[key][0], detail: text[key][1], time }
+    return {
+      key,
+      cylinder,
+      title: text[key][0],
+      detail: text[key][1],
+      prevent: this.prevention(key),
+      time,
+    }
+  }
+  /** Hints that would avoid a failure on this build, most direct first. */
+  private prevention(key: LimitKey) {
+    const e = this.engine
+    const p = this.parts
+    const boosted = e.induction.kind !== 'none'
+    const hints: string[] = []
+    const add = (when: boolean, hint: string) => when && hints.push(hint)
+    switch (key) {
+      case 'knock':
+        add(!e.combustion.knockControl, 'turn on ECU knock control (Combustion and knock) so the ECU pulls timing when it knocks')
+        add(e.combustion.fuel !== 'e85', 'use a higher-octane fuel')
+        hints.push('reduce ignition advance', boosted ? 'lower the boost' : 'lower the compression ratio')
+        add(p.pistons !== 'forged', 'fit forged pistons, which tolerate more knock')
+        break
+      case 'crown':
+        hints.push('run richer (a lower λ) to cool the charge', 'reduce ignition advance')
+        add(boosted, 'lower the boost or fit a bigger intercooler')
+        add(p.pistons !== 'forged', 'fit forged pistons')
+        break
+      case 'headGasket':
+        hints.push('stop the knock first: its pressure spikes lift the gasket')
+        add(boosted, 'lower the boost')
+        add(p.headGasket !== 'copper', 'fit a stronger head gasket')
+        add(p.headFasteners !== 'studs', 'fit head studs')
+        break
+      case 'rodCompression':
+        hints.push('reduce peak cylinder pressure: less boost, less advance or lower compression')
+        add(p.rods !== 'hBeam', 'fit stronger rods (forged I-beam or H-beam)')
+        break
+      case 'rodTension':
+        hints.push('lower the rev limiter: the inertia load grows with the square of speed')
+        add(p.rods !== 'hBeam', 'fit stronger rods (forged I-beam or H-beam)')
+        add(p.pistons !== 'forged', 'lighter pistons also reduce the load')
+        break
+      case 'valveFloat':
+        hints.push('lower the rev limiter below the float speed shown on the stress panel')
+        add(p.valveSprings !== 'race', 'fit stiffer valve springs')
+        add(!!e.cams, 'choose a milder cam: less lift or longer duration is gentler on the springs')
+        break
+      case 'valveClearance':
+        hints.push('reduce cam lift or phaser advance near overlap', 'retard the intake cam map where it advances most', 'lower the compression ratio, which leaves more room above the piston')
+        break
+      case 'turboSpeed':
+        hints.push('lower the boost target', 'fit a larger turbo, which makes the same boost at a lower shaft speed')
+        break
+      case 'turbineTemperature':
+        hints.push('run richer at full load to cool the exhaust', 'add ignition advance if it is not knocking: late burning heats the turbine', 'lower the boost')
+        break
+    }
+    const text = hints.join('; ')
+    return text.charAt(0).toUpperCase() + text.slice(1) + '.'
   }
 }

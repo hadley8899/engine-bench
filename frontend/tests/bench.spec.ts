@@ -686,6 +686,10 @@ test('an overboosted unprotected engine fails, explains why and rebuilds', async
     timeout: 20000,
   })
   await page.keyboard.up('Space')
+  await expect(page.getByTestId('failure-prevent')).toContainText(
+    /turn on ECU knock control/i,
+  )
+  await expect(page.getByTestId('status-failure')).toContainText('To prevent it')
   await page.getByTestId('failure').getByRole('button', { name: 'Rebuild' }).click()
   await expect(page.getByTestId('failure')).toHaveCount(0)
   await expect(page.getByText('Engine rebuilt with new parts')).toBeVisible()

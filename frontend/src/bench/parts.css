@@ -91,3 +91,7 @@
     grid-template-columns: 1fr;
   }
 }
+
+.failure-prevent {
+  margin-top: 6px;
+}

@@ -92,6 +92,9 @@ describe('parts, stress and failures', () => {
     const b = hold(overboosted, 4000, 6)
     expect(a.failure?.key).toBe('knock')
     expect(a.failure?.title).toBe('Cracked piston')
+    // It says how to avoid it on this build.
+    expect(a.failure?.prevent).toMatch(/higher-octane fuel/)
+    expect(a.failure?.prevent).toMatch(/forged pistons/)
     expect(b.failure).toEqual(a.failure)
     // The failed engine stops: no more combustion and no starter.
     a.core.setControls({ holdRpm: null, starter: true })

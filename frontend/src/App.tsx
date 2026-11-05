@@ -5,6 +5,7 @@ import { LoginPage } from './pages/auth/LoginPage.tsx'
 import { RegisterPage } from './pages/auth/RegisterPage.tsx'
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage.tsx'
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage.tsx'
+import { BenchErrorBoundary } from './bench/BenchErrorBoundary'
 import { BenchPage } from './bench/BenchPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { CompanySetupPage } from './pages/auth/CompanySetupPage.tsx'
@@ -61,7 +62,14 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<BenchPage />} />
+      <Route
+        path="/"
+        element={
+          <BenchErrorBoundary>
+            <BenchPage />
+          </BenchErrorBoundary>
+        }
+      />
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />

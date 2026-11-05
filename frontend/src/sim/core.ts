@@ -546,8 +546,15 @@ export class EngineCore {
     this.warning =
       rpm > e.mechanicalLimit ? 'Estimated mechanical RPM limit exceeded' : ''
     // Idle air: proportional on speed, plus an integral trim with the
-    // predictive burn, whose diluted idle needs more air than 1.5.0's.
-    if (this.runnerResidual && this.controls.ignition && rpm > 300)
+    // predictive burn, whose diluted idle needs more air than 1.5.0's. Like
+    // an ECU's throttle-closed switch, the trim holds while the pedal is
+    // pressed, so it does not close the idle air against the driver.
+    if (
+      this.runnerResidual &&
+      this.controls.ignition &&
+      rpm > 300 &&
+      this.controls.throttle < 0.01
+    )
       this.idleTrim = clamp(
         this.idleTrim + (950 - rpm) * IDLE_INTEGRAL * this.dt,
         0,
@@ -561,7 +568,9 @@ export class EngineCore {
           this.runnerResidual ? 0.6 : 0.38,
         )
       : 0
-    const throttle = Math.max(this.controls.throttle, idle)
+    // Idle air bypasses the throttle plate, so the two flows add: the first
+    // few per cent of pedal open the throttle beyond the idle air.
+    const throttle = idle + (1 - idle) * this.controls.throttle
     const switchRpm = e.cams ? e.cams.high?.rpm : e.camSwitch?.rpm
     if (switchRpm)
       this.highCam = this.highCam ? rpm >= switchRpm - 150 : rpm >= switchRpm

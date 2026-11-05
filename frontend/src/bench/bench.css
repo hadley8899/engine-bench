@@ -1168,3 +1168,29 @@
     order: -1;
   }
 }
+.bench-crash {
+  max-width: 640px;
+  margin: 80px auto;
+  padding: 24px;
+  color: #e5edf2;
+  font-family: 'Saira', sans-serif;
+}
+.bench-crash-detail {
+  font-family: monospace;
+  font-size: 12px;
+  color: #ff8fa8;
+}
+.bench-crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.bench-crash-actions button {
+  padding: 8px 14px;
+  border: 1px solid #f0b66c;
+  border-radius: 6px;
+  background: transparent;
+  color: #f0b66c;
+  font: inherit;
+  cursor: pointer;
+}
