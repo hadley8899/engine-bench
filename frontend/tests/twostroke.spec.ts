@@ -88,3 +88,32 @@ test('a four-stroke becomes a two-stroke twin and back', async ({ page }) => {
   await expect(page.getByTestId('command-bar')).toContainText('I4')
   expect(errors).toEqual([])
 })
+
+test('road load gives a race 125 its bike, which launches without breaking the engine', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await openSection(page, 'Starting build')
+  await page.getByRole('button', { name: '125 race two-stroke', exact: true }).click()
+  await openMode(page, 'Bench')
+  await page.getByRole('button', { name: 'Start engine', exact: true }).click()
+  await expect.poll(() => rpm(page), { timeout: 20000 }).toBeGreaterThan(800)
+  await page.getByRole('switch', { name: /Road load/ }).check()
+  await expect(page.getByRole('combobox', { name: 'Vehicle' })).toContainText('125 race bike')
+  await page.getByRole('heading', { level: 1 }).click()
+  await page.keyboard.down('Space')
+  await expect
+    .poll(
+      async () => Number((await page.getByTestId('road-speed').innerText()).replace(/[^\d]/g, '')),
+      { timeout: 20000 },
+    )
+    .toBeGreaterThan(20)
+  await page.keyboard.up('Space')
+  await expect(page.getByTestId('status-failure')).toHaveCount(0)
+  // Another vehicle can be chosen.
+  await choose(page, /^Vehicle/, 'Hatchback, six-speed')
+  await expect(page.getByRole('combobox', { name: 'Vehicle' })).toContainText('Hatchback')
+  expect(errors).toEqual([])
+})

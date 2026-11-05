@@ -71,6 +71,16 @@ const published: Record<
     points: [[8500, 39.3, 4]],
     kw: [8500, 35],
   },
+  // Restricted (learner) tune: 15.2 Nm at 6,500 RPM (1990–93 listing) and
+  // 10.3 kW, 14.2 Nm at 7,000 RPM (2002 listing).
+  DT125R: {
+    cc: 125,
+    points: [
+      [6500, 15.2, 3],
+      [7000, 14.2, 3],
+    ],
+    kw: [7000, 10.3],
+  },
 }
 function steady(engine: EngineDefinition, rpm: number) {
   const core = createCore(engine, normalConditions)

@@ -38,8 +38,13 @@ import { z } from 'zod'
  * crankcase scavenging, two-zone scavenging with short-circuit loss, reed
  * and rotary-disc intakes, a power valve and a one-dimensional exhaust pipe
  * or expansion chamber. Four-stroke builds keep 1.13.0 results.
+ * 1.14.1: two-stroke fixes. Backflow from the pipe into the cylinder
+ * carries its momentum out of the pipe (the sign was wrong, so large
+ * cylinders on small pipes left the model), and an exhaust window larger
+ * than the header flows no more than the header. Two-stroke results move
+ * by up to about 5%; four-strokes keep 1.13.0 results.
  */
-export const MODEL_VERSION = 'eb-0d-1.14.0'
+export const MODEL_VERSION = 'eb-0d-1.14.1'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -56,6 +61,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.11.0',
   'eb-0d-1.12.0',
   'eb-0d-1.13.0',
+  'eb-0d-1.14.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({

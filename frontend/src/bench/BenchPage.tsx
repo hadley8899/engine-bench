@@ -118,6 +118,7 @@ import {
 import type { PowerUnit, TorqueUnit } from './units'
 import { LISTENERS } from '../sim/acoustics'
 import type { Listener } from '../sim/acoustics'
+import { suggestedVehicle } from '../sim/road'
 import type { Road } from '../sim/road'
 import { describeFuel, fuelErrors, fuelShortLabels } from './fuelFields'
 import {
@@ -1532,6 +1533,15 @@ export function BenchPage() {
     telemetry.knock.retard.reduce((a, b) => a + b, 0) /
     telemetry.knock.retard.length
   const messages: StatusMessage[] = []
+  // Bench and model errors join the status strip, so they appear in the
+  // same place as engine state and do not push the tabs about.
+  if (error)
+    messages.push({
+      key: 'error',
+      severity: 'error',
+      text: error,
+      action: { label: 'Dismiss', onClick: () => setError('') },
+    })
   if (failure)
     messages.push({
       key: 'failure',
@@ -1743,11 +1753,6 @@ export function BenchPage() {
           <StatusStrip messages={messages} notice={notice} />
         </div>
         <main>
-          {error && (
-            <Alert severity="error" onClose={() => setError('')}>
-              {error}
-            </Alert>
-          )}
           <Tabs
             className="mode-tabs"
             value={layout.view}
@@ -3002,6 +3007,10 @@ export function BenchPage() {
                 </div>
                 <RoadControls
                   road={road}
+                  suggested={suggestedVehicle(
+                    displacement(experiment.engine),
+                    experiment.engine.revLimit,
+                  )}
                   onChange={changeRoad}
                   speed={telemetry.road?.speed ?? null}
                   disabled={busy || activeTest || mode === 'audition'}

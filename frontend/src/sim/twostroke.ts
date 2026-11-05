@@ -1,5 +1,5 @@
 /**
- * Crankcase-scavenged, loop-scavenged two-stroke core (model 1.14.0).
+ * Crankcase-scavenged, loop-scavenged two-stroke core (model 1.14.0; fixes in 1.14.1).
  * Same fixed 48 kHz step, gas model, combustion, knock, fuel, parts and
  * sound as the four-stroke core (core.ts), with the piston opening ports
  * in the liner, the crankcase pumping the charge, a two-zone scavenging
@@ -958,8 +958,10 @@ export class TwoStrokeCore {
         } else cyl.transfer = 0
 
         // 3. Exhaust port to the pipe, both ways.
+        // The duct behind the window can carry no more than the pipe's
+        // entry: a window larger than the header chokes at the header.
         const exhaust = exhaustOpen
-          ? PORT_DISCHARGE * exhaustWidth(t) * (x - exhaustEdge)
+          ? Math.min(PORT_DISCHARGE * exhaustWidth(t) * (x - exhaustEdge), pipe.faceArea[0])
           : 0
         if (exhaust > 0) {
           const portPressure = pipe.portPressure
@@ -1185,7 +1187,11 @@ export class TwoStrokeCore {
     let sample = 0
     if (this.sound) {
       const input = this.input
-      input.exhaust = audio * 5 * this.audioScale
+      // The stinger flows continuously and fires every revolution, so per
+      // litre it carries several times a four-stroke's port pulses: 0.15
+      // brings a full-throttle pull to the four-strokes' loudness instead of
+      // saturating the output.
+      input.exhaust = audio * 5 * this.audioScale * 0.15
       input.portTemperature = portMass > 0 ? portEnergy / portMass : 0
       input.intake = (intakeMass / this.dt) * 5 * this.audioScale
       input.throttle = throttle

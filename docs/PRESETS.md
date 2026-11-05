@@ -188,10 +188,59 @@ Steady full load in normal air, held 2 s and averaged over the last second:
 
 | RPM | 4,000 | 5,500 | 7,000 | 7,500 | 8,000 | 8,500 | 9,000 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Preset, Nm | 20.9 | 22.4 | 25.7 | 31.8 | 38.1 | 37.5 | 35.2 |
-| Preset, kW | 8.8 | 12.9 | 18.8 | 25.0 | 32.0 | 33.4 | 33.2 |
+| Preset, Nm | 22.1 | 23.6 | 25.8 | 31.9 | 38.0 | 37.1 | 35.0 |
+| Preset, kW | 9.3 | 13.6 | 18.9 | 25.1 | 31.8 | 33.1 | 33.0 |
 
-At 8,500 RPM the preset makes 33.4 kW against the claimed 35 kW (−4.6%); `src/sim/presets.test.ts` holds it within 6% and 4 Nm of the rated point. The torque comes on sharply above 7,000 RPM, as the chambers start to work, which matches the bike's reputation but has not been checked against a measured curve. Highest part stress over the range is 63% of its limit.
+Model 1.14.1 (the pipe backflow fix) moved these by up to 1.2 Nm; 1.14.0 made 33.4 kW at 8,500 RPM. At 8,500 RPM the preset makes 33.1 kW against the claimed 35 kW (−5.4%); `src/sim/presets.test.ts` holds it within 6% and 4 Nm of the rated point. The torque comes on sharply above 7,000 RPM, as the chambers start to work, which matches the bike's reputation but has not been checked against a measured curve. Highest part stress over the range is 63% of its limit.
 
 Not represented: the YPVS power valve (later models), the separate oil injection, auxiliary exhaust ports and the airbox. The model's two-stroke scavenging constants are estimates (see `docs/SIMULATION.md`).
+
+## Yamaha DT125R
+
+`frontend/src/bench/presets.ts`, added with model 1.14.1 (5 November 2026, user request). A liquid-cooled 124 cc reed-valve trail single in its restricted (learner) tune, the form the published figures describe. No manufacturer curve or port timing was found; two rated points are calibrated.
+
+### Sources
+
+1. Ultimate Specs, [*2002 Yamaha DT 125 R*](https://www.ultimatespecs.com/motorcycles-specs/yamaha/yamaha-dt-125-r-2002): 124 cc, 56.0 × 50.7 mm, 6.7:1, 10.3 kW (14.1 hp) and 14.2 Nm at 7,000 RPM, dry 116 kg.
+2. Yamaha DT125RE/DT125X owner's manual, specifications page ([ManualsLib](https://www.manualslib.com/manual/611222/Yamaha-Dt125r.html?page=67)): liquid-cooled two-stroke, 56.0 × 50.7 mm, 6.70:1, Mikuni TM28 carburettor, primary 71/22 (3.227), final 57/16 (3.563), first to fourth gears 2.833, 1.875, 1.412, 1.143.
+3. MotorcycleSpecs, [*1990 Yamaha DT125R*](https://www.motorcyclespecs.co.za/model/yamaha/yamaha_dt125r%2090.htm) (and the identical [moto-data 1992–93 listing](https://moto-data.net/yamaha/dt-125r-1992-1993)): reed valve, 10.3 kW (14 hp) and 15.2 Nm at 6,500 RPM, top speed 124.6 km/h. Its 56 × 50 mm, 6.8:1 and VM24 carburettor disagree with (1) and (2) and are taken as an earlier or garbled listing.
+4. MotorcycleSpecs, [*1998 Yamaha DT 125RE*](https://www.motorcyclespecs.co.za/model/yamaha/yamaha_dt125r%2098.htm): reed valve, Mikuni 28 SS, 10.8 kW at 7,000 RPM, 16.3 Nm at 7,000 RPM.
+
+As with the RD350LC (source 3 there), the 6.7:1 is taken as Yamaha's trapped ratio from exhaust closing.
+
+### Values
+
+| Field | Value | Basis |
+| --- | --- | --- |
+| Layout, bore × stroke, capacity | Single, 56.0 × 50.7 mm, 124.9 cc | Sourced (1, 2) |
+| Compression | 6.7:1 trapped; 11.1:1 full stroke | Trapped sourced (1, 2); full-stroke ratio follows from the inferred exhaust port |
+| Rated output | 10.3 kW and 14.2 Nm at 7,000 RPM; 15.2 Nm at 6,500 RPM | Sourced (1, 3) |
+| Intake | Reed valve, 1,100 mm² open, 500 Hz petals | Reed sourced (3, 4); size inferred |
+| Carburettor | One 28 mm | Sourced (2, 4) |
+| Power valve | Lowers the port 3 mm below 6,500 RPM | Inferred: the DT125R is widely reported with Yamaha's YPVS, but none of the cited pages states it |
+| Ports | Exhaust opens 90° ATDC (181°), 41 mm, unbridged; five transfers open 117° ATDC (126°), 70 mm total | Inferred, mild trail timing; calibrated |
+| Expansion chamber | 1.13 m from the port to the stinger, with a 34 mm header | Calibrated |
+| Rod length (100 mm), ignition (16° BTDC), burn, λ 0.9, inertia, primary compression 1.35, limits (9,000 RPM limiter) | As in the file | Inferred |
+
+How the restriction was made (a smaller exhaust or carburettor, or a different power-valve setting) is not stated in the sources; the preset reaches the restricted figures through mild port timing and a pipe tuned low, not by modelling a restrictor.
+
+### Calibration and deviation
+
+Steady full load in normal air, held 2 s and averaged over the last second:
+
+| RPM | 3,000 | 4,000 | 5,000 | 6,000 | 6,500 | 7,000 | 7,500 | 8,000 | 8,500 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Preset, Nm | 10.0 | 12.4 | 10.6 | 14.0 | 15.3 | 13.6 | 14.6 | 13.5 | 7.9 |
+| Preset, kW | 3.2 | 5.2 | 5.6 | 8.8 | 10.4 | 9.9 | 11.5 | 11.3 | 7.0 |
+
+At 6,500 RPM it makes 15.3 Nm (published 15.2); at 7,000 RPM 13.6 Nm and 9.9 kW against 14.2 Nm and 10.3 kW (−4%). `src/sim/presets.test.ts` holds both points within 3 Nm and the power within 6%. The model's power peaks at 7,500 RPM (11.5 kW), above the published rating, then falls sharply past 8,000 RPM as the pipe goes off tune; the curve between the rated points has not been checked against a measurement. Highest part stress over the range is 61% of its limit. Road load picks the 125 trail bike for it, whose gearing is close to the manual's (first gear 2.833, overall 10 against the manual's 11.5).
+
+Not represented: the restrictor itself, the separate oil injection, the airbox and the electric start's own behaviour.
+
+## Two-strokes that wait
+
+Requested by the user on 5 November 2026:
+
+- **Yamaha YZ125 and YZ250, Aprilia RS125.** Bore, stroke and compression are published (YZ125: 54.0 × 54.5 mm, 8.2–10.7:1 depending on year), but manufacturers do not publish their power, and magazine dyno figures put them at roughly 9–13 bar brake mean effective pressure. The model's race single reaches about 5.3 bar because its trapping and pipe suction fall short (`docs/SIMULATION.md`, two-stroke calibration). They wait until that gap is fixed rather than shipping engines that make half their power.
+- **Aprilia RS250 and Honda RS250R.** 90° V-twins, which need Stage 11's layouts.
 

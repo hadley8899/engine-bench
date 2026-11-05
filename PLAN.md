@@ -357,13 +357,14 @@ Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 Nov
 - [x] Prototype and benchmark a quasi-1D pipe solver. Record whether it fits the AudioWorklet budget or needs the worker/ring-buffer fallback. (Single: about a third of the budget; twin: about 60% with peaks near the limit. No fallback built; see `docs/SIMULATION.md`.)
 - [x] Add segmented expansion chambers (header, cones, belly, baffle, stinger) with an editor, a 3D shape drawn from the segments, a tuned-RPM estimate and sound from the stinger.
 - [x] Add reed and rotary-disc intake, then twins and a power valve. (Parallel twins at 180° or 360°; V twins move to Stage 11.)
-- [x] Add sourced two-stroke presets once their trends are reproduced. (Yamaha RD350LC, within 5% of its rated power; `docs/PRESETS.md`. Racing 125s wait: the model's charging falls short of them.)
+- [x] Add sourced two-stroke presets once their trends are reproduced. (Yamaha RD350LC, within 6% of its rated power, and the restricted Yamaha DT125R, within 4%, added with the 1.14.1 fixes; `docs/PRESETS.md`. Racing 125s wait: the model's charging falls short of them.)
 
 Acceptance: port timing is derived from geometry and validated; mass and energy balance across crankcase, cylinder and pipe; supported trends hold (pipe length moves the torque peak, exhaust-port height moves and narrows the band, a tuned chamber beats a straight pipe at its tuned speed); the two-stroke works through the editor, animation, audio, dyno and persistence; four-stroke results are unchanged.
 
 ### 11. Additional layouts
 
 - [ ] Add inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Prioritise meaningful variety over a large list of near-identical presets.
+- [ ] V-twin two-strokes, then the Aprilia RS250 and Honda RS250R (90° V-twins; user request, 5 November 2026).
 
 Acceptance: each released layout works through configuration, animation, audio, dyno and persistence.
 
@@ -377,6 +378,8 @@ Gas exchange and cams:
 - [ ] Reduce naturally aspirated low-speed torque, which runs high: the K20A was 28 Nm over Honda's curve at 1,500 RPM and the Golf 22 Nm over at 1,000 RPM before cam phasing hid it. Review low-speed volumetric efficiency, residual and wall heat.
 - [ ] Add valve ramps and realistic cam acceleration profiles in place of half-sine lift, so a cam's aggressiveness can differ at the same duration and lift.
 - [ ] Make valve float progressive (lost power and erratic seating) before it bends a valve, and give valve-to-piston room per engine (valve reliefs), rather than half the clearance height for every build.
+
+- [ ] Raise two-stroke charging towards tuned racing engines: the race 125 traps 60% of a full delivered charge and its pipe's suction wave reaches only 0.83 bar, giving about 5.3 bar BMEP where racing 125s make 9–13. Then add the Yamaha YZ125, YZ250 and Aprilia RS125 (user request, 5 November 2026; `docs/PRESETS.md`, "Two-strokes that wait").
 
 Forced induction and combustion:
 

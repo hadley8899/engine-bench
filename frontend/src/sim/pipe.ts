@@ -361,10 +361,11 @@ export class Pipe {
       this.lp[i + 1] = pr
     }
     this.hllc(1, n - 1)
-    // Port face: the cylinder's flow, carrying its momentum into the pipe.
+    // Port face: the cylinder's flow and its momentum flux, ṁu = ṁ²/ρA,
+    // which is positive both ways (backflow carries negative momentum out).
     const a0 = this.faceArea[0]
     this.f0[0] = flow
-    this.f1[0] = p[0] * a0 + (flow * Math.abs(flow)) / (rho[0] * a0)
+    this.f1[0] = p[0] * a0 + (flow * flow) / (rho[0] * a0)
     this.f2[0] = energy
     this.f3[0] = fresh
     this.f4[0] = fuel

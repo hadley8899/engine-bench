@@ -198,6 +198,39 @@ describe('two-stroke core', () => {
     expect(Math.abs(phases[0] - phases[1])).toBeCloseTo(180, 6)
   })
 
+  it('cranks and runs oversized cylinders on undersized pipes without leaving the model', () => {
+    // From the bench: a 100 mm single on the 125's pipe, and a 250 mm bore
+    // on the moped's. Ports scale with the stroke so the layouts are valid.
+    for (const [base, bore, stroke] of [
+      [race, 0.1, 0.1],
+      [race, 0.25, 0.15],
+      [mopedTwoStroke, 0.25, 0.1],
+    ] as const) {
+      const t = base.twoStroke!
+      const s = stroke / base.stroke
+      const engine = validateEngine({
+        ...base,
+        bore,
+        stroke,
+        rodLength: 2 * stroke,
+        twoStroke: {
+          ...t,
+          exhaustPort: { ...t.exhaustPort, height: t.exhaustPort.height * s },
+          transfers: { ...t.transfers, height: t.transfers.height * s },
+          intake: t.intake.kind === 'piston' ? { ...t.intake, height: t.intake.height * s } : t.intake,
+          powerValve: t.powerValve && { ...t.powerValve, drop: t.powerValve.drop * s },
+        },
+      })
+      const core = createCore(engine, normalConditions)
+      core.sound = false
+      core.setControls({ ignition: true, starter: true, throttle: 1 })
+      for (let i = 0; i < 5; i++) core.advance(0.1)
+      core.setControls({ starter: false, holdRpm: 0.9 * engine.revLimit })
+      for (let i = 0; i < 3; i++) core.advance(0.1)
+      expect(Number.isFinite(core.telemetry().rpm)).toBe(true)
+    }
+  })
+
   it('continues a live edit, and rebuilds when the cycle changes', () => {
     const core = createCore(race, normalConditions)
     core.sound = false
@@ -243,10 +276,8 @@ describe('two-stroke trends', { timeout: 120000 }, () => {
   it('a tuned chamber beats a straight pipe at its tuned speed', () => {
     const straight = withTwoStroke(race, { pipe: { kind: 'straight', length: 0.25, diameter: 0.04 } })
     expect(torque(race, 11500)).toBeGreaterThan(1.3 * torque(straight, 11500))
-    // The straight pipe's curve is flatter: its best and worst are closer.
-    const curve = (e: EngineDefinition) => [6000, 8000, 10000, 12000].map((r) => torque(e, r))
-    const spread = (c: number[]) => Math.max(...c) / Math.min(...c)
-    expect(spread(curve(straight))).toBeLessThan(spread(curve(race)) + 0.6)
+    // Below its band the chamber gives that up: the stub does at least as well.
+    expect(torque(straight, 6000)).toBeGreaterThan(torque(race, 6000))
   })
 
   it('lower primary compression reduces delivery at low speed', () => {

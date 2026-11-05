@@ -22,6 +22,20 @@ describe('quasi-1D exhaust pipe', () => {
     }
   })
 
+  it('backflow into the cylinder takes its momentum with it', () => {
+    // A cylinder drawing gas back from a small pipe: the gas at the port
+    // moves towards it at about ṁ/ρA instead of running away.
+    const pipe = new Pipe(straight(0.3, 0.02), 101325, 293.15, PIPE_WALL)
+    const area = Math.PI * 0.01 ** 2
+    for (let i = 0; i < 480; i++) {
+      const flow = -0.3 * pipe.portDensity * area * 100
+      pipe.advance(1 / 48000, flow, flow * pipe.portEnthalpy, flow * pipe.portFresh, flow * pipe.portFuel)
+    }
+    expect(pipe.velocityAt(0)).toBeLessThan(0)
+    expect(pipe.velocityAt(0)).toBeGreaterThan(-200)
+    expect(pipe.temperatureAt(0)).toBeGreaterThan(200)
+  })
+
   it('conserves mass and energy between the port and the outlet', () => {
     const pipe = new Pipe(chamber, 101325, 293.15, 600)
     const start = pipe.totals()

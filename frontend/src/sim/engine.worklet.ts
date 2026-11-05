@@ -195,8 +195,22 @@ export class EngineProcessor extends AudioWorkletProcessor {
         if (this.dyno) this.send({ type: 'run', value: this.dyno.run })
       }
     } catch (error) {
+      // The engine stops and is rebuilt at rest, so the next start begins
+      // from a valid state instead of the one that failed.
       this.running = false
-      this.send({ type: 'error', message: String(error) })
+      this.dyno?.abort(String(error))
+      if (this.dyno) this.send({ type: 'run', value: this.dyno.run })
+      this.dyno = null
+      this.send({
+        type: 'error',
+        message: `${String(error).replace(/^Error: /, '')} The engine has stopped and been reset; change the build or start again.`,
+      })
+      try {
+        this.use(createCore(this.core.engine, this.core.conditions))
+        this.sendTelemetry()
+      } catch {
+        // The definition was valid when built; keep the stopped core.
+      }
     }
     // Keep the node alive for subsequent user starts; suspended contexts advance no physics.
     this.peakMs = Math.max(this.peakMs, Date.now() - began)

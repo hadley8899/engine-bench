@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { EngineCore } from './core'
-import { roadDefaults, validateRoad } from './road'
-import { inductionDefaults, normalConditions, roadEngine } from './schema'
+import { roadDefaults, suggestedVehicle, validateRoad, vehicleKey, vehicles } from './road'
+import { createCore } from './cores'
+import { displacement, inductionDefaults, normalConditions, raceTwoStroke, roadEngine } from './schema'
 import type { EngineDefinition } from './schema'
 
 /** Starts the engine, then drives with road load at full throttle. */
@@ -37,6 +38,33 @@ describe('road load', () => {
   it('validates gears against the gearbox', () => {
     expect(() => validateRoad({ ...roadDefaults, gear: 7 })).toThrow()
     expect(() => validateRoad({ ...roadDefaults, mass: 10 })).toThrow()
+  })
+  it('offers a vehicle that suits the engine, and recognises it', () => {
+    for (const v of Object.values(vehicles)) expect(validateRoad(v.road)).toEqual(v.road)
+    expect(suggestedVehicle(displacement(roadEngine), roadEngine.revLimit)).toBe('hatchback')
+    expect(suggestedVehicle(50e-6, 8000)).toBe('moped')
+    expect(suggestedVehicle(125e-6, 12500)).toBe('race125')
+    expect(suggestedVehicle(125e-6, 9500)).toBe('trail125')
+    expect(suggestedVehicle(347e-6, 9500)).toBe('motorcycle')
+    expect(vehicleKey({ ...vehicles.moped.road, gear: 3 })).toBe('moped')
+    expect(vehicleKey({ ...vehicles.moped.road, mass: 170 })).toBeNull()
+  })
+  it('a race 125 on its bike launches in its powerband without lugging', () => {
+    const core = createCore(raceTwoStroke, normalConditions)
+    core.sound = false
+    core.setControls({ ignition: true, starter: true })
+    for (let i = 0; i < 10; i++) core.advance(0.1)
+    core.setControls({ starter: false, throttle: 1, road: vehicles.race125.road })
+    let lowest = Infinity
+    for (let i = 0; i < 40; i++) {
+      core.advance(0.1)
+      // Once the bike moves, the clutch holds the engine near its launch speed.
+      const t = core.telemetry()
+      if (t.road!.speed > 2) lowest = Math.min(lowest, t.rpm)
+    }
+    expect(lowest).toBeGreaterThan(8000)
+    expect(core.stress.failure).toBeNull()
+    expect(core.telemetry().road!.speed).toBeGreaterThan(20)
   })
   it('launches from rest on the automatic clutch and accelerates plausibly', () => {
     const { core, hundred } = drive(roadEngine, 14, upshift)

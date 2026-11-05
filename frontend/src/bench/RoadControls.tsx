@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Button, FormControlLabel, Stack, Switch } from '@mui/material'
-import { roadDefaults, roadSchema } from '../sim/road'
-import type { Road } from '../sim/road'
+import { Button, FormControlLabel, MenuItem, Stack, Switch, TextField } from '@mui/material'
+import { roadSchema, vehicleKey, vehicles } from '../sim/road'
+import type { Road, VehicleKey } from '../sim/road'
 import { NumberField } from './NumberField'
 
 const fields: {
-  key: 'mass' | 'finalDrive' | 'tyreRadius' | 'dragArea'
+  key: 'mass' | 'finalDrive' | 'tyreRadius' | 'dragArea' | 'launchRpm' | 'clutchCapacity'
   label: string
   unit: string
   scale: number
@@ -13,20 +13,27 @@ const fields: {
   max: number
   step: number
 }[] = [
-  { key: 'mass', label: 'Vehicle mass', unit: 'kg', scale: 1, min: 300, max: 5000, step: 10 },
-  { key: 'finalDrive', label: 'Final drive', unit: ':1', scale: 1, min: 1.5, max: 8, step: 0.01 },
+  { key: 'mass', label: 'Vehicle and rider mass', unit: 'kg', scale: 1, min: 80, max: 5000, step: 5 },
+  { key: 'finalDrive', label: 'Final drive', unit: ':1', scale: 1, min: 1.5, max: 15, step: 0.01 },
   { key: 'tyreRadius', label: 'Tyre radius', unit: 'mm', scale: 1000, min: 200, max: 500, step: 1 },
   { key: 'dragArea', label: 'Drag area (CdA)', unit: 'm²', scale: 1, min: 0.1, max: 2, step: 0.01 },
+  { key: 'launchRpm', label: 'Clutch bites from', unit: 'RPM', scale: 1, min: 600, max: 12000, step: 100 },
+  { key: 'clutchCapacity', label: 'Clutch capacity', unit: 'Nm', scale: 1, min: 10, max: 2000, step: 5 },
 ]
 
-/** Road-load switch, gear selector and vehicle settings. */
+/**
+ * Road-load switch, vehicle, gear selector and vehicle settings. Turning
+ * road load on picks the vehicle that suits the engine's size.
+ */
 export function RoadControls({
   road,
+  suggested,
   onChange,
   speed,
   disabled,
 }: {
   road: Road | null
+  suggested: VehicleKey
   onChange: (road: Road | null) => void
   speed: number | null
   disabled?: boolean
@@ -42,13 +49,36 @@ export function RoadControls({
           <Switch
             checked={!!road}
             disabled={disabled}
-            onChange={(e) => onChange(e.target.checked ? roadDefaults : null)}
+            onChange={(e) => onChange(e.target.checked ? vehicles[suggested].road : null)}
           />
         }
-        label="Road load: drive a car through a gearbox"
+        label="Road load: drive a vehicle through a gearbox"
       />
       {road && (
         <>
+          <TextField
+            select
+            size="small"
+            label="Vehicle"
+            value={vehicleKey(road) ?? 'custom'}
+            disabled={disabled}
+            onChange={(e) => {
+              const key = e.target.value as VehicleKey
+              onChange({ ...vehicles[key].road, gear: Math.min(road.gear, vehicles[key].road.ratios.length) })
+            }}
+          >
+            {(Object.keys(vehicles) as VehicleKey[]).map((k) => (
+              <MenuItem key={k} value={k}>
+                {vehicles[k].label}
+                {k === suggested ? ' (suits this engine)' : ''}
+              </MenuItem>
+            ))}
+            {!vehicleKey(road) && (
+              <MenuItem value="custom" disabled>
+                Custom settings
+              </MenuItem>
+            )}
+          </TextField>
           <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
             <Button
               variant="outlined"
@@ -79,8 +109,9 @@ export function RoadControls({
             </span>
           </Stack>
           <p className="cranking-note">
-            The automatic clutch bites from 900 RPM, so floor it in first to
-            launch. Q / E change gear. A load model only: the bench still
+            The automatic clutch bites from {road.launchRpm} RPM, so floor it in
+            first to launch. Q / E change gear. The vehicles are illustrative,
+            not real ones. A load model only: the bench still
             reports crank output, with no tyre grip, driveline losses or wheel
             power.
           </p>

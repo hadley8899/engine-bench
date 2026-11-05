@@ -346,6 +346,51 @@ const rd350: EngineDefinition = {
   },
 }
 
+// 6.7:1 is Yamaha's trapped ratio; the full-stroke ratio follows from the
+// inferred exhaust port. Specification and inferred values: docs/PRESETS.md.
+const dtExhaust = 0.0285
+const dt125: EngineDefinition = {
+  ...rd350,
+  name: 'Yamaha DT125R',
+  layout: 'single',
+  cylinders: 1,
+  firingOrder: [1],
+  bore: 0.056,
+  stroke: 0.0507,
+  rodLength: 0.1,
+  compression: 1 + (5.7 * 0.0507) / dtExhaust,
+  intakeRunnerLength: 0.18,
+  ignitionAdvance: 16,
+  burnDuration: 48,
+  lambda: 0.9,
+  inertia: 0.006,
+  revLimit: 9000,
+  limiterCut: 'spark',
+  mechanicalLimit: 10000,
+  starterTorque: 25,
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.028, chokes: 1, acceleratorPump: false },
+  exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.3 },
+  twoStroke: {
+    exhaustPort: { height: dtExhaust, width: 0.041, bridge: false },
+    transfers: { count: 5, height: 0.0395, width: 0.07 },
+    intake: { kind: 'reed', area: 0.0011, stiffness: 500 },
+    crankcaseCompression: 1.35,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.26, diameter: 0.034 },
+      diffuser: [
+        { length: 0.22, diameter: 0.055 },
+        { length: 0.24, diameter: 0.09 },
+      ],
+      belly: { length: 0.17 },
+      baffle: [{ length: 0.24, diameter: 0.022 }],
+      stinger: { length: 0.22, diameter: 0.02 },
+    },
+    powerValve: { rpm: 6500, drop: 0.003 },
+    crankPhase: 180,
+  },
+}
+
 export const realEngines: RealEngine[] = [
   {
     label: 'VW Golf GTI Mk5 2.0 TFSI',
@@ -458,5 +503,12 @@ export const realEngines: RealEngine[] = [
       'The 1980 RD350LC “Elsie”: a liquid-cooled 347 cc two-stroke twin on a 180° crank with reed valves and an expansion chamber per cylinder. Nothing much below 7,000 RPM, then it comes on the pipe.',
     rated: '35 kW (47 hp) at 8,500 RPM (Yamaha, claimed)',
     engine: rd350,
+  },
+  {
+    label: 'Yamaha DT125R',
+    description:
+      'The DT125R trail bike: a liquid-cooled 124 cc reed-valve single with a power valve, in the learner-legal tune most were sold in. Soft and tractable low down, with a modest step when the pipe comes in.',
+    rated: '10.3 kW (14 hp) at 7,000 RPM · 14.2 Nm at 7,000 RPM (Yamaha, restricted)',
+    engine: dt125,
   },
 ]

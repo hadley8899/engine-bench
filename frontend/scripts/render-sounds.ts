@@ -1,11 +1,11 @@
 /**
  * Renders fixed bench scenarios to 48 kHz mono WAV files for listening
- * checks: `npm run sounds -- <output directory>`. The engine core is
+ * checks: `npm run sounds -- <output directory> [name filter]`. The engine core is
  * advanced exactly as on the live bench; nothing is recorded or sampled.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { EngineCore } from '../src/sim/core'
+import { createCore } from '../src/sim/cores'
 import type { Controls } from '../src/sim/core'
 import type { Listener } from '../src/sim/acoustics'
 import {
@@ -17,9 +17,11 @@ import {
 } from '../src/sim/schema'
 import type { EngineDefinition } from '../src/sim/schema'
 import { starterBuilds } from '../src/bench/builds'
+import { realEngines } from '../src/bench/presets'
 type Step = { at: number; controls: Partial<Controls> }
 
 const out = process.argv[2] ?? 'sounds'
+const only = process.argv[3]
 mkdirSync(out, { recursive: true })
 
 /** Throttle blips, a free rev onto the limiter and a lift-off coast. */
@@ -44,6 +46,17 @@ const pull: Step[] = [
   { at: 8.1, controls: { throttle: 0, holdRpm: null } },
 ]
 
+/** A two-stroke pull from 3,000 RPM to just under the limiter, then lift-off. */
+const twoStrokePull = (limit: number): Step[] => [
+  { at: 0, controls: { ignition: true, starter: true } },
+  { at: 1.2, controls: { starter: false } },
+  ...Array.from({ length: 121 }, (_, i) => ({
+    at: 2 + i * 0.05,
+    controls: { throttle: 1, holdRpm: 3000 + (i * (limit - 3300)) / 120 },
+  })),
+  { at: 8.1, controls: { throttle: 0, holdRpm: null } },
+]
+
 /** Build boost at 5,000 RPM, lift off, repeat: the blow-off valve. */
 const blowOff: Step[] = [
   { at: 0, controls: { ignition: true, starter: true } },
@@ -61,7 +74,8 @@ function render(
   seconds: number,
   listener?: Listener,
 ) {
-  const core = new EngineCore(engine, normalConditions)
+  if (only && !name.includes(only)) return
+  const core = createCore(engine, normalConditions)
   if (listener) core.setListener(listener)
   const frames = Math.round(seconds * 48000)
   const pcm = new Int16Array(frames)
@@ -100,10 +114,11 @@ render('road-pull', roadEngine, pull, 10)
 render('sport-free-rev', sportEngine, freeRev, 11)
 render('turbo-pull', turbo, pull, 10)
 render('turbo-blow-off', turbo, blowOff, 11.5)
-for (const build of starterBuilds.slice(2)) {
+for (const build of [...starterBuilds.slice(2), ...realEngines.filter((r) => r.engine.cycle === 'two-stroke')]) {
   const slug = build.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const two = build.engine.cycle === 'two-stroke'
   render(`build-${slug}-free-rev`, build.engine, freeRev, 11)
-  render(`build-${slug}-pull`, build.engine, pull, 10)
+  render(`build-${slug}-pull`, build.engine, two ? twoStrokePull(build.engine.revLimit) : pull, 10)
 }
 render(
   'road-straight-pipe-free-rev',

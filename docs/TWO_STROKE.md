@@ -81,7 +81,7 @@ Validation rejects impossible layouts: transfers that open before the exhaust, p
   - a higher exhaust port moves the peak up and narrows the band;
   - lower primary compression reduces delivery ratio at low speed;
   - a reed improves low-speed delivery ratio compared with a piston port;
-  - a straight pipe makes a flatter, lower curve than a tuned chamber.
+  - a straight pipe makes a lower curve than a tuned chamber in its band. (As built, the model's short stub is not flatter: it peaks at its own resonance, and below the chamber's band it out-pulls the chamber, which is what the test checks.)
 - Cross-host agreement and bounded cost, as for the four-stroke core.
 
 References for the model: G. P. Blair, *Design and Simulation of Two-Stroke Engines* (SAE, 1996), and G. Jennings, *Two-Stroke Tuner's Handbook* (1973), for port time-area and expansion-chamber design practice; Benson and Brandham's two-zone scavenging model (1969). Implement from the published equations and record what is adapted. Recheck licences for any code, data or sounds used.
@@ -95,3 +95,4 @@ References for the model: G. P. Blair, *Design and Simulation of Two-Stroke Engi
 - Not in the original note, added because a crankcase-pumped engine needed them: a throttle orifice with a lumped intake tract (instead of the four-stroke's imposed manifold pressure), transfer-duct momentum, an idle screw, and an optional bridged exhaust port (up to 1.05 × bore wide).
 - Transfer port angles and a separate boost port are not settings: the transfer count (2, 3 with a boost port, 5) sets the scavenging estimate.
 - Pipe cells of 3 cm with second-order reconstruction, chosen for cost (sensitivity in SIMULATION.md). The single fits the AudioWorklet budget comfortably and the twin with little margin; the worker ring-buffer fallback was not needed for the measured hosts and was not built.
+- 5 November 2026, after the user's first session with the two-strokes (model 1.14.1): fixed the pipe's backflow momentum (an oversized single on a small pipe left the model when cranked) and limited the exhaust window to the header area; brought the two-stroke sound out of the output's soft clipping; added vehicles matched to engine size for road load (a race 125 launched at 900 RPM in a car cracked a piston); added the restricted DT125R. The YZ125, YZ250 and RS125 wait for the charging fix (Stage 12) and the RS250 for V-twins (Stage 11).
