@@ -237,10 +237,51 @@ At 6,500 RPM it makes 15.3 Nm (published 15.2); at 7,000 RPM 13.6 Nm and 9.9 kW 
 
 Not represented: the restrictor itself, the separate oil injection, the airbox and the electric start's own behaviour.
 
+## Racing two-strokes: Yamaha YZ125 and YZ250, Aprilia RS125
+
+`frontend/src/bench/presets.ts`, added 5 November 2026 at the user's request, knowing they fall short. **These presets do not reach their real output.** The model's charging falls short of tuned racing two-strokes (`docs/SIMULATION.md`, "Charging investigation"), so each is calibrated to a stated share of its published figures: about 65% for the YZ125 and YZ250, 70% for the RS125. Speeds, character and hardware follow the sources; the deficit is in torque at every speed. The presets' descriptions and rated lines say so on the bench. When the charging gap is fixed, recalibrate them to their full figures.
+
+### Sources
+
+1. Yamaha Motor Corporation USA, [2023 YZ250 specifications](https://yamahamotorsports.com/models/23-yz250/specs): 66.4 × 72.0 mm, 8.9–10.6:1, Keihin PWK38S carburettor, reed valve, five speeds; no power. The YZ125's 54.0 × 54.5 mm and 8.2–10.1:1 (8.6–10.7:1 for 2005 models) are Yamaha's figures as quoted in search listings of its [YZ125 specifications](https://yamahamotorsports.com/models/25-yz125/specs); that page was not read directly.
+2. Dirt Bike magazine, [*125 2-strokes on the dyno: the wrap*](https://dirtbikemagazine.com/125-2-strokes-on-the-dyno-the-wrap/) (2024, Pro Circuit dyno): YZ125 35.78 hp (26.7 kW) at 11,670 RPM and 16.47 lb-ft (22.3 Nm) at 10,940 RPM. Whether this is at the crank or the wheel is not stated; it is used as published.
+3. Wikipedia, [*Yamaha YZ125*](https://en.wikipedia.org/wiki/Yamaha_YZ125) (revision of 6 October 2026): reed valve, liquid cooled since 1981, 38 mm carburettor, 33–35 hp from Motocross Action's 2016 shootout.
+4. Wikipedia, [*Yamaha YZ250*](https://en.wikipedia.org/wiki/Yamaha_YZ250) (revision of 6 October 2026): 66.4 × 72 mm from 1999, mechanical YPVS, reed block in the cylinder, 47 hp (35 kW) at 8,800 RPM and 41.5 Nm at 7,500 RPM, 9,000 RPM redline. The power figures' source is a Motocross Action page that does not show them, so treat them as unverified.
+5. Wikipedia, [*Aprilia RS125*](https://en.wikipedia.org/wiki/Aprilia_RS125) (revision of 18 May 2026): Rotax 124.8 cc liquid-cooled single, 54.0 × 54.5 mm, 21.0 kW (28.2 bhp, Aprilia technical sheet) and 19.0 Nm (Motorcycle News); no speeds, model year or compression ratio.
+
+Yamaha's compression ranges are taken as trapped ratios, as for the RD350LC and DT125R.
+
+### Values
+
+| Field | YZ125 | YZ250 | RS125 | Basis |
+| --- | --- | --- | --- | --- |
+| Bore × stroke | 54.0 × 54.5 mm | 66.4 × 72.0 mm | 54.0 × 54.5 mm | Sourced (1, 4, 5) |
+| Trapped compression | 8.6:1 | 8.9:1 | 8.0:1 | YZ sourced (1), the low end of each range; RS inferred |
+| Carburettor | 38 mm | 38 mm | 34 mm | YZ sourced (1, 3); RS inferred (a Dell'Orto VHSB 34 is reported for 2003–04 bikes) |
+| Intake | Reed, 2,400 mm², 550 Hz | Reed, 2,800 mm², 500 Hz | Reed, 1,600 mm², 600 Hz | YZ reed sourced (1, 3, 4); sizes and the RS reed inferred |
+| Power valve | 4 mm below 8,500 RPM | 5 mm below 6,000 RPM | 4 mm below 8,000 RPM | YZ250's YPVS sourced (4); the rest inferred |
+| Ports | Exhaust 26.5 mm from the deck (opens 81° ATDC), 56 mm bridged; five transfers, 85 mm total | Exhaust 37.5 mm (84° ATDC), 69 mm bridged; five transfers, 95 mm | Exhaust 28 mm (84° ATDC), 55 mm bridged; five transfers, 76 mm | Inferred, typical racing timing; calibrated |
+| Primary compression | 1.5 | 1.4 | 1.4 | Inferred; the YZ125's raised to reach its share |
+| Expansion chamber | Tuned near 11,700 RPM | Tuned near 8,700 RPM | Tuned near 10,900 RPM | Calibrated to the published peak speeds |
+| Limiter | 12,500 RPM | 9,000 RPM (the redline, 4) | 11,800 RPM | YZ250 sourced; others inferred |
+| Rod, ignition (16° BTDC), burn, λ 0.88, RON 98, inertia | As in the file | | | Inferred |
+
+Auxiliary exhaust ports, which racing engines have, are not modelled; the bridged main port stands in for them.
+
+### Calibration and deviation
+
+Steady full load in normal air, held 2 s and averaged over the last second (model / published):
+
+| Preset | Torque | Power |
+| --- | --- | --- |
+| YZ125 | 14.9 Nm at 11,000 RPM / 22.3 Nm at 10,940 (67%) | 16.9 kW at 11,500 RPM / 26.7 kW at 11,670 (63%) |
+| YZ250 | 26.8 Nm at 7,500 RPM / 41.5 Nm (65%); its peak is 29.4 Nm at 8,000 | 23.3 kW at 8,800 RPM / 35 kW (67%); its peak is 25.8 kW at 8,500 |
+| RS125 | 13.4 Nm at 10,500 RPM / 19.0 Nm (70%) | 14.7 kW at 10,500 RPM / 21.0 kW (70%) |
+
+The RS125's speed is inferred: 21 kW and 19 Nm meet at about 10,500 RPM. `src/sim/presets.test.ts` holds each preset to its share of the published figure (YZ125 65%, YZ250 and RS125 70%): torque within 2, 3 and 1.5 Nm, power within 6%. The YZ250 falls away sharply above 8,800 RPM (16.8 Nm at 9,000), where the real engine is reported to over-rev a little. Highest part stress over the ranges is 71% of its limit. Road load picks the 125 race bike for the two 125s, which launch near 9,100 RPM without knock, and the road motorcycle for the YZ250.
+
+Not represented: auxiliary exhaust ports, the power valves' real mechanisms (a lowered port edge stands in), the YZ250's five-speed and the bikes' own gearing, electronic ignition maps, and Aprilia's restricted versions.
+
 ## Two-strokes that wait
 
-Requested by the user on 5 November 2026:
-
-- **Yamaha YZ125 and YZ250, Aprilia RS125.** Bore, stroke and compression are published (YZ125: 54.0 × 54.5 mm, 8.2–10.7:1 depending on year), but manufacturers do not publish their power, and magazine dyno figures put them at roughly 9–13 bar brake mean effective pressure. The model's race single reaches about 5.3 bar because its trapping and pipe suction fall short (`docs/SIMULATION.md`, two-stroke calibration). They wait until that gap is fixed rather than shipping engines that make half their power. The 5 November investigation found no quick fix: with race-like hardware the model reaches about 15 Nm against the 20–22 Nm these engines make, so a preset now would make roughly 70% of its real torque.
-- **Aprilia RS250 and Honda RS250R.** 90° V-twins, which need Stage 11's layouts.
-
+- **Aprilia RS250 and Honda RS250R.** 90° V-twins, which need Stage 11's layouts (user request, 5 November 2026).

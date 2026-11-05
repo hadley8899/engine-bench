@@ -13,7 +13,7 @@ import {
   roadEngine,
   stockParts,
 } from '../sim/schema'
-import type { EngineDefinition, Management } from '../sim/schema'
+import type { EngineDefinition, Management, TwoStroke } from '../sim/schema'
 import { camsFromEvents } from '../sim/cams'
 
 export type RealEngine = {
@@ -391,6 +391,118 @@ const dt125: EngineDefinition = {
   },
 }
 
+// Racing two-strokes. The model's charging falls short of tuned racing
+// engines, so these make about 70% of their published torque; the shapes,
+// speeds and hardware follow the sources (docs/PRESETS.md).
+const racing = (
+  name: string,
+  bore: number,
+  stroke: number,
+  trapped: number,
+  exhaust: number,
+  rest: Partial<EngineDefinition> & { twoStroke: TwoStroke },
+): EngineDefinition => ({
+  ...dt125,
+  name,
+  bore,
+  stroke,
+  // The quoted ratio is the trapped one; the full-stroke ratio follows.
+  compression: 1 + ((trapped - 1) * stroke) / exhaust,
+  ignitionAdvance: 16,
+  burnDuration: 45,
+  lambda: 0.88,
+  combustion: { burnRate: 'predictive', fuel: 'ron98', knockControl: false },
+  exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.3 },
+  ...rest,
+})
+const yz125: EngineDefinition = racing('Yamaha YZ125', 0.054, 0.0545, 8.6, 0.0265, {
+  rodLength: 0.11,
+  inertia: 0.005,
+  revLimit: 12500,
+  mechanicalLimit: 13500,
+  starterTorque: 35,
+  intakeRunnerLength: 0.18,
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.038, chokes: 1, acceleratorPump: false },
+  twoStroke: {
+    exhaustPort: { height: 0.0265, width: 0.056, bridge: true },
+    transfers: { count: 5, height: 0.0395, width: 0.085 },
+    intake: { kind: 'reed', area: 0.0024, stiffness: 550 },
+    crankcaseCompression: 1.5,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.12, diameter: 0.04 },
+      diffuser: [
+        { length: 0.13, diameter: 0.058 },
+        { length: 0.14, diameter: 0.085 },
+        { length: 0.11, diameter: 0.11 },
+      ],
+      belly: { length: 0.13 },
+      baffle: [{ length: 0.19, diameter: 0.024 }],
+      stinger: { length: 0.2, diameter: 0.021 },
+    },
+    powerValve: { rpm: 8500, drop: 0.004 },
+    crankPhase: 180,
+  },
+})
+const yz250: EngineDefinition = racing('Yamaha YZ250', 0.0664, 0.072, 8.9, 0.0375, {
+  rodLength: 0.13,
+  inertia: 0.011,
+  revLimit: 9000,
+  mechanicalLimit: 10000,
+  starterTorque: 60,
+  intakeRunnerLength: 0.2,
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.038, chokes: 1, acceleratorPump: false },
+  twoStroke: {
+    exhaustPort: { height: 0.0375, width: 0.069, bridge: true },
+    transfers: { count: 5, height: 0.053, width: 0.095 },
+    intake: { kind: 'reed', area: 0.0028, stiffness: 500 },
+    crankcaseCompression: 1.4,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.17, diameter: 0.048 },
+      diffuser: [
+        { length: 0.17, diameter: 0.07 },
+        { length: 0.19, diameter: 0.105 },
+        { length: 0.14, diameter: 0.13 },
+      ],
+      belly: { length: 0.16 },
+      baffle: [{ length: 0.24, diameter: 0.028 }],
+      stinger: { length: 0.24, diameter: 0.026 },
+    },
+    powerValve: { rpm: 6000, drop: 0.005 },
+    crankPhase: 180,
+  },
+})
+const rs125: EngineDefinition = racing('Aprilia RS125 (Rotax)', 0.054, 0.0545, 8, 0.028, {
+  rodLength: 0.11,
+  inertia: 0.005,
+  revLimit: 11800,
+  mechanicalLimit: 13000,
+  starterTorque: 35,
+  intakeRunnerLength: 0.18,
+  fuelSystem: { kind: 'carburettor', chokeDiameter: 0.034, chokes: 1, acceleratorPump: false },
+  twoStroke: {
+    exhaustPort: { height: 0.028, width: 0.055, bridge: true },
+    transfers: { count: 5, height: 0.0398, width: 0.076 },
+    intake: { kind: 'reed', area: 0.0016, stiffness: 600 },
+    crankcaseCompression: 1.4,
+    pipe: {
+      kind: 'chamber',
+      header: { length: 0.13, diameter: 0.04 },
+      diffuser: [
+        { length: 0.14, diameter: 0.058 },
+        { length: 0.15, diameter: 0.085 },
+        { length: 0.11, diameter: 0.11 },
+      ],
+      belly: { length: 0.13 },
+      baffle: [{ length: 0.2, diameter: 0.024 }],
+      stinger: { length: 0.2, diameter: 0.021 },
+    },
+    powerValve: { rpm: 8000, drop: 0.004 },
+    crankPhase: 180,
+  },
+})
+
 export const realEngines: RealEngine[] = [
   {
     label: 'VW Golf GTI Mk5 2.0 TFSI',
@@ -510,5 +622,26 @@ export const realEngines: RealEngine[] = [
       'The DT125R trail bike: a liquid-cooled 124 cc reed-valve single with a power valve, in the learner-legal tune most were sold in. Soft and tractable low down, with a modest step when the pipe comes in.',
     rated: '10.3 kW (14 hp) at 7,000 RPM · 14.2 Nm at 7,000 RPM (Yamaha, restricted)',
     engine: dt125,
+  },
+  {
+    label: 'Yamaha YZ125',
+    description:
+      'Yamaha’s 125 motocross racer: a reed-valve single with YPVS and a 38 mm carburettor that lives above 10,000 RPM and revs to 12,500. The model makes about two thirds of its dyno power: its charging falls short of tuned racing two-strokes.',
+    rated: '26.7 kW (35.8 hp) at 11,670 RPM · 22.3 Nm at 10,940 RPM (Dirt Bike magazine dyno); the model makes about 65%',
+    engine: yz125,
+  },
+  {
+    label: 'Yamaha YZ250',
+    description:
+      'The 249 cc YZ250 motocross single (66.4 × 72 mm since 1999), with YPVS and a reed valve. Big midrange, a 9,000 RPM redline. The model makes about two thirds of its rated power.',
+    rated: '35 kW (47 hp) at 8,800 RPM · 41.5 Nm at 7,500 RPM (published figures); the model makes about 65–70%',
+    engine: yz250,
+  },
+  {
+    label: 'Aprilia RS125',
+    description:
+      'The Rotax-engined RS125 road racer replica: a 124.8 cc single with a reed valve and power valve, in the unrestricted tune of Aprilia’s technical sheet. The model makes about 70% of the claim.',
+    rated: '21.0 kW (28.2 bhp), 19.0 Nm (Aprilia claim; speeds not published); the model makes about 70%',
+    engine: rs125,
   },
 ]
