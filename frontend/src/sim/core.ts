@@ -22,6 +22,7 @@ import { FUELS, FuelDelivery, LEAN_MISFIRE, RICH_MISFIRE } from './fuel'
 import { BurnedGas, FREEZE } from './chemistry'
 import { partsInertia, Stress, VALVE_SPRINGS } from './parts'
 import { clearanceRatio, emptyEvents, valveEvents } from './cams'
+import { FourStrokeExhaust } from './exhaust'
 import type { StressTelemetry } from './parts'
 import type { FuelTelemetry } from './fuel'
 import type { TwoStrokeTelemetry } from './twostroke'
@@ -247,6 +248,8 @@ export class EngineCore {
   starterStalled = false
   readonly induction: InductionSystem
   readonly fuel: FuelDelivery
+  /** Tuned primary/collector pressure boundary; disabled for legacy builds. */
+  readonly exhaustWaves: FourStrokeExhaust
   /** Smoothed delivered λ of firing cylinders. */
   lambda: number
   private misfireTime = -Infinity
@@ -296,6 +299,8 @@ export class EngineCore {
   private mapsRead = false
   /** One cylinder's exhaust flow at 6,000 RPM with a full standard charge, kg/s. */
   private exhaustReference: number
+  /** Signed mass passed through each exhaust valve during this 48 kHz step. */
+  private exhaustFlow: Float64Array
   private octaneDelay: number
   private referenceFlame: number
   private pistonSpeedPerRpm: number
@@ -329,6 +334,7 @@ export class EngineCore {
     this.traces = Array.from({ length: count }, () => new Float32Array(360))
     this.crowns = new Array<number>(count).fill(0)
     this.knocks = new Array<number>(count).fill(0)
+    this.exhaustFlow = new Float64Array(count)
     this.pistonArea = (Math.PI * engine.bore ** 2) / 4
     this.stress = new Stress(this.engine)
     this.inertia = engine.inertia + partsInertia(this.engine)
@@ -387,6 +393,7 @@ export class EngineCore {
       this.airDensityRatio,
     )
     this.fuel = new FuelDelivery(engine, air.density)
+    this.exhaustWaves = new FourStrokeExhaust(this.engine)
     this.lambda = engine.lambda
     // Firing intervals are even: 180° apart on the inline-four.
     this.phases = Array.from(
@@ -484,6 +491,7 @@ export class EngineCore {
     if (engine.induction.kind === 'turbo' && !engine.management)
       core.boostBase = engine.induction.boostTarget
     core.fuel.adopt(previous.fuel)
+    core.exhaustWaves.adopt(previous.exhaustWaves)
     const p = previous.engine
     const sameGeometry =
       p.bore === engine.bore &&
@@ -671,7 +679,7 @@ export class EngineCore {
         : this.intakeEnthalpy
     const intakeDensity =
       (this.airDensity * c.temperature) / (c.pressure * intakeTemperature)
-    const backPressure = turbo ? induction.exhaustPressure : c.pressure
+    const meanBackPressure = turbo ? induction.exhaustPressure : c.pressure
     const backTemperature = turbo
       ? induction.exhaustTemperature
       : EXHAUST_BACKFLOW_TEMPERATURE
@@ -700,6 +708,7 @@ export class EngineCore {
     let exhaustEnergy = 0
     let torque = 0
     let absorbed = 0
+    this.exhaustFlow.fill(0)
     for (let sub = 0; sub < n; sub++) {
       const da = this.omega * dt
       let indicated = 0
@@ -843,6 +852,10 @@ export class EngineCore {
           intakeMass += flow * dt
         } else cyl.runner = 0
         if (exhaust > 0) {
+          const backPressure = this.exhaustWaves.backPressure(
+            i,
+            meanBackPressure,
+          )
           if (pressure > backPressure) {
             const dm = Math.min(
               cyl.mass * 0.08,
@@ -872,6 +885,7 @@ export class EngineCore {
             cyl.thermal.exhaust(dm, temperature)
             exhaustMass += dm
             exhaustEnergy += h
+            this.exhaustFlow[i] += dm
             audio += (dm / this.dt) * 5 * this.audioScale
           } else {
             const dm = Math.min(
@@ -887,6 +901,7 @@ export class EngineCore {
             cyl.energy += dm * backEnthalpy
             exhaustMass -= dm
             exhaustEnergy -= dm * backEnthalpy
+            this.exhaustFlow[i] -= dm
           }
         }
         // Without maps the spark stays before top dead centre, as in 1.6.0.
@@ -1057,6 +1072,9 @@ export class EngineCore {
       this.angle = wrap(this.angle + da)
     }
     this.absorbedTorque = absorbed
+    for (let i = 0; i < this.exhaustFlow.length; i++)
+      this.exhaustFlow[i] /= this.dt
+    this.exhaustWaves.step(this.exhaustFlow)
     induction.step(
       this.dt,
       this.omega,

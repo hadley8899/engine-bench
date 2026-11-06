@@ -25,7 +25,8 @@
         "eb-0d-1.13.0",
         "eb-0d-1.14.0",
         "eb-0d-1.14.1",
-        "eb-0d-1.15.0"
+        "eb-0d-1.15.0",
+        "eb-0d-1.16.0"
       ]
     },
     "id": {
@@ -54,6 +55,10 @@
             {
               "type": "number",
               "const": 3
+            },
+            {
+              "type": "number",
+              "const": 4
             }
           ]
         },
@@ -517,7 +522,8 @@
             "collector": "4-1",
             "catalyst": true,
             "silencer": "chambered",
-            "tailpipeLength": 2.5
+            "tailpipeLength": 2.5,
+            "pressureWaves": false
           },
           "type": "object",
           "properties": {
@@ -548,6 +554,10 @@
               "type": "number",
               "minimum": 0.3,
               "maximum": 4
+            },
+            "pressureWaves": {
+              "default": false,
+              "type": "boolean"
             }
           },
           "required": [

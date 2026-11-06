@@ -91,6 +91,23 @@ export function ExhaustEditor({
           ))}
         </TextField>
       </div>
+      {!twoStroke && (
+        <FormControlLabel
+          control={
+            <Switch
+              checked={value.pressureWaves}
+              disabled={disabled}
+              onChange={(e) =>
+                onChange((current) => ({
+                  ...current,
+                  pressureWaves: e.target.checked,
+                }))
+              }
+            />
+          }
+          label="Simulate exhaust pressure waves"
+        />
+      )}
       <FormControlLabel
         control={
           <Switch
@@ -107,9 +124,13 @@ export function ExhaustEditor({
         label="Catalytic converter"
       />
       <p className="cranking-note">
-        {silencerNotes[value.silencer]} The exhaust shapes the sound only: in
-        this model version it does not change back pressure or power. Unburned
-        fuel from a misfire or the rev limiter can pop in a hot exhaust.
+        {silencerNotes[value.silencer]}{' '}
+        {twoStroke
+          ? 'The two-stroke pipe above owns gas exchange; these settings shape its sound after the stinger.'
+          : value.pressureWaves
+            ? 'Primary length, collector layout and valve overlap now tune the pressure returning to each exhaust valve and can change torque.'
+            : 'Pressure-wave tuning is off, so this exhaust shapes sound without changing gas exchange or power.'}{' '}
+        Unburned fuel from a misfire or the rev limiter can pop in a hot exhaust.
       </p>
     </div>
   )

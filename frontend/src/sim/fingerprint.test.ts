@@ -5,10 +5,9 @@ import type { EngineDefinition } from './schema'
 import { realEngines } from '../bench/presets'
 
 /**
- * Exact four-stroke output. The first seven hashes were re-recorded from an
- * untouched archive of the 1.14.1 commit on the current supported runtime;
- * the older checked-in hashes were already stale. Stage 11's first seven
- * match that clean baseline exactly, followed by its four new layouts.
+ * Exact four-stroke output. Legacy hashes were recorded from the clean
+ * 1.14.1/1.15.0 path; schema-4 builds opt into pressure-wave tuning and get
+ * a second pinned set. Disabling the opt-in must keep every old hash exactly.
  */
 function fingerprint(engine: EngineDefinition) {
   const core = new EngineCore(engine, normalConditions)
@@ -38,11 +37,15 @@ function fingerprint(engine: EngineDefinition) {
 }
 
 describe('four-stroke results', () => {
-  it('keep the 1.14.1 builds bit-for-bit and pin the Stage 11 layouts', { timeout: 120000 }, () => {
+  it('keeps legacy builds bit-for-bit and pins pressure-wave results', { timeout: 120000 }, () => {
     const builds = [roadEngine, sportEngine, ...realEngines.map((p) => p.engine)].filter(
       (e) => e.cycle === 'four-stroke',
     )
-    expect(builds.map(fingerprint)).toEqual([
+    const legacy = builds.map((engine) => ({
+      ...engine,
+      exhaust: { ...engine.exhaust, pressureWaves: false },
+    }))
+    expect(legacy.map(fingerprint)).toEqual([
       '1f4a150343025205',
       'dce91837020d0507',
       '48de30e3e29b02b9',
@@ -54,6 +57,19 @@ describe('four-stroke results', () => {
       'a7f807a78d15d401',
       '5f529de88bdf1b04',
       'f53479f9d23ec6bf',
+    ])
+    expect(builds.map(fingerprint)).toEqual([
+      'f50500494fbffd81',
+      '80f696624b71e988',
+      'edb12e049c3d63f4',
+      '4148c73131a1fc51',
+      'c483cf890f8b7003',
+      'd02a7057b432d379',
+      '6521583bfb0db0b9',
+      '20220ca5c26baf9f',
+      '0e12d0107a573bb0',
+      '4e41f1115dd98c91',
+      'b6c5dbb1914dd551',
     ])
   })
 })

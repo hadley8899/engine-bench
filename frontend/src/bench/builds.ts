@@ -117,6 +117,7 @@ export const starterBuilds: StarterBuild[] = [
         catalyst: false,
         silencer: 'straight',
         tailpipeLength: 1.2,
+        pressureWaves: true,
       },
     },
   },

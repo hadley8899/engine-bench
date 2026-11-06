@@ -6,12 +6,14 @@
  */
 import {
   combustionDefaults,
+  ENGINE_SCHEMA_VERSION,
   exhaustDefaults,
   flatMaps,
   fuelSystemDefaults,
   inductionDefaults,
   roadEngine,
   stockParts,
+  tunedExhaustDefaults,
 } from '../sim/schema'
 import type { EngineDefinition, Management, TwoStroke } from '../sim/schema'
 import { camsFromEvents } from '../sim/cams'
@@ -60,7 +62,7 @@ const axx: EngineDefinition = {
   management: null,
   fuelSupply: { injectorFlow: 450, maxDuty: 0.85, pumpFlow: 130 },
   exhaust: {
-    ...exhaustDefaults,
+    ...tunedExhaustDefaults,
     headerLength: 0.3,
     silencer: 'absorptive',
     tailpipeLength: 2.4,
@@ -177,7 +179,7 @@ const k20a: EngineDefinition = {
   management: null,
   fuelSupply: { injectorFlow: 360, maxDuty: 0.85, pumpFlow: 130 },
   exhaust: {
-    ...exhaustDefaults,
+    ...tunedExhaustDefaults,
     headerLength: 0.45,
     collector: '4-2-1',
     silencer: 'absorptive',
@@ -223,7 +225,7 @@ const evo: EngineDefinition = {
   combustion: { ...combustionDefaults, fuel: 'ron98' },
   management: null,
   fuelSupply: { injectorFlow: 560, maxDuty: 0.85, pumpFlow: 190 },
-  exhaust: { ...exhaustDefaults, headerLength: 0.3, silencer: 'absorptive' },
+  exhaust: { ...tunedExhaustDefaults, headerLength: 0.3, silencer: 'absorptive' },
   parts: stockParts,
 }
 // Nissan SR20DET (Silvia S15 Spec-R, 1999).
@@ -259,7 +261,7 @@ const sr20: EngineDefinition = {
   combustion: { ...combustionDefaults, fuel: 'ron98' },
   management: null,
   fuelSupply: { injectorFlow: 480, maxDuty: 0.85, pumpFlow: 160 },
-  exhaust: { ...exhaustDefaults, headerLength: 0.3, silencer: 'absorptive' },
+  exhaust: { ...tunedExhaustDefaults, headerLength: 0.3, silencer: 'absorptive' },
   parts: stockParts,
 }
 // Toyota 4A-GE 16-valve (Corolla Levin/Sprinter Trueno AE86, 1983).
@@ -286,7 +288,7 @@ const ae86: EngineDefinition = {
   combustion: { ...combustionDefaults, fuel: 'ron98' },
   management: null,
   fuelSupply: { injectorFlow: 190, maxDuty: 0.85, pumpFlow: 90 },
-  exhaust: { ...exhaustDefaults, headerLength: 0.5, collector: '4-2-1' },
+  exhaust: { ...tunedExhaustDefaults, headerLength: 0.5, collector: '4-2-1' },
   parts: stockParts,
 }
 
@@ -509,7 +511,7 @@ const rs125: EngineDefinition = racing('Aprilia RS125 (Rotax)', 0.054, 0.0545, 8
 const twoJzBase: EngineDefinition = {
   ...axx,
   name: 'Toyota 2JZ-GTE • Supra RZ',
-  schemaVersion: 3,
+  schemaVersion: ENGINE_SCHEMA_VERSION,
   layout: 'inline-6',
   cylinders: 6,
   firingOrder: [1, 5, 3, 6, 2, 4],
@@ -572,7 +574,7 @@ const rb26: EngineDefinition = {
 const ej20Base: EngineDefinition = {
   ...evo,
   name: 'Subaru EJ20 • Impreza WRX STI',
-  schemaVersion: 3,
+  schemaVersion: ENGINE_SCHEMA_VERSION,
   layout: 'boxer-4',
   cylinders: 4,
   firingOrder: [1, 3, 2, 4],
@@ -606,7 +608,7 @@ const ej20: EngineDefinition = {
 const ls3: EngineDefinition = {
   ...roadEngine,
   name: 'GM LS3 6.2 V8 • Corvette',
-  schemaVersion: 3,
+  schemaVersion: ENGINE_SCHEMA_VERSION,
   layout: 'v-8',
   cylinders: 8,
   firingOrder: [1, 8, 4, 3, 6, 5, 7, 2],
@@ -630,7 +632,7 @@ const ls3: EngineDefinition = {
   combustion: { ...combustionDefaults, fuel: 'ron98' },
   management: null,
   fuelSupply: { injectorFlow: 420, maxDuty: 0.85, pumpFlow: 220 },
-  exhaust: { ...exhaustDefaults, headerLength: 0.48, silencer: 'absorptive' },
+  exhaust: { ...tunedExhaustDefaults, headerLength: 0.48, silencer: 'absorptive' },
   parts: stockParts,
 }
 
@@ -645,7 +647,7 @@ function vTwin250(
   return {
     ...rs125,
     name,
-    schemaVersion: 3,
+    schemaVersion: ENGINE_SCHEMA_VERSION,
     layout: 'v-2',
     cylinders: 2,
     firingOrder: [1, 2],

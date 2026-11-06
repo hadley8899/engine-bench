@@ -47,8 +47,11 @@ import { z } from 'zod'
  * and boxer-four) and a 90-degree two-stroke V-twin. Engine schema 3
  * widens layout, cylinder-count, firing-order and crank-phase fields;
  * existing schema 1/2 builds migrate without changing their results.
+ * 1.16.0: optional four-stroke exhaust pressure waves make primary length,
+ * collector layout and valve overlap affect gas exchange. Engine schema 4
+ * stores the opt-in; older builds keep the legacy ambient-pressure boundary.
  */
-export const MODEL_VERSION = 'eb-0d-1.15.0'
+export const MODEL_VERSION = 'eb-0d-1.16.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -67,6 +70,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.13.0',
   'eb-0d-1.14.0',
   'eb-0d-1.14.1',
+  'eb-0d-1.15.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -185,9 +189,9 @@ export const fuelSystemDefaults = {
 } satisfies { [K in FuelSystemKind]: Extract<FuelSystem, { kind: K }> }
 
 /**
- * Exhaust system after the ports. In this model version it shapes only the
- * sound (pipe resonances, filtering and afterfire); it does not change gas
- * exchange, back pressure or power.
+ * Exhaust system after the ports. Sound always follows it. Four-strokes can
+ * opt into the tuned pressure-wave boundary added in model 1.16.0; the field
+ * defaults off so builds saved by older schemas keep their exact results.
  */
 export const exhaustSchema = z.strictObject({
   /** Primary (header) pipe length from port to collector. */
@@ -199,6 +203,8 @@ export const exhaustSchema = z.strictObject({
   silencer: z.enum(['straight', 'absorptive', 'chambered']),
   /** Pipe from the collector to the outlet, including the silencer. */
   tailpipeLength: z.number().min(0.3).max(4),
+  /** Tuned primary/collector waves act on four-stroke exhaust-valve flow. */
+  pressureWaves: z.boolean().default(false),
 })
 export type Exhaust = z.infer<typeof exhaustSchema>
 export const exhaustDefaults: Exhaust = {
@@ -207,6 +213,12 @@ export const exhaustDefaults: Exhaust = {
   catalyst: true,
   silencer: 'chambered',
   tailpipeLength: 2.5,
+  pressureWaves: false,
+}
+/** New workshop builds opt in; `exhaustDefaults` remains the legacy migration. */
+export const tunedExhaustDefaults: Exhaust = {
+  ...exhaustDefaults,
+  pressureWaves: true,
 }
 
 /**
@@ -498,13 +510,18 @@ export const twoStrokeSchema = z.strictObject({
 })
 export type TwoStroke = z.infer<typeof twoStrokeSchema>
 
-/** Schema 2 adds cycles; schema 3 adds the Stage 11 layouts. */
-export const ENGINE_SCHEMA_VERSION = 3
+/** Schema 2 adds cycles, schema 3 layouts, schema 4 exhaust pressure waves. */
+export const ENGINE_SCHEMA_VERSION = 4
 
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
-  schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  schemaVersion: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+  ]),
   name: z.string().trim().min(1).max(80),
   cycle: z.enum(['four-stroke', 'two-stroke']).default('four-stroke'),
   layout: z.enum([
@@ -654,7 +671,7 @@ export function validateEngine(value: unknown): EngineDefinition {
     if (e.twoStroke)
       throw new Error('A four-stroke has valves, not two-stroke ports.')
   } else twoStrokeProblems(e)
-  // Older builds read as schema 3 without changing their layout or results.
+  // Older builds read as schema 4; missing pressureWaves defaults false.
   return { ...e, schemaVersion: ENGINE_SCHEMA_VERSION }
 }
 /**
@@ -801,7 +818,7 @@ export const roadEngine: EngineDefinition = {
   starterTorque: 150,
   induction: { kind: 'none' },
   fuelSystem: fuelSystemDefaults.port,
-  exhaust: exhaustDefaults,
+  exhaust: tunedExhaustDefaults,
   combustion: combustionDefaults,
   management: null,
   fuelSupply: { injectorFlow: 240, maxDuty: 0.85, pumpFlow: 110 },

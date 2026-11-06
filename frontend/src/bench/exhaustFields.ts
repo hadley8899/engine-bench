@@ -79,6 +79,10 @@ export function describeExhaust(
     changes.push(
       `Collector: ${collectorLabels[a.collector]} → ${collectorLabels[b.collector]}`,
     )
+  if (a.pressureWaves !== b.pressureWaves)
+    changes.push(
+      `Pressure waves: ${a.pressureWaves ? 'on' : 'off'} → ${b.pressureWaves ? 'on' : 'off'}`,
+    )
   if (a.catalyst !== b.catalyst)
     changes.push(
       `Catalyst: ${a.catalyst ? 'fitted' : 'removed'} → ${b.catalyst ? 'fitted' : 'removed'}`,

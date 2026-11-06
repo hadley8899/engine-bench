@@ -43,7 +43,7 @@ Steady full load in normal air (the S337_008 curve read at 500 RPM steps, agains
 | Published, Nm | 170 | 239 | 280 | 280 | 280 | 271 | 254 | 236 | 218 |
 | Preset, Nm | 192 | 224 | 283 | 283–287 | 277 | 266 | 253 | 235 | 211 |
 
-With model 1.13.0's intake phasing the preset makes 172 Nm at 1,000 RPM, 244 at 1,500 and 288 at 2,000; above that it is unchanged. The RMS deviation fell from about 9 to 5 Nm, and every point is within 8 Nm. Before phasing (1.11.0), the largest deviations were +22 Nm at 1,000 RPM and −15 Nm at 1,500, where the model's turbo spools later and its naturally aspirated torque is higher. A standard 1,500–6,600 RPM sweep reaches 148.6 kW at about 6,070 RPM and 289 Nm at 3,650 RPM; in that sweep the hottest EGT is 921 °C and the highest part stress 92% (turbine inlet). `src/sim/presets.test.ts` holds these points to the recorded tolerances.
+Model 1.13.0's intake phasing brought the old fixed-boundary result to 172 Nm at 1,000 RPM, 244 at 1,500 and 288 at 2,000; the RMS deviation fell from about 9 to 5 Nm. With model 1.16.0 pressure waves the held points are 170, 240, 288, 285–290, 281, 270, 258, 241 and 217 Nm from 1,000 through 6,500 RPM: every published point remains within 10 Nm. A standard 1,500–6,600 RPM sweep reaches 152.5 kW at about 6,070 RPM and 291 Nm at 3,860 RPM. Before phasing (1.11.0), the largest deviations were +22 Nm at 1,000 RPM and −15 Nm at 1,500, where the model's turbo spools later and its naturally aspirated torque is higher. `src/sim/presets.test.ts` holds the rated points to the recorded tolerances.
 
 **Known deviation: boost.** At the published 0.9 bar, the model makes about 350–370 Nm instead of 280 Nm, so the preset's boost target is calibrated to 0.6 bar. The model overestimates boosted torque at a given manifold pressure by about 20%. It probably has too little knock-limited spark retard, too little charge heating and too weak residual and back-pressure effects compared with the real K03 at high load. So boost changes on this preset are relative to the model's 0.6 bar, and absolute boost numbers should not be compared with a real car's logs.
 
@@ -82,7 +82,7 @@ The curve was read from the image, so expect about ±5 Nm of reading error.
 | Honda, Nm | ~160 | ~186 | ~204 | ~187 | ~208 | ~218 | ~210 | ~190 |
 | Preset, Nm | 188 | 192 | 200 | 198 | 207 | 212 | 209 | 192 |
 
-With model 1.13.0's intake phasing the preset makes 159, 181, 200, 191, 207, 215, 210 and 192 Nm at those speeds: within 5 Nm everywhere except −5 at 2,500 RPM, and RMS about 3 Nm. Retarding the intake removes 1.12.0's +28 Nm excess at 1,500 RPM and deepens the dip before VTEC. A standard sweep gives 162.3 kW at about 8,170 RPM and 215 Nm at about 6,280. The real i-VTC map is not published, so this phasing is a fit to the curve, not Honda's calibration.
+With model 1.16.0 pressure waves the preset makes 158, 182, 202, 193, 211, 220, 215 and 195 Nm at those speeds: the largest deviation is +5 Nm. Retarding the intake still removes 1.12.0's +28 Nm excess at 1,500 RPM and deepens the dip before VTEC. A standard sweep gives 164.9 kW at about 8,170 RPM and 220 Nm at about 6,280. The real i-VTC map is not published, so this phasing is a fit to the curve, not Honda's calibration.
 
 ## Mitsubishi 4G63T, Lancer Evolution VIII
 
@@ -108,7 +108,7 @@ No manufacturer torque curve was found, so the preset is calibrated to the two r
 
 ### Calibration and deviation
 
-At 3,500 RPM the preset makes 384 Nm against the rated 383 Nm. At 6,500 RPM it makes 305 Nm (208 kW) against 302 Nm (206 kW). Between those points the shape is the model's own: 379 Nm at 2,500 RPM and 347 at 5,500. A standard sweep gives 209.3 kW at about 6,490 RPM and 390 Nm at about 3,550. Unlike the Golf, this preset reaches its rated torque at roughly the real boost, so the model's boosted overestimate (see the Golf) is not consistent between engines. On stock parts, a boost push at 4,300 RPM cracks a cast piston at 1.4 bar above the map.
+With model 1.16.0 pressure waves the preset makes 387 Nm at 3,500 RPM against the rated 383 Nm. At 6,500 RPM it makes 312 Nm (213 kW) against 302 Nm (206 kW). Between those points the shape is the model's own: 378 Nm at 2,500 RPM and 353 at 5,500. A standard sweep gives 214.1 kW at about 6,490 RPM and 393 Nm at about 3,550. Unlike the Golf, this preset reaches its rated torque at roughly the real boost, so the model's boosted overestimate (see the Golf) is not consistent between engines. On stock parts, a boost push at 4,300 RPM cracks a cast piston at 1.4 bar above the map.
 
 ## Nissan SR20DET, Silvia S15 Spec-R
 
@@ -134,7 +134,7 @@ No manufacturer torque curve was found; calibrated to the two rated points.
 
 ### Calibration and deviation
 
-With VTC (1.13.0) the preset makes 274 Nm at 4,800 RPM against the rated 275 Nm, and 276 Nm (185 kW) at 6,400 RPM against 274 Nm (184 kW). It holds 274–281 Nm from 3,000 to 6,400 RPM, the broad plateau the S15 is known for. A standard sweep gives 189.6 kW at about 6,700 RPM and 281 Nm. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
+With VTC and model 1.16.0 pressure waves the preset makes 280 Nm at 4,800 RPM against the rated 275 Nm, and 282 Nm (189 kW) at 6,400 RPM against 274 Nm (184 kW). It holds about 277–285 Nm from 3,000 to 6,400 RPM. A standard sweep gives 193.5 kW at about 6,700 RPM and 285 Nm. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
 
 ## Toyota 4A-GE (16-valve), AE86
 
@@ -156,7 +156,7 @@ No manufacturer torque curve was found; calibrated to the two Japanese rated poi
 
 ### Calibration and deviation
 
-At 5,200 RPM the preset makes 149 Nm against the rated 149 Nm. At 6,600 RPM it makes 130 Nm (90 kW) against 127 Nm (88 kW). A standard sweep gives 91.3 kW at about 6,380 RPM and 150 Nm at about 4,810. Not represented: T-VIS, the intake runner valve that improved low-speed torque.
+With model 1.16.0 pressure waves, at 5,200 RPM the preset makes 151 Nm against the rated 149 Nm. At 6,600 RPM it makes 134 Nm (92.6 kW) against 127 Nm (88 kW). A standard sweep gives 93.8 kW at about 6,490 RPM and 152 Nm at about 4,810. Not represented: T-VIS, the intake runner valve that improved low-speed torque.
 
 ## Yamaha RD350LC (4L0)
 
@@ -288,19 +288,19 @@ Added with model 1.15.0. All use the ordinary cylinder model; there is no preset
 
 ### Toyota 2JZ-GTE — Supra RZ
 
-Toyota's [1993 A80 Supra launch release](https://global.toyota/en/detail/7868203) gives a 3.0-litre inline-six, sequential twin turbos, 206 kW at 5,600 RPM and 44.0 kg-m (431 Nm) at 3,600 RPM. Bore × stroke (86.0 × 86.0 mm), 8.5:1 compression and the 1–5–3–6–2–4 order come from Toyota repair manual RM502U; rod length is inferred. Valve areas, runner, single equivalent turbo, intercooler, maps, inertia and limits are calibrated estimates. It makes 435.7 Nm at 3,600 RPM (+4.7) and 204.9 kW at 5,600 RPM (−1.1). Sequential changeover is not represented.
+Toyota's [1993 A80 Supra launch release](https://global.toyota/en/detail/7868203) gives a 3.0-litre inline-six, sequential twin turbos, 206 kW at 5,600 RPM and 44.0 kg-m (431 Nm) at 3,600 RPM. Bore × stroke (86.0 × 86.0 mm), 8.5:1 compression and the 1–5–3–6–2–4 order come from Toyota repair manual RM502U; rod length is inferred. Valve areas, runner, single equivalent turbo, intercooler, maps, inertia and limits are calibrated estimates. With model 1.16.0 pressure waves it makes 437.9 Nm at 3,600 RPM (+6.9) and 208.2 kW at 5,600 RPM (+2.2). Sequential changeover is not represented.
 
 ### Nissan RB26DETT — Skyline GT-R R34
 
-Nissan's [Heritage Collection R34](https://www.nissan-global.com/EN/HERITAGE_COLLECTION/280_skyline_gt-r_v-spec_ii.html) gives 2,568 cc, inline-six DOHC twin turbo, 206 kW at 6,800 RPM and 392 Nm at 4,400 RPM. Bore × stroke (86.0 × 73.7 mm), 8.5:1 compression and 1–5–3–6–2–4 come from Nissan's R34 service manual; the geometry calculates to 2,568.7 cc while Nissan labels it 2,568. Rod length, breathing, equivalent turbo and maps are inferred/calibrated. It makes 391.4 Nm at 4,400 RPM (−0.6) and 204.9 kW at 6,800 RPM (−1.1). The individual ceramic turbos and six-throttle intake are not represented.
+Nissan's [Heritage Collection R34](https://www.nissan-global.com/EN/HERITAGE_COLLECTION/280_skyline_gt-r_v-spec_ii.html) gives 2,568 cc, inline-six DOHC twin turbo, 206 kW at 6,800 RPM and 392 Nm at 4,400 RPM. Bore × stroke (86.0 × 73.7 mm), 8.5:1 compression and 1–5–3–6–2–4 come from Nissan's R34 service manual; the geometry calculates to 2,568.7 cc while Nissan labels it 2,568. Rod length, breathing, equivalent turbo and maps are inferred/calibrated. With model 1.16.0 pressure waves it makes 393.7 Nm at 4,400 RPM (+1.7) and 208.8 kW at 6,800 RPM (+2.8). The individual ceramic turbos and six-throttle intake are not represented.
 
 ### Subaru EJ20 — Impreza WRX STI
 
-Subaru's [31 October 2000 release](https://www.subaru.co.jp/news/archives/00_10_12/10_31_1.html) gives a 1,994 cc turbo boxer-four, 92.0 × 75.0 mm, 8.0:1, 206 kW at 6,400 RPM and 373 Nm at 4,000 RPM. It also identifies AVCS. Rod length, valve events/areas, turbo and maps are inferred/calibrated; the present preset does not reproduce a published cam map. It makes 372.0 Nm at 4,000 RPM (−1.0) and 199.9 kW at 6,400 RPM (−3.0%). Unequal header lengths and bank-specific pulses are not solved, so its familiar exhaust note is only approximated by firing order and the synthesiser.
+Subaru's [31 October 2000 release](https://www.subaru.co.jp/news/archives/00_10_12/10_31_1.html) gives a 1,994 cc turbo boxer-four, 92.0 × 75.0 mm, 8.0:1, 206 kW at 6,400 RPM and 373 Nm at 4,000 RPM. It also identifies AVCS. Rod length, valve events/areas, turbo and maps are inferred/calibrated; the present preset does not reproduce a published cam map. With model 1.16.0 pressure waves it makes 375.2 Nm at 4,000 RPM (+2.2) and 204.6 kW at 6,400 RPM (−0.7%). Unequal header lengths and bank-specific pulses are not solved, so its familiar exhaust note is only approximated by firing order and the synthesiser.
 
 ### GM LS3 6.2 V8
 
-Chevrolet Performance's [LS3 specification](https://www.chevrolet.com/performance-parts/crate-engines/ls-lsx-engines/ls3-engine) gives a 6.2-litre Gen IV V8, 103.25 × 92.0 mm, 10.7:1, 430 hp (321 kW) at 5,900 RPM, 425 lb-ft (576 Nm) at 4,600 RPM and a 6,600 RPM maximum recommendation. It also specifies hypereutectic pistons and powdered-metal rods; the preset leaves the simulator's generic stock-part limits because those are model estimates. Rod length, effective valve areas/events and exhaust are inferred/calibrated. It makes 578.6 Nm at 4,600 RPM (+2.6) and 313.6 kW at 5,900 RPM (−2.3%). The cross-plane 1–8–4–3–6–5–7–2 order is represented; pushrods, the real hydraulic-roller cam and four-primary collector grouping are not.
+Chevrolet Performance's [LS3 specification](https://www.chevrolet.com/performance-parts/crate-engines/ls-lsx-engines/ls3-engine) gives a 6.2-litre Gen IV V8, 103.25 × 92.0 mm, 10.7:1, 430 hp (321 kW) at 5,900 RPM, 425 lb-ft (576 Nm) at 4,600 RPM and a 6,600 RPM maximum recommendation. It also specifies hypereutectic pistons and powdered-metal rods; the preset leaves the simulator's generic stock-part limits because those are model estimates. Rod length, effective valve areas/events and exhaust are inferred/calibrated. With model 1.16.0 pressure waves it makes 585.1 Nm at 4,600 RPM (+9.1) and 318.0 kW at 5,900 RPM (−0.9%). The cross-plane 1–8–4–3–6–5–7–2 order is represented; pushrods, the real hydraulic-roller cam and bank-specific four-primary collectors are not.
 
 `src/sim/presets.test.ts` holds the four rated points to their stated tolerances and checks displacement, no failure and less than 95% estimated stress. Full published curves were not found for these exact specifications, so the interface describes them as calibrated approximations rather than replicas.
 

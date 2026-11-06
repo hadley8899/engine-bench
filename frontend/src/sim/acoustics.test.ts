@@ -14,7 +14,7 @@ import type { EngineDefinition, Exhaust } from './schema'
 
 const withExhaust = (exhaust: Partial<Exhaust>): EngineDefinition => ({
   ...roadEngine,
-  exhaust: { ...exhaustDefaults, ...exhaust },
+  exhaust: { ...roadEngine.exhaust, ...exhaust },
 })
 const straight = withExhaust({ silencer: 'straight', catalyst: false })
 
@@ -77,7 +77,7 @@ describe('engine sound', () => {
     void exhaust
     expect(engineSchema.parse(old).exhaust).toEqual(exhaustDefaults)
   })
-  it('never changes the physics: exhaust, listener and muting', () => {
+  it('keeps downstream sound hardware, listener and muting out of physics', () => {
     const run = (engine: EngineDefinition, listener: Listener, sound = true) => {
       const core = new EngineCore(engine, normalConditions)
       core.sound = sound
@@ -89,7 +89,7 @@ describe('engine sound', () => {
     }
     const reference = run(roadEngine, 'tailpipe')
     expect(run(straight, 'cell')).toEqual(reference)
-    expect(run(withExhaust({ collector: '4-2-1' }), 'bay')).toEqual(reference)
+    expect(run(withExhaust({ tailpipeLength: 0.8 }), 'bay')).toEqual(reference)
     expect(run(roadEngine, 'tailpipe', false)).toEqual(reference)
   })
   it('stays finite and bounded for every exhaust, listener and induction', () => {
@@ -123,8 +123,8 @@ describe('engine sound', () => {
   it('makes a straight pipe louder and brighter than a silenced exhaust', () => {
     const quiet = listen(roadEngine, { throttle: 1, holdRpm: 4000 }).audio
     const loud = listen(straight, { throttle: 1, holdRpm: 4000 }).audio
-    // About +2.8 dB since 1.10.0's dissociation made λ 1 exhaust pulses hotter.
-    expect(rms(loud)).toBeGreaterThan(rms(quiet) * 1.35)
+    // Still about +2.4 dB with model 1.16.0's pressure-shaped port pulses.
+    expect(rms(loud)).toBeGreaterThan(rms(quiet) * 1.3)
     expect(brightness(loud)).toBeGreaterThan(brightness(quiet) * 1.5)
   })
   it('tunes pipe resonances by length: longer headers sound lower', () => {

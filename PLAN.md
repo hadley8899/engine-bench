@@ -4,7 +4,7 @@ Updated: 6 November 2026
 
 ## Active delivery goal
 
-Stage 11, additional layouts, is complete (model 1.15.0, engine schema 3): inline-six, V6, cross-plane V8, boxer-four and 90° two-stroke V-twin builds run through the same bench, and Stage 7's 2JZ-GTE, RB26DETT, EJ20 and LS3 presets plus the Aprilia RS250 and Honda RS250R are included. Phases 1–3 and Stages 5–11 are otherwise complete as recorded below. Stage 12, fidelity and release readiness, is next; Stage 13's 3D overhaul follows it. Phase 2's human first-use check remains open and does not block later work.
+Stage 12, fidelity and release readiness, is in progress. Stage 12.1 is complete (model 1.16.0, engine schema 4): an opt-in four-stroke exhaust waveguide makes primary length, collector layout and cam overlap affect gas exchange and torque, while older builds retain their exact fixed-boundary results. Stage 11's layouts and presets remain complete as recorded below. Stage 12.2, naturally aspirated low-speed torque, is next; Stage 13's 3D overhaul follows Stage 12. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
@@ -374,7 +374,7 @@ Known model gaps to fix (user request, 4 November 2026). Each is recorded with i
 
 Gas exchange and cams:
 
-- [ ] Model exhaust pressure waves (a 1D or tuned-pipe model) so header length, collector type and cam overlap affect scavenging and power, not only sound. Today the exhaust is a lumped back pressure, so tuned exhaust pulses cannot scavenge the cylinder.
+- [x] Model exhaust pressure waves so header length, collector type and cam overlap affect scavenging and power, not only sound. Model 1.16.0 uses a bounded digital waveguide with pressure/admittance scattering at 4-1 or paired 4-2-1 collectors. New schema-4 builds opt in; older builds default off and keep their exact results. Trend, compatibility, preset, browser and performance evidence is in `docs/VERIFICATION.md` and assumptions in `docs/SIMULATION.md`.
 - [ ] Reduce naturally aspirated low-speed torque, which runs high: the K20A was 28 Nm over Honda's curve at 1,500 RPM and the Golf 22 Nm over at 1,000 RPM before cam phasing hid it. Review low-speed volumetric efficiency, residual and wall heat.
 - [ ] Add valve ramps and realistic cam acceleration profiles in place of half-sine lift, so a cam's aggressiveness can differ at the same duration and lift.
 - [ ] Make valve float progressive (lost power and erratic seating) before it bends a valve, and give valve-to-piston room per engine (valve reliefs), rather than half the clearance height for every build.
@@ -404,8 +404,8 @@ Sound:
 
 Checks:
 
-- [x] Run the backend tests in Docker after the schema changes. On 6 November, model 1.15.0 and engine schema 3 passed all 35 Pest tests (196 assertions); the isolated browser-storage API also passed in Chromium and Firefox against its dedicated test database.
-- [x] Make the existing browser suite reliable. On 6 November the complete Chromium run passed all 38 enabled tests in one run (three isolated storage tests skipped there and passed separately in Chromium and Firefox), including emergency stop, loaded stall, over-boost, Golf and sign-in navigation.
+- [x] Run the backend tests in Docker after the schema changes. On 6 November, model 1.16.0 and engine schema 4 passed all 35 Pest tests (196 assertions); the isolated browser-storage API also passed all six cases in Chromium and Firefox against its dedicated test database, including a pressure-wave V8 and immutable run.
+- [x] Make the existing browser suite reliable. On 6 November the complete Chromium run passed all 39 enabled tests in one run (three isolated storage tests skipped there and passed separately in Chromium and Firefox), including emergency stop, loaded stall, over-boost, Golf, sign-in navigation and the Stage 12.1 pressure-wave workflow. The Stage 12.1 workflow also passed in Firefox.
 
 Release readiness:
 

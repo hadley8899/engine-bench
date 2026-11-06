@@ -126,7 +126,7 @@ test('a two-stroke build and its run save, reload and load back', async ({ page 
   expect(errors).toEqual([])
 })
 
-test('a schema 3 multibank build and immutable run persist', async ({ page }) => {
+test('a schema 4 pressure-wave multibank build and immutable run persist', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const name = `Stage 11 V8 ${test.info().project.name} ${Date.now()}`
@@ -155,6 +155,10 @@ test('a schema 3 multibank build and immutable run persist', async ({ page }) =>
   const build = page.locator('.library-entry').filter({ hasText: name }).filter({ has: page.getByRole('button', { name: 'Load build', exact: true }) })
   await build.getByRole('button', { name: 'Load build', exact: true }).click()
   await expect(page.getByTestId('command-bar')).toContainText('V8 · 1–8–4–3–6–5–7–2')
+  await openSection(page, 'Exhaust')
+  await expect(
+    page.getByRole('switch', { name: 'Simulate exhaust pressure waves' }),
+  ).toBeChecked()
   await expect(page.locator('.run-entry').filter({ hasText: name })).toHaveCount(1)
   expect(errors).toEqual([])
 })
