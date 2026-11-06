@@ -20,15 +20,27 @@ export const pipeLabels = {
 
 /** Cycle and cylinder layouts the workshop offers. */
 export const CYCLE_LAYOUTS = [
-  { key: 'four', label: 'Four-stroke inline-four' },
+  { key: 'inline4', label: 'Four-stroke inline-four' },
+  { key: 'inline6', label: 'Four-stroke inline-six' },
+  { key: 'v6', label: 'Four-stroke V6' },
+  { key: 'v8', label: 'Four-stroke cross-plane V8' },
+  { key: 'boxer4', label: 'Four-stroke boxer-four' },
   { key: 'single', label: 'Two-stroke single' },
   { key: 'twin180', label: 'Two-stroke twin, 180° crank' },
   { key: 'twin360', label: 'Two-stroke twin, 360° crank' },
+  { key: 'vtwin90', label: 'Two-stroke 90° V-twin' },
 ] as const
 export type CycleLayout = (typeof CYCLE_LAYOUTS)[number]['key']
 export function cycleLayout(e: EngineDefinition): CycleLayout {
-  if (e.cycle !== 'two-stroke') return 'four'
+  if (e.cycle !== 'two-stroke') {
+    if (e.layout === 'inline-6') return 'inline6'
+    if (e.layout === 'v-6') return 'v6'
+    if (e.layout === 'v-8') return 'v8'
+    if (e.layout === 'boxer-4') return 'boxer4'
+    return 'inline4'
+  }
   if (e.cylinders === 1) return 'single'
+  if (e.layout === 'v-2') return 'vtwin90'
   return e.twoStroke?.crankPhase === 360 ? 'twin360' : 'twin180'
 }
 
@@ -76,18 +88,28 @@ export function setIntakeKind(e: EngineDefinition, kind: TwoStrokeIntakeKind): E
  * switch back.
  */
 export function withCycleLayout(e: EngineDefinition, layout: CycleLayout): EngineDefinition {
-  if (layout === 'four')
-    return e.cycle === 'four-stroke'
-      ? e
-      : {
-          ...e,
-          cycle: 'four-stroke',
-          layout: 'inline-4',
-          cylinders: 4,
-          firingOrder: [1, 3, 4, 2],
-          twoStroke: null,
-          inertia: Math.max(e.inertia, roadEngine.inertia * 0.5),
-        }
+  const fourStroke = {
+    inline4: { layout: 'inline-4', cylinders: 4, firingOrder: [1, 3, 4, 2] },
+    inline6: { layout: 'inline-6', cylinders: 6, firingOrder: [1, 5, 3, 6, 2, 4] },
+    v6: { layout: 'v-6', cylinders: 6, firingOrder: [1, 4, 2, 5, 3, 6] },
+    v8: { layout: 'v-8', cylinders: 8, firingOrder: [1, 8, 4, 3, 6, 5, 7, 2] },
+    boxer4: { layout: 'boxer-4', cylinders: 4, firingOrder: [1, 3, 2, 4] },
+  } as const
+  if (layout in fourStroke) {
+    const next = fourStroke[layout as keyof typeof fourStroke]
+    const inertia = Math.max(
+      e.inertia * (next.cylinders / e.cylinders),
+      roadEngine.inertia * 0.5 * (next.cylinders / 4),
+    )
+    return {
+      ...e,
+      cycle: 'four-stroke',
+      ...next,
+      firingOrder: [...next.firingOrder],
+      twoStroke: null,
+      inertia,
+    }
+  }
   const cylinders = layout === 'single' ? 1 : 2
   const base = e.twoStroke ?? scaledTwoStroke(e)
   const management = e.management && {
@@ -102,7 +124,7 @@ export function withCycleLayout(e: EngineDefinition, layout: CycleLayout): Engin
   return {
     ...e,
     cycle: 'two-stroke',
-    layout: cylinders === 1 ? 'single' : 'inline-2',
+    layout: cylinders === 1 ? 'single' : layout === 'vtwin90' ? 'v-2' : 'inline-2',
     cylinders,
     firingOrder: cylinders === 1 ? [1] : [1, 2],
     induction: { kind: 'none' },
@@ -113,7 +135,10 @@ export function withCycleLayout(e: EngineDefinition, layout: CycleLayout): Engin
     cams: null,
     camSwitch: null,
     management,
-    twoStroke: { ...base, crankPhase: layout === 'twin360' ? 360 : 180 },
+    twoStroke: {
+      ...base,
+      crankPhase: layout === 'twin360' ? 360 : layout === 'vtwin90' ? 90 : 180,
+    },
   }
 }
 

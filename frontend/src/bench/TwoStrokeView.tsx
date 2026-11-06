@@ -156,10 +156,11 @@ export function TwoStrokeView({
     host.appendChild(renderer.domElement)
     renderer.domElement.setAttribute(
       'aria-label',
-      `Interactive two-stroke ${engine.cylinders === 1 ? 'single' : 'twin'} cutaway showing the ports and exhaust pipe; drag to orbit and scroll to zoom`,
+      `Interactive two-stroke ${engine.cylinders === 1 ? 'single' : engine.layout === 'v-2' ? '90 degree V-twin' : 'parallel twin'} cutaway showing the ports and exhaust pipe; drag to orbit and scroll to zoom`,
     )
     const scene = new THREE.Scene()
     const meshes: THREE.Mesh[] = []
+    let currentParent: THREE.Object3D = scene
     const material = (
       color: number,
       extra: THREE.MeshStandardMaterialParameters = {},
@@ -184,7 +185,7 @@ export function TwoStrokeView({
       x: number,
       y: number,
       z: number,
-      parent: THREE.Object3D = scene,
+      parent: THREE.Object3D = currentParent,
     ) {
       const m = new THREE.Mesh(geometry, mat)
       m.position.set(x, y, z)
@@ -241,6 +242,12 @@ export function TwoStrokeView({
     const exhaustTop = deck - ts.exhaustPort.height
     const transferTop = deck - ts.transfers.height
     for (let i = 0; i < n; i++) {
+      const bank = new THREE.Group()
+      if (engine.layout === 'v-2') {
+        bank.rotation.x = (i === 0 ? 1 : -1) * Math.PI / 4
+        scene.add(bank)
+        currentParent = bank
+      } else currentParent = scene
       const x = (i - (n - 1) / 2) * spacing
       // Liner, barrel casting behind it and the head.
       mesh(new THREE.CylinderGeometry(radius, radius, deck - bottomDead + skirt, 40, 1, true), liner, x, (deck + bottomDead - skirt) / 2, 0)
@@ -284,7 +291,7 @@ export function TwoStrokeView({
       rods.push(rod)
       const web = new THREE.Group()
       web.position.set(x, crankY, 0)
-      scene.add(web)
+      currentParent.add(web)
       for (const side of [-1, 1]) {
         const disc = mesh(new THREE.CylinderGeometry(r * 1.9, r * 1.9, 0.12 * u, 40), steel, side * 0.5 * u, 0, 0, web)
         disc.rotation.z = Math.PI / 2
@@ -303,7 +310,7 @@ export function TwoStrokeView({
         // Reed block on the crankcase behind the cylinder; petals open on depression.
         const block = new THREE.Group()
         block.position.set(x, crankY + ccRadius * 0.6, -ccRadius * 0.95)
-        scene.add(block)
+        currentParent.add(block)
         mesh(new THREE.BoxGeometry(0.7 * u, 0.5 * u, 0.25 * u), casting, 0, 0, -0.12 * u, block)
         const petal = new THREE.Group()
         mesh(new THREE.BoxGeometry(0.6 * u, 0.45 * u, 0.01 * u), material(0x272727, { metalness: 0.2 }), 0, -0.22 * u, 0, petal)
@@ -314,7 +321,7 @@ export function TwoStrokeView({
       if (ts.intake.kind === 'rotary') {
         const disc = new THREE.Group()
         disc.position.set(x + 0.75 * u, crankY, 0)
-        scene.add(disc)
+        currentParent.add(disc)
         const shape = new THREE.Shape()
         const open = ((ts.intake.open + ts.intake.close) * Math.PI) / 180
         shape.absarc(0, 0, ccRadius * 0.9, open / 2, TAU - open / 2, false)
@@ -353,14 +360,15 @@ export function TwoStrokeView({
       const rings = Math.max(48, Math.round(total / 0.006))
       const sweep = sweptTube(path, total, rings, 24, radiusAt)
       const pipeMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.8, envMapIntensity: 0.25, side: THREE.DoubleSide })
-      mesh(sweep, pipeMat, 0, 0, 0)
+      const pipeObject = mesh(sweep, pipeMat, 0, 0, 0)
       pipeMeshes.push({ geometry: sweep, cells: Array.from({ length: rings + 1 }, (_, k) => k / rings), around: 24 })
-      pipeObjects.push(scene.children[scene.children.length - 1])
+      pipeObjects.push(pipeObject)
     }
+    currentParent = scene
     // Framing: the cylinder and crankcase, the pipe, or everything.
     const engineBox = new THREE.Box3(
-      new THREE.Vector3(-(n - 1) * spacing / 2 - u, crankY - r * 2.4, -r * 2.4),
-      new THREE.Vector3((n - 1) * spacing / 2 + u, deck + 0.9 * u, r * 2.4),
+      new THREE.Vector3(-(n - 1) * spacing / 2 - u, crankY - r * 3.2, -deck),
+      new THREE.Vector3((n - 1) * spacing / 2 + u, deck + 0.9 * u, deck),
     )
     const pipeBox = new THREE.Box3()
     for (const o of pipeObjects) pipeBox.expandByObject(o)
@@ -536,7 +544,7 @@ export function TwoStrokeView({
         <span>
           {slow
             ? 'INSPECTION · 15 RPM · sound muted · pipe waves from the last revolution'
-            : `LIVE CUTAWAY · TWO-STROKE ${engine.cylinders === 1 ? 'SINGLE' : 'TWIN'}`}
+            : `LIVE CUTAWAY · TWO-STROKE ${engine.cylinders === 1 ? 'SINGLE' : engine.layout === 'v-2' ? '90° V-TWIN' : 'PARALLEL TWIN'}`}
         </span>
         <span>Ports glow while open · pipe: blue suction, orange pressure</span>
       </div>

@@ -28,7 +28,12 @@ export function continueCore(
   conditions: Conditions,
 ): Core {
   const cycle = engine.cycle ?? 'four-stroke'
-  if (previous.engine.cycle !== cycle || previous.engine.cylinders !== engine.cylinders)
+  if (
+    previous.engine.cycle !== cycle ||
+    previous.engine.layout !== engine.layout ||
+    previous.engine.cylinders !== engine.cylinders ||
+    previous.engine.firingOrder.join() !== engine.firingOrder.join()
+  )
     return createCore(engine, conditions)
   return previous instanceof TwoStrokeCore
     ? TwoStrokeCore.continueFrom(previous, engine, conditions)
@@ -39,7 +44,9 @@ export function continueCore(
 export function canContinue(previous: EngineDefinition, next: EngineDefinition) {
   return (
     (previous.cycle ?? 'four-stroke') === (next.cycle ?? 'four-stroke') &&
-    previous.cylinders === next.cylinders
+    previous.layout === next.layout &&
+    previous.cylinders === next.cylinders &&
+    previous.firingOrder.join() === next.firingOrder.join()
   )
 }
 

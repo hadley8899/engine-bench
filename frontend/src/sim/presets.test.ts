@@ -109,6 +109,39 @@ const published: Record<
     points: [[10500, 19, 1.5]],
     kw: [10500, 21],
   },
+  '2JZ-GTE': {
+    cc: 2997,
+    points: [[3600, 431, 18]],
+    kw: [5600, 206],
+  },
+  RB26DETT: {
+    // 86.0 × 73.7 mm calculates to 2,568.7 cc; Nissan labels it 2,568 cc.
+    cc: 2568.7,
+    points: [[4400, 392, 18]],
+    kw: [6800, 206],
+  },
+  'Subaru EJ20': {
+    cc: 1994,
+    points: [[4000, 373, 18]],
+    kw: [6400, 206],
+  },
+  'GM LS3': {
+    cc: 6162,
+    points: [[4600, 576, 25]],
+    kw: [5900, 321],
+  },
+  'Aprilia RS250': {
+    cc: 249,
+    share: 0.7,
+    points: [[11000, 39, 4]],
+    kw: [11000, 45],
+  },
+  'Honda RS250R': {
+    cc: 250,
+    share: 0.55,
+    points: [[12500, 48, 5]],
+    kw: [12500, 63],
+  },
 }
 function steady(engine: EngineDefinition, rpm: number) {
   const core = createCore(engine, normalConditions)

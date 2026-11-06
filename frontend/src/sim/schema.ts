@@ -43,8 +43,12 @@ import { z } from 'zod'
  * cylinders on small pipes left the model), and an exhaust window larger
  * than the header flows no more than the header. Two-stroke results move
  * by up to about 5%; four-strokes keep 1.13.0 results.
+ * 1.15.0: additional four-stroke layouts (inline-six, V6, cross-plane V8
+ * and boxer-four) and a 90-degree two-stroke V-twin. Engine schema 3
+ * widens layout, cylinder-count, firing-order and crank-phase fields;
+ * existing schema 1/2 builds migrate without changing their results.
  */
-export const MODEL_VERSION = 'eb-0d-1.14.1'
+export const MODEL_VERSION = 'eb-0d-1.15.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -62,6 +66,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.12.0',
   'eb-0d-1.13.0',
   'eb-0d-1.14.0',
+  'eb-0d-1.14.1',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -489,21 +494,36 @@ export const twoStrokeSchema = z.strictObject({
     })
     .nullable(),
   /** Crank angle between a twin's cylinders: 180° alternate, 360° together. */
-  crankPhase: z.union([z.literal(180), z.literal(360)]),
+  crankPhase: z.union([z.literal(90), z.literal(180), z.literal(360)]),
 })
 export type TwoStroke = z.infer<typeof twoStrokeSchema>
 
-/** Engine schema 2 adds the cycle; schema 1 builds read as four-strokes. */
-export const ENGINE_SCHEMA_VERSION = 2
+/** Schema 2 adds cycles; schema 3 adds the Stage 11 layouts. */
+export const ENGINE_SCHEMA_VERSION = 3
 
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
 export const engineSchema = z.strictObject({
-  schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   name: z.string().trim().min(1).max(80),
   cycle: z.enum(['four-stroke', 'two-stroke']).default('four-stroke'),
-  layout: z.enum(['inline-4', 'single', 'inline-2']),
-  cylinders: z.union([z.literal(1), z.literal(2), z.literal(4)]),
+  layout: z.enum([
+    'inline-4',
+    'inline-6',
+    'v-6',
+    'v-8',
+    'boxer-4',
+    'single',
+    'inline-2',
+    'v-2',
+  ]),
+  cylinders: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(4),
+    z.literal(6),
+    z.literal(8),
+  ]),
   bore: z.number().min(0.02).max(0.3),
   stroke: z.number().min(0.02).max(0.3),
   rodLength: z.number().min(0.03).max(0.6),
@@ -544,8 +564,8 @@ export const engineSchema = z.strictObject({
   camSwitch: camSwitchSchema.nullable().default(null),
   // Builds saved before 1.13.0 have fixed valve events.
   cams: camsSchema.nullable().default(null),
-  /** Cylinder numbers in firing order: 1–3–4–2 for the inline-four. */
-  firingOrder: z.array(z.number().int().min(1).max(4)).min(1).max(4),
+  /** Cylinder numbers in firing order; validation fixes one order per layout. */
+  firingOrder: z.array(z.number().int().min(1).max(8)).min(1).max(8),
   /**
    * Ports, crankcase and pipe of a two-stroke; null for four-strokes,
    * whose valve, runner and cam settings a two-stroke ignores.
@@ -619,14 +639,22 @@ export function validateEngine(value: unknown): EngineDefinition {
   )
     throw new Error('The firing order must name each cylinder once.')
   if (e.cycle === 'four-stroke') {
-    if (e.layout !== 'inline-4' || e.cylinders !== 4)
-      throw new Error('Four-strokes are inline-fours in this model version.')
-    if (e.firingOrder.join() !== '1,3,4,2')
-      throw new Error('The inline-four fires 1–3–4–2.')
+    const layouts = {
+      'inline-4': { cylinders: 4, order: '1,3,4,2' },
+      'inline-6': { cylinders: 6, order: '1,5,3,6,2,4' },
+      'v-6': { cylinders: 6, order: '1,4,2,5,3,6' },
+      'v-8': { cylinders: 8, order: '1,8,4,3,6,5,7,2' },
+      'boxer-4': { cylinders: 4, order: '1,3,2,4' },
+    } as const
+    const spec = layouts[e.layout as keyof typeof layouts]
+    if (!spec || e.cylinders !== spec.cylinders)
+      throw new Error('The cylinder count must match the four-stroke layout.')
+    if (e.firingOrder.join() !== spec.order)
+      throw new Error(`The ${e.layout} firing order is ${spec.order.replaceAll(',', '–')}.`)
     if (e.twoStroke)
       throw new Error('A four-stroke has valves, not two-stroke ports.')
   } else twoStrokeProblems(e)
-  // Schema 1 builds are four-strokes; they read as schema 2 unchanged.
+  // Older builds read as schema 3 without changing their layout or results.
   return { ...e, schemaVersion: ENGINE_SCHEMA_VERSION }
 }
 /**
@@ -676,10 +704,11 @@ function twoStrokeProblems(e: EngineDefinition) {
   if (
     !(
       (e.layout === 'single' && e.cylinders === 1) ||
-      (e.layout === 'inline-2' && e.cylinders === 2)
+      (e.layout === 'inline-2' && e.cylinders === 2) ||
+      (e.layout === 'v-2' && e.cylinders === 2 && t.crankPhase === 90)
     )
   )
-    throw new Error('Two-strokes are singles or inline twins in this model version.')
+    throw new Error('Two-strokes are singles, parallel twins or 90° V-twins.')
   if (e.induction.kind !== 'none')
     throw new Error(
       'Forced induction is not modelled on a crankcase-scavenged two-stroke.',

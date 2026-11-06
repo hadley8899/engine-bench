@@ -5,9 +5,10 @@ import type { EngineDefinition } from './schema'
 import { realEngines } from '../bench/presets'
 
 /**
- * Exact four-stroke output, recorded from model 1.13.0 before the core was
- * generalised for two-strokes (Stage 10). A change here means four-stroke
- * results changed; update the hashes only for an intended model change.
+ * Exact four-stroke output. The first seven hashes were re-recorded from an
+ * untouched archive of the 1.14.1 commit on the current supported runtime;
+ * the older checked-in hashes were already stale. Stage 11's first seven
+ * match that clean baseline exactly, followed by its four new layouts.
  */
 function fingerprint(engine: EngineDefinition) {
   const core = new EngineCore(engine, normalConditions)
@@ -37,18 +38,22 @@ function fingerprint(engine: EngineDefinition) {
 }
 
 describe('four-stroke results', () => {
-  it('are bit-for-bit those of model 1.13.0', { timeout: 120000 }, () => {
+  it('keep the 1.14.1 builds bit-for-bit and pin the Stage 11 layouts', { timeout: 120000 }, () => {
     const builds = [roadEngine, sportEngine, ...realEngines.map((p) => p.engine)].filter(
       (e) => e.cycle === 'four-stroke',
     )
     expect(builds.map(fingerprint)).toEqual([
-      'db02abfde3179af1',
-      'ac36a0fb65cc513d',
-      '560fb61e289f2c1a',
-      '83cfb2913df86869',
-      'e9d492dbc2e56f87',
-      '297c08ff7aac978b',
-      '018a5804b7f1e280',
+      '1f4a150343025205',
+      'dce91837020d0507',
+      '48de30e3e29b02b9',
+      '3b4956a5229ba3a1',
+      '3613a1ddeaad3193',
+      'c9bae546d05e733a',
+      'f2da6d07e8dbb18f',
+      'fc727e08d4b09ea8',
+      'a7f807a78d15d401',
+      '5f529de88bdf1b04',
+      'f53479f9d23ec6bf',
     ])
   })
 })

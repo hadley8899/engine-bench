@@ -282,6 +282,36 @@ The RS125's speed is inferred: 21 kW and 19 Nm meet at about 10,500 RPM. `src/si
 
 Not represented: auxiliary exhaust ports, the power valves' real mechanisms (a lowered port edge stands in), the YZ250's five-speed and the bikes' own gearing, electronic ignition maps, and Aprilia's restricted versions.
 
-## Two-strokes that wait
+## Stage 11 engines: sixes, boxer and V8
 
-- **Aprilia RS250 and Honda RS250R.** 90° V-twins, which need Stage 11's layouts (user request, 5 November 2026).
+Added with model 1.15.0. All use the ordinary cylinder model; there is no preset-only torque multiplier. Twin turbochargers are represented by one equivalent lumped turbo because the induction model has one shaft.
+
+### Toyota 2JZ-GTE — Supra RZ
+
+Toyota's [1993 A80 Supra launch release](https://global.toyota/en/detail/7868203) gives a 3.0-litre inline-six, sequential twin turbos, 206 kW at 5,600 RPM and 44.0 kg-m (431 Nm) at 3,600 RPM. Bore × stroke (86.0 × 86.0 mm), 8.5:1 compression and the 1–5–3–6–2–4 order come from Toyota repair manual RM502U; rod length is inferred. Valve areas, runner, single equivalent turbo, intercooler, maps, inertia and limits are calibrated estimates. It makes 435.7 Nm at 3,600 RPM (+4.7) and 204.9 kW at 5,600 RPM (−1.1). Sequential changeover is not represented.
+
+### Nissan RB26DETT — Skyline GT-R R34
+
+Nissan's [Heritage Collection R34](https://www.nissan-global.com/EN/HERITAGE_COLLECTION/280_skyline_gt-r_v-spec_ii.html) gives 2,568 cc, inline-six DOHC twin turbo, 206 kW at 6,800 RPM and 392 Nm at 4,400 RPM. Bore × stroke (86.0 × 73.7 mm), 8.5:1 compression and 1–5–3–6–2–4 come from Nissan's R34 service manual; the geometry calculates to 2,568.7 cc while Nissan labels it 2,568. Rod length, breathing, equivalent turbo and maps are inferred/calibrated. It makes 391.4 Nm at 4,400 RPM (−0.6) and 204.9 kW at 6,800 RPM (−1.1). The individual ceramic turbos and six-throttle intake are not represented.
+
+### Subaru EJ20 — Impreza WRX STI
+
+Subaru's [31 October 2000 release](https://www.subaru.co.jp/news/archives/00_10_12/10_31_1.html) gives a 1,994 cc turbo boxer-four, 92.0 × 75.0 mm, 8.0:1, 206 kW at 6,400 RPM and 373 Nm at 4,000 RPM. It also identifies AVCS. Rod length, valve events/areas, turbo and maps are inferred/calibrated; the present preset does not reproduce a published cam map. It makes 372.0 Nm at 4,000 RPM (−1.0) and 199.9 kW at 6,400 RPM (−3.0%). Unequal header lengths and bank-specific pulses are not solved, so its familiar exhaust note is only approximated by firing order and the synthesiser.
+
+### GM LS3 6.2 V8
+
+Chevrolet Performance's [LS3 specification](https://www.chevrolet.com/performance-parts/crate-engines/ls-lsx-engines/ls3-engine) gives a 6.2-litre Gen IV V8, 103.25 × 92.0 mm, 10.7:1, 430 hp (321 kW) at 5,900 RPM, 425 lb-ft (576 Nm) at 4,600 RPM and a 6,600 RPM maximum recommendation. It also specifies hypereutectic pistons and powdered-metal rods; the preset leaves the simulator's generic stock-part limits because those are model estimates. Rod length, effective valve areas/events and exhaust are inferred/calibrated. It makes 578.6 Nm at 4,600 RPM (+2.6) and 313.6 kW at 5,900 RPM (−2.3%). The cross-plane 1–8–4–3–6–5–7–2 order is represented; pushrods, the real hydraulic-roller cam and four-primary collector grouping are not.
+
+`src/sim/presets.test.ts` holds the four rated points to their stated tolerances and checks displacement, no failure and less than 95% estimated stress. Full published curves were not found for these exact specifications, so the interface describes them as calibrated approximations rather than replicas.
+
+## Stage 11 two-stroke V-twins
+
+### Aprilia RS250
+
+Aprilia's [factory service and repair manual](https://www.abikingworld.com/manuals/aprilia/assets/files/Aprilia_RS250-Repair_manual_1998.pdf) specifies a 249 cc 90° V-twin, 56.0 × 50.6 mm, reed induction, exhaust valves, liquid cooling and two Mikuni TM34SS carburettors. The quoted 12.0:1 ratio is used as the full-stroke model ratio. Port sizes/timing, pipe cones, rod, primary compression, ignition and limits are inferred/calibrated. At 11,000 RPM it makes 25.8 Nm and 29.7 kW, about 66% of the commonly published 45 kW unrestricted figure. The rated line deliberately gives only the factory-manual facts because the manual does not publish power.
+
+### Honda RS250R
+
+No readable Honda/HRC period specification was found. The preset therefore uses the consistently reported 90° V-twin, 54.0 × 54.5 mm geometry and period output of roughly 63 kW as secondary evidence; [this documented 1997 machine](https://racingsm.org/hondars.php) reports the geometry, over 85 hp and a 13,500 RPM maximum. Every port, pipe, intake, compression and calibration value is explicitly inferred. It makes 26.4 Nm and 34.5 kW at 12,500 RPM, 55% of the period figure. This larger shortfall is the known racing-two-stroke charging gap, not a claim about the real engine.
+
+Both V-twins fire 90° then 270° apart, draw two animated banks and run a separate simulated chamber per cylinder. They remain labelled below their real output until Stage 12 replaces the under-reflecting pipe scheme; `src/sim/presets.test.ts` holds the Aprilia to 70% and the Honda to 55% of the stated comparison figures.

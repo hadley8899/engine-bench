@@ -92,6 +92,33 @@ describe('definitions and physical invariants', () => {
       }),
     ).toThrow()
   })
+  it('validates every Stage 11 four-stroke layout and firing order', () => {
+    const layouts = [
+      ['inline-4', 4, [1, 3, 4, 2]],
+      ['inline-6', 6, [1, 5, 3, 6, 2, 4]],
+      ['v-6', 6, [1, 4, 2, 5, 3, 6]],
+      ['v-8', 8, [1, 8, 4, 3, 6, 5, 7, 2]],
+      ['boxer-4', 4, [1, 3, 2, 4]],
+    ] as const
+    for (const [layout, cylinders, firingOrder] of layouts) {
+      const engine = validateEngine({
+        ...roadEngine,
+        schemaVersion: 3,
+        layout,
+        cylinders,
+        firingOrder: [...firingOrder],
+      })
+      expect(engine.layout).toBe(layout)
+      expect(engine.cylinders).toBe(cylinders)
+      expect(new EngineCore(engine, normalConditions).telemetry().phases).toHaveLength(cylinders)
+    }
+    expect(() => validateEngine({
+      ...roadEngine,
+      layout: 'v-8',
+      cylinders: 8,
+      firingOrder: [1, 2, 3, 4, 5, 6, 7, 8],
+    })).toThrow(/firing order/)
+  })
   it('inverts temperature-dependent internal energy', () => {
     for (const t of [30, 300, 1500, 2800, 6000])
       expect(temperatureFromEnergy(internalEnergy(t))).toBeCloseTo(t, 9)

@@ -503,6 +503,194 @@ const rs125: EngineDefinition = racing('Aprilia RS125 (Rotax)', 0.054, 0.0545, 8
   },
 })
 
+// Stage 11 layouts. These use the same bounded zero-dimensional model as the
+// inline-fours. Published facts and every inferred/calibrated input are
+// recorded in docs/PRESETS.md.
+const twoJzBase: EngineDefinition = {
+  ...axx,
+  name: 'Toyota 2JZ-GTE • Supra RZ',
+  schemaVersion: 3,
+  layout: 'inline-6',
+  cylinders: 6,
+  firingOrder: [1, 5, 3, 6, 2, 4],
+  bore: 0.086,
+  stroke: 0.086,
+  rodLength: 0.142,
+  compression: 8.5,
+  intakeArea: 0.00072,
+  exhaustArea: 0.00062,
+  inertia: 0.3,
+  revLimit: 6800,
+  mechanicalLimit: 7200,
+  induction: {
+    ...inductionDefaults.turbo,
+    compressorDiameter: 0.065,
+    turbineArea: 0.00052,
+    shaftInertia: 0.000045,
+    boostTarget: 62000,
+    maxShaftRpm: 190000,
+    intercooler: { effectiveness: 0.62, pressureDrop: 9000 },
+  },
+  fuelSupply: { injectorFlow: 440, maxDuty: 0.85, pumpFlow: 190 },
+}
+const twoJz: EngineDefinition = {
+  ...twoJzBase,
+  management: shapedMaps(twoJzBase, {
+    boost: [[3600, 62000], [5600, 45000], [7000, 40000]],
+    lambda: [[3000, 0.94], [5000, 0.88]],
+  }),
+}
+
+const rb26Base: EngineDefinition = {
+  ...twoJz,
+  name: 'Nissan RB26DETT • Skyline GT-R R34',
+  bore: 0.086,
+  stroke: 0.0737,
+  rodLength: 0.1215,
+  compression: 8.5,
+  inertia: 0.26,
+  revLimit: 8000,
+  mechanicalLimit: 8400,
+  induction: {
+    ...inductionDefaults.turbo,
+    compressorDiameter: 0.06,
+    turbineArea: 0.00048,
+    shaftInertia: 0.00004,
+    boostTarget: 70000,
+    maxShaftRpm: 195000,
+    intercooler: { effectiveness: 0.62, pressureDrop: 9000 },
+  },
+}
+const rb26: EngineDefinition = {
+  ...rb26Base,
+  management: shapedMaps(rb26Base, {
+    boost: [[4400, 70000], [6800, 45000], [8000, 40000]],
+    lambda: [[4000, 0.94], [6000, 0.88]],
+  }),
+}
+
+const ej20Base: EngineDefinition = {
+  ...evo,
+  name: 'Subaru EJ20 • Impreza WRX STI',
+  schemaVersion: 3,
+  layout: 'boxer-4',
+  cylinders: 4,
+  firingOrder: [1, 3, 2, 4],
+  bore: 0.092,
+  stroke: 0.075,
+  rodLength: 0.13,
+  compression: 8,
+  inertia: 0.18,
+  revLimit: 7600,
+  mechanicalLimit: 8000,
+  induction: {
+    ...inductionDefaults.turbo,
+    compressorDiameter: 0.052,
+    turbineArea: 0.0003,
+    shaftInertia: 0.000025,
+    boostTarget: 105000,
+    maxShaftRpm: 205000,
+    blowOff: true,
+    intercooler: { effectiveness: 0.68, pressureDrop: 9000 },
+  },
+  fuelSupply: { injectorFlow: 560, maxDuty: 0.85, pumpFlow: 180 },
+}
+const ej20: EngineDefinition = {
+  ...ej20Base,
+  management: shapedMaps(ej20Base, {
+    boost: [[3000, 125000], [4000, 125000], [6400, 105000]],
+    lambda: [[3500, 0.94], [5000, 0.86]],
+  }),
+}
+
+const ls3: EngineDefinition = {
+  ...roadEngine,
+  name: 'GM LS3 6.2 V8 • Corvette',
+  schemaVersion: 3,
+  layout: 'v-8',
+  cylinders: 8,
+  firingOrder: [1, 8, 4, 3, 6, 5, 7, 2],
+  bore: 0.10325,
+  stroke: 0.092,
+  rodLength: 0.1547,
+  compression: 10.7,
+  intakeArea: 0.001,
+  exhaustArea: 0.00085,
+  intakeClose: 600,
+  intakeRunnerLength: 0.32,
+  ignitionAdvance: 20,
+  burnDuration: 52,
+  lambda: 0.9,
+  inertia: 0.42,
+  revLimit: 6600,
+  mechanicalLimit: 7000,
+  starterTorque: 160,
+  induction: { kind: 'none' },
+  fuelSystem: fuelSystemDefaults.port,
+  combustion: { ...combustionDefaults, fuel: 'ron98' },
+  management: null,
+  fuelSupply: { injectorFlow: 420, maxDuty: 0.85, pumpFlow: 220 },
+  exhaust: { ...exhaustDefaults, headerLength: 0.48, silencer: 'absorptive' },
+  parts: stockParts,
+}
+
+function vTwin250(
+  name: string,
+  bore: number,
+  stroke: number,
+  compression: number,
+  carb: number,
+): EngineDefinition {
+  const scale = Math.sqrt((bore * bore * stroke) / (rs125.bore ** 2 * rs125.stroke))
+  return {
+    ...rs125,
+    name,
+    schemaVersion: 3,
+    layout: 'v-2',
+    cylinders: 2,
+    firingOrder: [1, 2],
+    bore,
+    stroke,
+    rodLength: 0.11,
+    compression,
+    inertia: 0.009,
+    revLimit: 13000,
+    mechanicalLimit: 14000,
+    starterTorque: 50,
+    fuelSystem: { kind: 'carburettor', chokeDiameter: carb, chokes: 2, acceleratorPump: false },
+    twoStroke: {
+      ...rs125.twoStroke!,
+      exhaustPort: { ...rs125.twoStroke!.exhaustPort, height: stroke * 0.51, width: bore * 1.02 },
+      transfers: { ...rs125.twoStroke!.transfers, height: stroke * 0.73, width: bore * 1.45 },
+      intake: { kind: 'reed', area: 0.0017 * scale, stiffness: 600 },
+      crankcaseCompression: 1.42,
+      crankPhase: 90,
+    },
+  }
+}
+
+const apriliaRs250 = vTwin250('Aprilia RS250', 0.056, 0.0506, 12, 0.034)
+const hondaRs250rBase = vTwin250('Honda RS250R', 0.054, 0.0545, 12, 0.038)
+const hondaPipe = hondaRs250rBase.twoStroke!.pipe
+const hondaRs250r: EngineDefinition = {
+  ...hondaRs250rBase,
+  twoStroke: {
+    ...hondaRs250rBase.twoStroke!,
+    exhaustPort: { height: 0.027, width: 0.055, bridge: true },
+    transfers: { count: 5, height: 0.04, width: 0.086 },
+    intake: { kind: 'reed', area: 0.003, stiffness: 550 },
+    crankcaseCompression: 1.65,
+    pipe: hondaPipe.kind === 'chamber' ? {
+      ...hondaPipe,
+      header: { ...hondaPipe.header, length: hondaPipe.header.length * 0.88 },
+      diffuser: hondaPipe.diffuser.map((c) => ({ ...c, length: c.length * 0.88 })),
+      belly: { ...hondaPipe.belly, length: hondaPipe.belly.length * 0.88 },
+      baffle: hondaPipe.baffle.map((c) => ({ ...c, length: c.length * 0.88 })),
+      stinger: { ...hondaPipe.stinger, length: hondaPipe.stinger.length * 0.88 },
+    } : hondaPipe,
+  },
+}
+
 export const realEngines: RealEngine[] = [
   {
     label: 'VW Golf GTI Mk5 2.0 TFSI',
@@ -610,11 +798,53 @@ export const realEngines: RealEngine[] = [
     engine: ae86,
   },
   {
+    label: 'Toyota Supra 2JZ-GTE',
+    description:
+      'The Japanese-market A80 Supra RZ’s 3.0-litre twin-turbo inline-six, represented by one equivalent turbo because this model has no sequential-twin-turbo system.',
+    rated: '206 kW at 5,600 RPM · 431 Nm at 3,600 RPM (Toyota)',
+    engine: twoJz,
+  },
+  {
+    label: 'Nissan Skyline GT-R RB26DETT',
+    description:
+      'The R34 GT-R’s 2.6-litre twin-turbo inline-six. Its pair of turbos are represented by one equivalent turbo and the preset is an estimate, not a replica.',
+    rated: '206 kW at 6,800 RPM · 392 Nm at 4,400 RPM (Nissan)',
+    engine: rb26,
+  },
+  {
+    label: 'Subaru Impreza WRX STI EJ20',
+    description:
+      'Subaru’s short-stroke 2.0-litre turbo boxer-four with AVCS-era specifications and the uneven-bank exhaust character of its firing order.',
+    rated: '206 kW at 6,400 RPM · 373 Nm at 4,000 RPM (Subaru)',
+    engine: ej20,
+  },
+  {
+    label: 'GM LS3 6.2 V8',
+    description:
+      'The naturally aspirated 6.2-litre LS3 small-block: a cross-plane V8 with broad torque. Header grouping remains a sound-only approximation.',
+    rated: '317 kW (430 hp) · 575 Nm (GM Performance Parts)',
+    engine: ls3,
+  },
+  {
     label: 'Yamaha RD350LC',
     description:
       'The 1980 RD350LC “Elsie”: a liquid-cooled 347 cc two-stroke twin on a 180° crank with reed valves and an expansion chamber per cylinder. Nothing much below 7,000 RPM, then it comes on the pipe.',
     rated: '35 kW (47 hp) at 8,500 RPM (Yamaha, claimed)',
     engine: rd350,
+  },
+  {
+    label: 'Aprilia RS250',
+    description:
+      'Aprilia’s road-going 249 cc 90° V-twin with reed induction, exhaust valves and twin 34 mm carburettors. The current pipe model undercharges racing two-strokes, so output remains deliberately low.',
+    rated: '249 cc · 56 × 50.6 mm · 90° V-twin (Aprilia workshop manual)',
+    engine: apriliaRs250,
+  },
+  {
+    label: 'Honda RS250R',
+    description:
+      'Honda’s 250 GP production racer: a 90° two-stroke V-twin. Port and pipe dimensions are calibrated estimates pending Stage 12’s charging fix.',
+    rated: '249 cc · 54 × 54.5 mm · about 63 kW in period race trim',
+    engine: hondaRs250r,
   },
   {
     label: 'Yamaha DT125R',

@@ -50,6 +50,7 @@ import type {
 import { BenchAudio } from './audio'
 import { Chart } from './Chart'
 import { EngineView } from './EngineView'
+import { MultiBankView } from './MultiBankView'
 import { NumberField } from './NumberField'
 import { InductionEditor } from './InductionEditor'
 import { FuelSystemEditor } from './FuelSystemEditor'
@@ -138,6 +139,14 @@ import {
   persistPreferences,
 } from './storage'
 import './bench.css'
+
+const fourStrokeLayoutLabels: Partial<Record<EngineDefinition['layout'], string>> = {
+  'inline-4': 'I4',
+  'inline-6': 'I6',
+  'v-6': 'V6',
+  'v-8': 'V8',
+  'boxer-4': 'boxer-4',
+}
 
 const theme = buildTheme('dark')
 /**
@@ -1671,7 +1680,7 @@ export function BenchPage() {
                     {(displacement(viewEngine) * 1e6).toFixed(0)} cc <b>·</b>{' '}
                     {viewEngine.cylinders === 1
                       ? 'two-stroke single'
-                      : `two-stroke twin, ${viewEngine.twoStroke!.crankPhase}°`}{' '}
+                      : `${viewEngine.layout === 'v-2' ? 'two-stroke V-twin' : 'two-stroke twin'}, ${viewEngine.twoStroke!.crankPhase}°`}{' '}
                     <b>·</b>{' '}
                     {viewEngine.twoStroke!.intake.kind === 'reed'
                       ? 'reed'
@@ -1682,8 +1691,10 @@ export function BenchPage() {
                   </>
                 ) : (
                   <>
-                    {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b> I4{' '}
-                    <b>·</b> 1–3–4–2 <b>·</b> {fuelShortLabels[viewEngine.fuelSystem.kind]}
+                    {(displacement(viewEngine) * 1000).toFixed(2)} L <b>·</b>{' '}
+                    {fourStrokeLayoutLabels[viewEngine.layout]} <b>·</b>{' '}
+                    {viewEngine.firingOrder.join('–')} <b>·</b>{' '}
+                    {fuelShortLabels[viewEngine.fuelSystem.kind]}
                   </>
                 )}
                 {viewEngine.induction.kind !== 'none' &&
@@ -1786,6 +1797,15 @@ export function BenchPage() {
                     <>
                       {viewEngine.cycle === 'two-stroke' ? (
                         <TwoStrokeView
+                          engine={viewEngine}
+                          telemetry={telemetryRef}
+                          slow={slow}
+                          overlays={overlays}
+                          selected={Math.min(selected, viewEngine.cylinders - 1)}
+                          onSelect={setSelected}
+                        />
+                      ) : viewEngine.layout !== 'inline-4' ? (
+                        <MultiBankView
                           engine={viewEngine}
                           telemetry={telemetryRef}
                           slow={slow}

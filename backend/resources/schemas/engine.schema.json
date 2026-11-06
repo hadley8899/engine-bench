@@ -11,6 +11,10 @@
         {
           "type": "number",
           "const": 2
+        },
+        {
+          "type": "number",
+          "const": 3
         }
       ]
     },
@@ -31,8 +35,13 @@
       "type": "string",
       "enum": [
         "inline-4",
+        "inline-6",
+        "v-6",
+        "v-8",
+        "boxer-4",
         "single",
-        "inline-2"
+        "inline-2",
+        "v-2"
       ]
     },
     "cylinders": {
@@ -48,6 +57,14 @@
         {
           "type": "number",
           "const": 4
+        },
+        {
+          "type": "number",
+          "const": 6
+        },
+        {
+          "type": "number",
+          "const": 8
         }
       ]
     },
@@ -992,12 +1009,12 @@
     },
     "firingOrder": {
       "minItems": 1,
-      "maxItems": 4,
+      "maxItems": 8,
       "type": "array",
       "items": {
         "type": "integer",
         "minimum": 1,
-        "maximum": 4
+        "maximum": 8
       }
     },
     "twoStroke": {
@@ -1337,6 +1354,10 @@
             },
             "crankPhase": {
               "anyOf": [
+                {
+                  "type": "number",
+                  "const": 90
+                },
                 {
                   "type": "number",
                   "const": 180

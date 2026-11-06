@@ -1,18 +1,18 @@
 # Engine Bench — Delivery Plan
 
-Updated: 5 November 2026
+Updated: 6 November 2026
 
 ## Active delivery goal
 
-Stage 10, two-stroke engines, is complete (model 1.14.0). Phases 1–3 and Stages 5 and 6 are complete: combustion and knock (model 1.6.0), engine management (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts, stress, failures and push-it tests (1.11.0) are implemented. Stage 7's inline-fours are complete (model 1.12.0 adds a two-stage cam for VTEC); its six-cylinder, boxer and V8 engines wait for Stage 11's layouts. Stage 8, camshafts and valve timing, is complete (model 1.13.0), and so is Stage 9, the UI revision (its first-use check with an unfamiliar user moved to the end of the plan). Phase 2's human first-use check remains open and does not block later work.
+Stage 11, additional layouts, is complete (model 1.15.0, engine schema 3): inline-six, V6, cross-plane V8, boxer-four and 90° two-stroke V-twin builds run through the same bench, and Stage 7's 2JZ-GTE, RB26DETT, EJ20 and LS3 presets plus the Aprilia RS250 and Honda RS250R are included. Phases 1–3 and Stages 5–11 are otherwise complete as recorded below. Stage 12, fidelity and release readiness, is next; Stage 13's 3D overhaul follows it. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
 1. Stage 5, sound and bench feel — complete (model 1.5.0); the user accepted the sound on 2 November 2026.
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
-3. Stage 7, famous real engines — inline-fours complete: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Engines needing other layouts follow Stage 11.
+3. Stage 7, famous real engines — complete for the planned set: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET, Toyota 4A-GE, Toyota 2JZ-GTE, Nissan RB26DETT, Subaru EJ20 and GM LS3.
 4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
-The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November), and so are two-stroke engines (Stage 10, 5 November). Next come other layouts (Stage 11) and the famous engines that need them, fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
+The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November), as are two-stroke engines (Stage 10, 5 November) and other layouts with their famous engines (Stage 11, 6 November). Next comes fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
 
 ## Product direction
 
@@ -302,7 +302,7 @@ The user wants famous engines they recognise, starting with the 2.0 TFSI from th
 - [x] Source a documented VW EA113 2.0 TFSI (AXX/BWA, Golf Mk5 GTI) preset: geometry, compression, valve timing, turbocharger, direct injection and published torque and power. Identify inferred and calibrated inputs explicitly. Requires Stage 6 knock and maps. Done 4 November 2026 from VW SSP 337; provenance in `docs/PRESETS.md`. Valve timing is not published beyond 42° of intake cam phasing, so it is inferred. Decision: the boost target is calibrated to 0.6 bar, because the model makes about 20% more torque than the real engine at its 0.9 bar; this is recorded as a known model deviation.
 - [x] Compare each preset with a sourced reference torque curve and operating range; record deviations. The AXX matches SSP 337's curve within 7 Nm from 2,000 to 6,500 RPM (+22 and −15 Nm at 1,000 and 1,500 RPM), and `src/sim/presets.test.ts` holds it there.
 - [x] Then add further well-known inline-fours with contrasting characters, for example the Honda K20A, Mitsubishi 4G63T, Nissan SR20DET and Toyota 4A-GE. Done 4 November 2026. Model 1.12.0 adds an optional two-stage cam so the K20A's VTEC changeover reproduces Honda's published curve. Decision: the Evo, SR20 and 4A-GE are calibrated to their rated points because no manufacturer curves were found; `docs/PRESETS.md` says so for each. SR20 VTC and 4A-GE T-VIS are not represented.
-- [ ] After the matching layouts exist (Stage 11), add famous engines that need them, for example the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20/EJ25 (boxer) and a GM LS V8.
+- [x] After the matching layouts exist (Stage 11), add famous engines that need them. Model 1.15.0 adds the Toyota 2JZ-GTE and Nissan RB26DETT (inline-six), Subaru EJ20 (boxer) and GM LS3 V8; sources, inferred inputs and measured deviations are in `docs/PRESETS.md`.
 - [x] Add a stock-or-modified view: for a preset, show which settings and parts differ from the stock engine. A build that keeps a preset's name lists its changes from that preset in the workshop.
 
 Acceptance: each released preset has provenance and model limitations, reproduces its sourced curve within a recorded deviation, and runs through the editor, animation, audio, dyno and persistence. The interface never calls a preset an exact replica.
@@ -361,10 +361,10 @@ Requested by the user on 1 November 2026, and moved behind Stages 5–8 on 2 Nov
 
 Acceptance: port timing is derived from geometry and validated; mass and energy balance across crankcase, cylinder and pipe; supported trends hold (pipe length moves the torque peak, exhaust-port height moves and narrows the band, a tuned chamber beats a straight pipe at its tuned speed); the two-stroke works through the editor, animation, audio, dyno and persistence; four-stroke results are unchanged.
 
-### 11. Additional layouts
+### 11. Additional layouts — complete
 
-- [ ] Add inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Prioritise meaningful variety over a large list of near-identical presets.
-- [ ] V-twin two-strokes, then the Aprilia RS250 and Honda RS250R (90° V-twins; user request, 5 November 2026).
+- [x] Add inline-six, V6, V8 and boxer support incrementally, with matching firing, motion and sound. Model 1.15.0 adds validated firing orders, layout-aware configuration and cutaways without changing the shared cylinder model or adding layout-specific power multipliers.
+- [x] V-twin two-strokes, then the Aprilia RS250 and Honda RS250R (90° V-twins; user request, 5 November 2026). Both presets retain an explicit charging-shortfall label pending Stage 12.
 
 Acceptance: each released layout works through configuration, animation, audio, dyno and persistence.
 
@@ -404,8 +404,8 @@ Sound:
 
 Checks:
 
-- [ ] Run the backend tests in Docker; they have not been run since model 1.11.0's schema changes because no backend containers exist on the development machine.
-- [ ] Make the browser suite reliable: emergency-stop, loaded-stall, over-boost and Golf cases fail only in full runs, and the sign-in navigation case needs the local API.
+- [x] Run the backend tests in Docker after the schema changes. On 6 November, model 1.15.0 and engine schema 3 passed all 35 Pest tests (196 assertions); the isolated browser-storage API also passed in Chromium and Firefox against its dedicated test database.
+- [x] Make the existing browser suite reliable. On 6 November the complete Chromium run passed all 38 enabled tests in one run (three isolated storage tests skipped there and passed separately in Chromium and Firefox), including emergency stop, loaded stall, over-boost, Golf and sign-in navigation.
 
 Release readiness:
 

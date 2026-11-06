@@ -113,7 +113,7 @@ describe('two-stroke geometry', () => {
     void cycle
     void twoStroke
     const e = validateEngine({ ...old, schemaVersion: 1 })
-    expect(e.schemaVersion).toBe(2)
+    expect(e.schemaVersion).toBe(3)
     expect(e.cycle).toBe('four-stroke')
     expect(e.twoStroke).toBeNull()
   })

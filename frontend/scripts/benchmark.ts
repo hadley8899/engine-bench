@@ -15,11 +15,27 @@ const twin: EngineDefinition = {
   cylinders: 2,
   firingOrder: [1, 2],
 }
+const vTwin: EngineDefinition = {
+  ...twin,
+  name: 'Two-stroke 90 degree V-twin',
+  layout: 'v-2',
+  twoStroke: { ...twin.twoStroke!, crankPhase: 90 },
+}
+const v8: EngineDefinition = {
+  ...sportEngine,
+  name: 'Four-stroke V8',
+  layout: 'v-8',
+  cylinders: 8,
+  firingOrder: [1, 8, 4, 3, 6, 5, 7, 2],
+  inertia: sportEngine.inertia * 2,
+}
 const cases: [string, EngineDefinition, number[]][] = [
   ['four-stroke', { ...sportEngine, revLimit: 8500, mechanicalLimit: 9000 }, [0, 1000, 4000, 7500, 8400]],
+  ['four-stroke V8', { ...v8, revLimit: 8500, mechanicalLimit: 9000 }, [0, 1000, 4000, 7500, 8400]],
   // Two-strokes carry a one-dimensional pipe per cylinder (pipe.ts).
   ['two-stroke single', { ...raceTwoStroke, revLimit: 14000, mechanicalLimit: 15000 }, [0, 4000, 9000, 12500]],
   ['two-stroke twin', { ...twin, revLimit: 14000, mechanicalLimit: 15000 }, [0, 4000, 9000, 12500]],
+  ['two-stroke V-twin', { ...vTwin, revLimit: 14000, mechanicalLimit: 15000 }, [0, 4000, 9000, 12500]],
 ]
 for (const [engine, definition, speeds] of cases)
 for (const rpm of speeds) {
