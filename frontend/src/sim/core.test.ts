@@ -608,6 +608,25 @@ describe('forced induction', () => {
     expect(na.boost).toBe(0)
     expect(na.shaftRpm).toBe(0)
   })
+  it('keeps old forced-induction builds on the legacy maps', () => {
+    const old: Record<string, unknown> = {
+      ...roadEngine,
+      schemaVersion: 8,
+      induction: { ...inductionDefaults.turbo },
+    }
+    delete (old.induction as Record<string, unknown>).compressorMap
+    delete (old.induction as Record<string, unknown>).turbineMap
+    const migrated = validateEngine(old)
+    expect(migrated.schemaVersion).toBe(10)
+    expect(migrated.induction).toMatchObject({
+      compressorMap: 'legacy',
+      turbineMap: 'legacy',
+    })
+    expect(inductionDefaults.turbo).toMatchObject({
+      compressorMap: 'representative',
+      turbineMap: 'representative',
+    })
+  })
   it('turbo boost is held near the wastegate target and raises torque', () => {
     const na = boosted(withInduction({ kind: 'none' }), 5000)
     const t = boosted(withInduction(turbo), 5000)
@@ -620,7 +639,9 @@ describe('forced induction', () => {
       withInduction({ ...turbo, boostTarget: 120000 }),
       5000,
     )
-    expect(higher.boost).toBeGreaterThan(t.boost + 20000)
+    // The representative radial map gains boost, then runs into its
+    // speed/flow envelope rather than following every wastegate request.
+    expect(higher.boost).toBeGreaterThan(t.boost + 5000)
     expect(higher.torque).toBeGreaterThan(t.torque)
   })
   it('turbo boost lags a throttle step while the shaft spools', () => {

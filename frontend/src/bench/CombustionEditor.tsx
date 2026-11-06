@@ -7,6 +7,7 @@ const fuelNotes: Record<FuelGrade, string> = {
   ron91: 'Lowest knock resistance.',
   ron95: 'The usual premium unleaded.',
   ron98: 'More knock margin for high compression or boost.',
+  ron100: 'Japanese premium calibration fuel for the JDM presets.',
   e85: 'Much more knock margin and strong charge cooling, but it needs about 50% more fuel (stoichiometric 9.8:1).',
 }
 

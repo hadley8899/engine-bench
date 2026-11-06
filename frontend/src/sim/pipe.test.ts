@@ -22,6 +22,64 @@ describe('quasi-1D exhaust pipe', () => {
     }
   })
 
+  it('holds a low-Mach steady flow through area changes without oscillating', () => {
+    const pipe = new Pipe(chamber, 101325, PIPE_WALL, PIPE_WALL)
+    const flow = 0.005
+    const h = enthalpy(PIPE_WALL)
+    let low = Infinity
+    let high = -Infinity
+    for (let i = 0; i < 48000; i++) {
+      pipe.advance(1 / 48000, flow, flow * h, 0, 0)
+      if (i >= 44000) {
+        low = Math.min(low, pipe.portPressure)
+        high = Math.max(high, pipe.portPressure)
+      }
+    }
+    expect(high - low).toBeLessThan(1)
+    expect(pipe.outletFlow).toBeCloseTo(flow, 5)
+  })
+
+  it('converges on the Webster step reflection coefficient', () => {
+    const reflected = (cellLength: number) => {
+      const lead = 1
+      const probe = 0.4
+      const pipe = new Pipe(
+        [
+          { length: lead, start: 0.04, end: 0.04 },
+          { length: 1.5, start: 0.11, end: 0.11 },
+        ],
+        101325,
+        PIPE_WALL,
+        PIPE_WALL,
+        true,
+        cellLength,
+      )
+      const dt = 1 / 48000
+      const h = enthalpy(PIPE_WALL)
+      const sound = Math.sqrt(1.37 * 287 * PIPE_WALL)
+      const incidentAt = probe / sound
+      const returnAt = (2 * lead - probe) / sound
+      const probeCell = Math.round(probe / pipe.dx - 0.5)
+      let incident = 0
+      let returning = 0
+      for (let i = 0; i < 480; i++) {
+        const flow = i < 24 ? 0.02 * Math.sin((Math.PI * i) / 24) : 0
+        pipe.advance(dt, flow, flow * h, 0, 0)
+        const disturbance = pipe.pressureAt(probeCell) - 101325
+        if (i * dt > incidentAt && i * dt < incidentAt + 0.001)
+          incident = Math.max(incident, disturbance)
+        if (i * dt > returnAt && i * dt < returnAt + 0.001)
+          returning = Math.min(returning, disturbance)
+      }
+      return returning / incident
+    }
+    const exact = (0.04 ** 2 - 0.11 ** 2) / (0.04 ** 2 + 0.11 ** 2)
+    const coarse = reflected(0.03)
+    const fine = reflected(0.01)
+    expect(Math.abs(fine - exact)).toBeLessThan(Math.abs(coarse - exact))
+    expect(fine).toBeCloseTo(exact, 1)
+  })
+
   it('backflow into the cylinder takes its momentum with it', () => {
     // A cylinder drawing gas back from a small pipe: the gas at the port
     // moves towards it at about ṁ/ρA instead of running away.

@@ -188,13 +188,24 @@ export type RichProducts = {
 }
 const STOICHIOMETRIC_PRODUCTS: RichProducts = { heat: 1, moles: 1, capacity: 1 }
 /**
+ * A homogeneous equilibrium calculation overstates the rich pocket that
+ * freezes as CO/H2 in a firing cylinder. The current calibration blends 35%
+ * of that departure from complete products, representing cycle-scale mixing
+ * before freeze-out; legacy retains the original homogeneous result.
+ */
+const CURRENT_RICH_DEPARTURE = 0.35
+/**
  * Frozen products of a rich burn per unit of air, relative to the
  * stoichiometric products the gas model is calibrated on: the oxygen is
  * shared between CO2, CO, H2O and H2, so the gas gains moles and heat
  * capacity, and the CO and H2 carry heat the burn did not release. Lean
  * and stoichiometric burns return 1 for each.
  */
-export function richProducts(fuel: Fuel, phi: number): RichProducts {
+export function richProducts(
+  fuel: Fuel,
+  phi: number,
+  calibration: 'legacy' | 'current' = 'current',
+): RichProducts {
   if (!(phi > 1)) return STOICHIOMETRIC_PRODUCTS
   const c = composition(fuel, phi, FREEZE, 50)
   const y = fuel.hydrogen
@@ -208,10 +219,16 @@ export function richProducts(fuel: Fuel, phi: number): RichProducts {
     c.h2 * MOLAR_CV.h2 +
     c.n2 * MOLAR_CV.n2
   const reference = composition(fuel, 1, FREEZE, 50)
-  return {
+  const equilibrium = {
     heat: released(fuel, phi, c, heat) / heat,
     moles: (phi * (1 + y / 2) + c.n2) / stoichiometric,
     capacity: capacity(c) / capacity(reference),
+  }
+  if (calibration === 'legacy') return equilibrium
+  return {
+    heat: 1 - CURRENT_RICH_DEPARTURE * (1 - equilibrium.heat),
+    moles: 1 + CURRENT_RICH_DEPARTURE * (equilibrium.moles - 1),
+    capacity: 1 + CURRENT_RICH_DEPARTURE * (equilibrium.capacity - 1),
   }
 }
 
@@ -226,8 +243,12 @@ class Table {
   readonly held = new Float64Array(T_COUNT * P_COUNT)
   readonly moles = new Float64Array(T_COUNT * P_COUNT)
 
-  constructor(fuel: Fuel, phi: number) {
-    this.capacityGain = richProducts(fuel, phi).capacity - 1
+  constructor(fuel: Fuel, phi: number, calibration: 'legacy' | 'current') {
+    const departure = calibration === 'current' ? CURRENT_RICH_DEPARTURE : 1
+    this.capacityGain = richProducts(fuel, phi, calibration).capacity - 1
+    const frozen = richProducts(fuel, phi, 'legacy')
+    const restoredHeat = (1 - departure) * (1 - frozen.heat)
+    const restoredMoles = (1 - departure) * (frozen.moles - 1)
     const y = fuel.hydrogen
     const molarMass = 0.012011 + 0.001008 * y + 0.015999 * fuel.oxygenAtoms
     // Heat of the fuel, and of the fuel that can burn, per carbon atom of
@@ -251,21 +272,27 @@ class Table {
         const k = i * P_COUNT + j
         // Share of the burnable fuel's heat not yet released; a rich
         // charge's surplus fuel releases part of its own heat.
-        this.held[k] = 1 - released(fuel, phi, c, fullHeat) / heat
-        this.moles[k] = c.total / complete
+        // Retain hot equilibrium dissociation. Only the frozen rich CO/H2
+        // departure is blended, so stoichiometric and lean results are exact.
+        this.held[k] = Math.max(
+          0,
+          1 - released(fuel, phi, c, fullHeat) / heat - restoredHeat,
+        )
+        this.moles[k] = Math.max(1, c.total / complete - restoredMoles)
       }
   }
 
-  private static grids = new Map<Fuel, Table[]>()
+  private static grids = new Map<string, Table[]>()
   /** Every grid point for a fuel, so no table is built while the engine runs. */
-  static prepare(fuel: Fuel) {
-    for (let i = 0; i < PHI_COUNT; i++) Table.at(fuel, i)
+  static prepare(fuel: Fuel, calibration: 'legacy' | 'current' = 'current') {
+    for (let i = 0; i < PHI_COUNT; i++) Table.at(fuel, i, calibration)
   }
   /** Grid point i for a fuel, built on first use (about 1.5 ms). */
-  static at(fuel: Fuel, i: number) {
-    let grid = Table.grids.get(fuel)
-    if (!grid) Table.grids.set(fuel, (grid = []))
-    return (grid[i] ??= new Table(fuel, PHI_MIN + i * PHI_GRID))
+  static at(fuel: Fuel, i: number, calibration: 'legacy' | 'current') {
+    const key = `${fuel.label}:${calibration}`
+    let grid = Table.grids.get(key)
+    if (!grid) Table.grids.set(key, (grid = []))
+    return (grid[i] ??= new Table(fuel, PHI_MIN + i * PHI_GRID, calibration))
   }
 }
 
@@ -284,6 +311,7 @@ export class BurnedGas {
   heldSlope = 0
   moles = 1
   private fuel: Fuel | null = null
+  private calibration: 'legacy' | 'current' = 'current'
   private heldTable = new Float64Array(T_COUNT * P_COUNT)
   private molesTable = new Float64Array(T_COUNT * P_COUNT)
 
@@ -291,20 +319,21 @@ export class BurnedGas {
    * Build a fuel's tables (about 70 ms, once per fuel and thread) before
    * an engine runs on it.
    */
-  static prepare(fuel: Fuel) {
-    Table.prepare(fuel)
+  static prepare(fuel: Fuel, calibration: 'legacy' | 'current' = 'current') {
+    Table.prepare(fuel, calibration)
   }
   /** Use a fuel and mixture, interpolating the cached mixture grid. */
-  set(fuel: Fuel, phi: number) {
+  set(fuel: Fuel, phi: number, calibration: 'legacy' | 'current' = 'current') {
     const q = Math.min(Math.max(phi, PHI_MIN), PHI_MIN + PHI_GRID * (PHI_COUNT - 1))
-    if (fuel === this.fuel && Math.abs(q - this.phi) < 0.001) return
+    if (fuel === this.fuel && calibration === this.calibration && Math.abs(q - this.phi) < 0.001) return
     this.fuel = fuel
+    this.calibration = calibration
     this.phi = q
     const x = (q - PHI_MIN) / PHI_GRID
     const i = Math.min(Math.floor(x), PHI_COUNT - 2)
     const f = x - i
-    const a = Table.at(fuel, i)
-    const b = f > 0 ? Table.at(fuel, i + 1) : a
+    const a = Table.at(fuel, i, calibration)
+    const b = f > 0 ? Table.at(fuel, i + 1, calibration) : a
     for (let k = 0; k < this.heldTable.length; k++) {
       this.heldTable[k] = a.held[k] + (b.held[k] - a.held[k]) * f
       this.molesTable[k] = a.moles[k] + (b.moles[k] - a.moles[k]) * f
@@ -314,6 +343,7 @@ export class BurnedGas {
   /** Take over another cylinder's tables, as a live update does. */
   adopt(previous: BurnedGas) {
     this.fuel = previous.fuel
+    this.calibration = previous.calibration
     this.phi = previous.phi
     this.capacityGain = previous.capacityGain
     this.heldTable.set(previous.heldTable)

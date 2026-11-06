@@ -53,8 +53,26 @@ import { z } from 'zod'
  * 1.17.0: an optional heated-intake-port model reduces low-speed volumetric
  * efficiency and preserves the energy of residual gas pushed into a runner.
  * Engine schema 5 stores the opt-in; older builds keep 1.16.0 results.
+ * 1.18.0: versioned polynomial valve motion adds seating ramps and lets cams
+ * of equal duration and lift differ in lift area and peak acceleration;
+ * float progressively loses lift and seating control before failure, and an
+ * effective valve-relief dimension replaces the generic clearance estimate.
+ * Engine schema 6 stores the opt-ins; older builds keep all legacy behaviour.
+ * 1.19.0: an opt-in tuned two-stroke charging model adds well-balanced pipe
+ * area changes, auxiliary exhaust area, measured loop-scavenging constants
+ * and rolling-bearing friction. Engine schema 7 stores the opt-in; older
+ * builds keep the 1.18.0 two-stroke model exactly.
+ * 1.20.0: optional torque-request maps let an electronic throttle meter
+ * cylinder charge independently of the driver's pedal. Engine schema 8
+ * stores the map; builds without it keep the direct pedal-to-throttle path.
+ * 1.21.0: opt-in representative corrected compressor and radial-turbine maps
+ * add explicit speed lines, surge/choke boundaries and efficiency islands.
+ * Engine schema 9 stores the opt-ins; older induction systems stay legacy.
+ * 1.22.0: revised rich-combustion calibration moves best power into the
+ * λ 0.86–0.90 range and reduces the enrichment EGT drop. Engine schema 10
+ * preserves the preceding frozen-product calibration for older builds.
  */
-export const MODEL_VERSION = 'eb-0d-1.17.0'
+export const MODEL_VERSION = 'eb-0d-1.22.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -75,6 +93,11 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.14.1',
   'eb-0d-1.15.0',
   'eb-0d-1.16.0',
+  'eb-0d-1.17.0',
+  'eb-0d-1.18.0',
+  'eb-0d-1.19.0',
+  'eb-0d-1.20.0',
+  'eb-0d-1.21.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -91,9 +114,11 @@ export const inductionSchema = z.discriminatedUnion('kind', [
     kind: z.literal('turbo'),
     compressorDiameter: z.number().min(0.02).max(0.2),
     compressorEfficiency: z.number().min(0.5).max(0.85),
+    compressorMap: z.enum(['legacy', 'representative']).default('legacy'),
     /** Effective turbine nozzle area; smaller spools sooner with more back pressure. */
     turbineArea: z.number().min(0.00002).max(0.01),
     turbineEfficiency: z.number().min(0.5).max(0.85),
+    turbineMap: z.enum(['legacy', 'representative']).default('legacy'),
     shaftInertia: z.number().min(0.000001).max(0.01),
     boostTarget: z.number().min(0).max(400000),
     maxShaftRpm: z.number().int().min(20000).max(400000),
@@ -104,6 +129,7 @@ export const inductionSchema = z.discriminatedUnion('kind', [
     kind: z.literal('centrifugal'),
     compressorDiameter: z.number().min(0.02).max(0.2),
     compressorEfficiency: z.number().min(0.5).max(0.85),
+    compressorMap: z.enum(['legacy', 'representative']).default('legacy'),
     /** Compressor shaft speed per crank speed, including any internal step-up. */
     driveRatio: z.number().min(1).max(30),
     maxShaftRpm: z.number().int().min(20000).max(400000),
@@ -131,8 +157,10 @@ export const inductionDefaults = {
     kind: 'turbo',
     compressorDiameter: 0.05,
     compressorEfficiency: 0.76,
+    compressorMap: 'representative',
     turbineArea: 0.0006,
     turbineEfficiency: 0.72,
+    turbineMap: 'representative',
     shaftInertia: 0.000025,
     boostTarget: 80000,
     maxShaftRpm: 210000,
@@ -143,6 +171,7 @@ export const inductionDefaults = {
     kind: 'centrifugal',
     compressorDiameter: 0.085,
     compressorEfficiency: 0.76,
+    compressorMap: 'representative',
     driveRatio: 12,
     maxShaftRpm: 90000,
     blowOff: true,
@@ -234,9 +263,11 @@ export const combustionSchema = z.strictObject({
    * the 3,000 RPM full-load reference and the burn speeds up or slows with
    * speed, charge density, mixture and residual gas. */
   burnRate: z.enum(['fixed', 'predictive']),
-  fuel: z.enum(['ron91', 'ron95', 'ron98', 'e85']),
+  fuel: z.enum(['ron91', 'ron95', 'ron98', 'ron100', 'e85']),
   /** ECU knock sensing: retards the knocking cylinder, then creeps back. */
   knockControl: z.boolean(),
+  /** Schema 10 rich-product and knock calibration; absent means legacy. */
+  calibration: z.enum(['legacy', 'current']).default('legacy'),
 })
 export type Combustion = z.infer<typeof combustionSchema>
 export type FuelGrade = Combustion['fuel']
@@ -245,11 +276,13 @@ export const legacyCombustion: Combustion = {
   burnRate: 'fixed',
   fuel: 'ron95',
   knockControl: false,
+  calibration: 'legacy',
 }
 export const combustionDefaults: Combustion = {
   burnRate: 'predictive',
   fuel: 'ron95',
   knockControl: true,
+  calibration: 'current',
 }
 
 /** Map breakpoints: strictly increasing, 2–16 of them. */
@@ -280,6 +313,8 @@ export const managementSchema = z
     throttle: axis(0, 1),
     /** Turbo boost target (gauge), Pa, by throttle row and RPM column. */
     boost: table(0, 400000),
+    /** Maximum requested brake torque, Nm, by driver throttle and RPM. */
+    torque: table(0, 20000).optional(),
     /**
      * Cam phaser targets, crank degrees of advance (negative retards), by
      * load row and RPM column. Present only for builds with cam phasers.
@@ -289,7 +324,13 @@ export const managementSchema = z
   })
   .superRefine((m, ctx) => {
     const check = (
-      name: 'ignition' | 'lambda' | 'boost' | 'intakeCam' | 'exhaustCam',
+      name:
+        | 'ignition'
+        | 'lambda'
+        | 'boost'
+        | 'torque'
+        | 'intakeCam'
+        | 'exhaustCam',
       rows: number,
     ) => {
       const t = m[name]
@@ -304,6 +345,7 @@ export const managementSchema = z
     check('ignition', m.load.length)
     check('lambda', m.load.length)
     check('boost', m.throttle.length)
+    check('torque', m.throttle.length)
     if (m.intakeCam) check('intakeCam', m.load.length)
     if (m.exhaustCam) check('exhaustCam', m.load.length)
   })
@@ -364,6 +406,14 @@ const valveEvent = (open: [number, number], close: [number, number]) =>
 export const intakeEventSchema = valveEvent([300, 400], [520, 660])
 export const exhaustEventSchema = valveEvent([80, 220], [330, 430])
 export type ValveEvent = z.infer<typeof intakeEventSchema>
+/** Valve-lift motion law. Legacy is the pre-1.18.0 half-sine. */
+export const camMotionSchema = z.enum([
+  'legacy',
+  'gentle',
+  'performance',
+  'race',
+])
+export type CamMotion = z.infer<typeof camMotionSchema>
 /**
  * Camshaft profiles. The build's intake and exhaust areas become the flow
  * area at full lift; lift below a quarter of the valve diameter limits it.
@@ -486,6 +536,8 @@ export const twoStrokeSchema = z.strictObject({
      */
     width: z.number().min(0.005).max(0.3),
     bridge: z.boolean(),
+    /** Total effective width of auxiliary exhaust windows, m. */
+    auxiliaryWidth: z.number().min(0).max(0.2).default(0),
   }),
   transfers: z.strictObject({
     /** Two, three (with a boost port) or five ports: better scavenging. */
@@ -511,11 +563,13 @@ export const twoStrokeSchema = z.strictObject({
     .nullable(),
   /** Crank angle between a twin's cylinders: 180° alternate, 360° together. */
   crankPhase: z.union([z.literal(90), z.literal(180), z.literal(360)]),
+  /** Versioned gas-exchange, scavenging and rolling-bearing friction model. */
+  chargingModel: z.enum(['legacy', 'tuned']).default('legacy'),
 })
 export type TwoStroke = z.infer<typeof twoStrokeSchema>
 
-/** Schema 2 adds cycles, 3 layouts, 4 exhaust waves, 5 intake-port heat. */
-export const ENGINE_SCHEMA_VERSION = 5
+/** Schema 2 adds cycles, 3 layouts, 4 exhaust waves, 5 port heat, 6 cam motion, 7 two-stroke charging, 8 torque requests, 9 turbo maps, 10 combustion calibration. */
+export const ENGINE_SCHEMA_VERSION = 10
 
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
@@ -526,6 +580,11 @@ export const engineSchema = z.strictObject({
     z.literal(3),
     z.literal(4),
     z.literal(5),
+    z.literal(6),
+    z.literal(7),
+    z.literal(8),
+    z.literal(9),
+    z.literal(10),
   ]),
   name: z.string().trim().min(1).max(80),
   cycle: z.enum(['four-stroke', 'two-stroke']).default('four-stroke'),
@@ -557,6 +616,11 @@ export const engineSchema = z.strictObject({
   intakeRunnerLength: z.number().min(0.05).max(1.5).default(0.3),
   // Builds saved before 1.17.0 keep the unheated-port result exactly.
   intakePortModel: z.enum(['legacy', 'heated']).default('legacy'),
+  // Builds saved before 1.18.0 keep the half-sine valve motion exactly.
+  camMotion: camMotionSchema.default('legacy'),
+  // Null preserves 1.17.0's half-clearance-height assumption. New builds
+  // store their effective valve-to-piston room at overlap TDC explicitly.
+  valveRelief: z.number().min(0.0005).max(0.02).nullable().default(null),
   ignitionAdvance: z.number().min(5).max(38),
   burnDuration: z.number().min(35).max(75),
   lambda: z.number().min(0.8).max(1.15),
@@ -678,7 +742,7 @@ export function validateEngine(value: unknown): EngineDefinition {
     if (e.twoStroke)
       throw new Error('A four-stroke has valves, not two-stroke ports.')
   } else twoStrokeProblems(e)
-  // Older builds read as schema 5; compatibility fields retain their model.
+  // Older builds read as schema 10; compatibility fields retain their model.
   return { ...e, schemaVersion: ENGINE_SCHEMA_VERSION }
 }
 /**
@@ -764,6 +828,8 @@ function twoStrokeProblems(e: EngineDefinition) {
         ? 'A bridged exhaust port wider than 1.05 × bore would snag the rings.'
         : 'An exhaust port wider than 0.75 × bore would snag the rings: narrow it or add a bridge.',
     )
+  if (t.exhaustPort.width + t.exhaustPort.auxiliaryWidth > 1.6 * e.bore + 1e-9)
+    throw new Error('The main and auxiliary exhaust ports cannot be wider in total than 1.6 × bore.')
   if (t.transfers.width > 1.6 * e.bore + 1e-9)
     throw new Error('The transfer ports cannot be wider in total than 1.6 × bore.')
   if (t.intake.kind === 'piston') {
@@ -816,7 +882,11 @@ export const roadEngine: EngineDefinition = {
   intakeClose: 590,
   intakeRunnerLength: 0.3,
   intakePortModel: 'heated',
-  ignitionAdvance: 20,
+  camMotion: 'performance',
+  valveRelief: 0.0048,
+  // Performance valve motion fills more strongly while lugging than the
+  // compatibility curve; 16° keeps the standard road launch knock-safe.
+  ignitionAdvance: 16,
   burnDuration: 52,
   lambda: 1,
   inertia: 0.22,
@@ -879,13 +949,18 @@ export const raceTwoStroke: EngineDefinition = {
   starterTorque: 30,
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.036, chokes: 1, acceleratorPump: false },
   exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.3 },
-  combustion: { burnRate: 'predictive', fuel: 'ron98', knockControl: false },
+  combustion: {
+    burnRate: 'predictive',
+    fuel: 'ron98',
+    knockControl: false,
+    calibration: 'current',
+  },
   fuelSupply: null,
   twoStroke: {
-    exhaustPort: { height: 0.0275, width: 0.054, bridge: true },
-    transfers: { count: 5, height: 0.0395, width: 0.075 },
-    intake: { kind: 'reed', area: 0.0012, stiffness: 600 },
-    crankcaseCompression: 1.35,
+    exhaustPort: { height: 0.0275, width: 0.054, bridge: true, auxiliaryWidth: 0.02 },
+    transfers: { count: 5, height: 0.0395, width: 0.085 },
+    intake: { kind: 'reed', area: 0.0024, stiffness: 600 },
+    crankcaseCompression: 1.5,
     pipe: {
       kind: 'chamber',
       header: { length: 0.11, diameter: 0.04 },
@@ -900,6 +975,7 @@ export const raceTwoStroke: EngineDefinition = {
     },
     powerValve: { rpm: 8500, drop: 0.004 },
     crankPhase: 180,
+    chargingModel: 'tuned',
   },
 }
 /** A 50 cc moped: piston-port intake, two transfers and a mild pipe. */
@@ -919,10 +995,15 @@ export const mopedTwoStroke: EngineDefinition = {
   mechanicalLimit: 9500,
   starterTorque: 20,
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.014, chokes: 1, acceleratorPump: false },
-  combustion: { burnRate: 'predictive', fuel: 'ron95', knockControl: false },
+  combustion: {
+    burnRate: 'predictive',
+    fuel: 'ron95',
+    knockControl: false,
+    calibration: 'current',
+  },
   exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'chambered', tailpipeLength: 0.3 },
   twoStroke: {
-    exhaustPort: { height: 0.0215, width: 0.026, bridge: false },
+    exhaustPort: { height: 0.0215, width: 0.026, bridge: false, auxiliaryWidth: 0 },
     transfers: { count: 2, height: 0.0275, width: 0.04 },
     intake: { kind: 'piston', height: 0.026, width: 0.024 },
     crankcaseCompression: 1.45,
@@ -936,6 +1017,7 @@ export const mopedTwoStroke: EngineDefinition = {
     },
     powerValve: null,
     crankPhase: 180,
+    chargingModel: 'legacy',
   },
 }
 export const normalConditions: Conditions = {
@@ -1020,6 +1102,8 @@ export function flatMaps(e: EngineDefinition): Management {
       throttle.length,
       e.induction.kind === 'turbo' ? e.induction.boostTarget : 0,
     ).map((r) => r.slice(0, 16)),
+    // Effectively unlimited: enabling maps alone must not close the throttle.
+    torque: fill(throttle.length, 20000).map((r) => r.slice(0, 16)),
     ...(e.cams?.phasers
       ? {
           intakeCam: fill(load.length, 0).map((r) => r.slice(0, 16)),

@@ -36,6 +36,7 @@ export const FUELS: Record<
   ron91: gasoline('RON 91 regular', 91),
   ron95: gasoline('RON 95 premium', 95),
   ron98: gasoline('RON 98 super', 98),
+  ron100: gasoline('RON 100 Japanese premium', 100),
   e85: {
     label: 'E85 ethanol blend',
     octane: 105,

@@ -23,6 +23,26 @@
         {
           "type": "number",
           "const": 5
+        },
+        {
+          "type": "number",
+          "const": 6
+        },
+        {
+          "type": "number",
+          "const": 7
+        },
+        {
+          "type": "number",
+          "const": 8
+        },
+        {
+          "type": "number",
+          "const": 9
+        },
+        {
+          "type": "number",
+          "const": 10
         }
       ]
     },
@@ -125,6 +145,29 @@
         "heated"
       ]
     },
+    "camMotion": {
+      "default": "legacy",
+      "type": "string",
+      "enum": [
+        "legacy",
+        "gentle",
+        "performance",
+        "race"
+      ]
+    },
+    "valveRelief": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0005,
+          "maximum": 0.02
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "ignitionAdvance": {
       "type": "number",
       "minimum": 5,
@@ -204,6 +247,14 @@
               "minimum": 0.5,
               "maximum": 0.85
             },
+            "compressorMap": {
+              "default": "legacy",
+              "type": "string",
+              "enum": [
+                "legacy",
+                "representative"
+              ]
+            },
             "turbineArea": {
               "type": "number",
               "minimum": 0.00002,
@@ -213,6 +264,14 @@
               "type": "number",
               "minimum": 0.5,
               "maximum": 0.85
+            },
+            "turbineMap": {
+              "default": "legacy",
+              "type": "string",
+              "enum": [
+                "legacy",
+                "representative"
+              ]
             },
             "shaftInertia": {
               "type": "number",
@@ -283,6 +342,14 @@
               "type": "number",
               "minimum": 0.5,
               "maximum": 0.85
+            },
+            "compressorMap": {
+              "default": "legacy",
+              "type": "string",
+              "enum": [
+                "legacy",
+                "representative"
+              ]
             },
             "driveRatio": {
               "type": "number",
@@ -545,7 +612,8 @@
       "default": {
         "burnRate": "fixed",
         "fuel": "ron95",
-        "knockControl": false
+        "knockControl": false,
+        "calibration": "legacy"
       },
       "type": "object",
       "properties": {
@@ -562,11 +630,20 @@
             "ron91",
             "ron95",
             "ron98",
+            "ron100",
             "e85"
           ]
         },
         "knockControl": {
           "type": "boolean"
+        },
+        "calibration": {
+          "default": "legacy",
+          "type": "string",
+          "enum": [
+            "legacy",
+            "current"
+          ]
         }
       },
       "required": [
@@ -654,6 +731,21 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 400000
+                }
+              }
+            },
+            "torque": {
+              "minItems": 2,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "minItems": 2,
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 20000
                 }
               }
             },
@@ -1059,6 +1151,12 @@
                 },
                 "bridge": {
                   "type": "boolean"
+                },
+                "auxiliaryWidth": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.2
                 }
               },
               "required": [
@@ -1387,6 +1485,14 @@
                   "type": "number",
                   "const": 360
                 }
+              ]
+            },
+            "chargingModel": {
+              "default": "legacy",
+              "type": "string",
+              "enum": [
+                "legacy",
+                "tuned"
               ]
             }
           },

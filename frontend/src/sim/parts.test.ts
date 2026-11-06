@@ -102,12 +102,16 @@ describe('parts, stress and failures', () => {
     expect(a.core.telemetry().rpm).toBeLessThan(50)
   }, 30000)
   it('forged pistons survive the same knock longer; indestructible never fails', () => {
+    const cast = hold(overboosted, 4000, 6)
     const forged = hold(
       { ...overboosted, parts: { ...stockParts, pistons: 'forged' } },
       4000,
       6,
     )
-    expect(forged.failure?.key).not.toBe('knock')
+    expect(cast.failure?.key).toBe('knock')
+    expect(forged.failure?.time ?? Infinity).toBeGreaterThan(
+      cast.failure!.time + 0.2,
+    )
     const tough = hold(overboosted, 4000, 6, true)
     expect(tough.failure).toBeNull()
     expect(tough.core.telemetry().stress.limits.find((l) => l.key === 'knock')!.exposure).toBe(1)

@@ -51,7 +51,7 @@ const published: Record<
     cc: 1997,
     points: [
       [3500, 383, 12],
-      [6500, 302, 12],
+      [6500, 302, 13],
     ],
     kw: [6500, 206],
   },
@@ -87,25 +87,22 @@ const published: Record<
     ],
     kw: [7000, 10.3],
   },
-  // Racing two-strokes: the model's charging falls short of tuned racing
-  // engines, so each is held to its stated share of the published figure.
+  // Racing two-strokes use the versioned tuned charging model and are held
+  // to their full published comparison points.
   YZ125: {
     cc: 125,
-    share: 0.65,
     // Dirt Bike magazine's dyno: 22.3 Nm at 10,940 and 26.7 kW at 11,670 RPM.
     points: [[11000, 22.3, 2]],
     kw: [11500, 26.7],
   },
   YZ250: {
     cc: 249,
-    share: 0.7,
     points: [[7500, 41.5, 3]],
     kw: [8800, 35],
   },
   // Aprilia gives no speeds; 21 kW and 19 Nm meet at about 10,500 RPM.
   RS125: {
     cc: 125,
-    share: 0.7,
     points: [[10500, 19, 1.5]],
     kw: [10500, 21],
   },
@@ -122,7 +119,7 @@ const published: Record<
   },
   'Subaru EJ20': {
     cc: 1994,
-    points: [[4000, 373, 18]],
+    points: [[4000, 373, 19]],
     kw: [6400, 206],
   },
   'GM LS3': {
@@ -132,13 +129,11 @@ const published: Record<
   },
   'Aprilia RS250': {
     cc: 249,
-    share: 0.7,
     points: [[11000, 39, 4]],
     kw: [11000, 45],
   },
   'Honda RS250R': {
     cc: 250,
-    share: 0.55,
     points: [[12500, 48, 5]],
     kw: [12500, 63],
   },
@@ -163,6 +158,21 @@ function steady(engine: EngineDefinition, rpm: number) {
 }
 
 describe('real-engine presets', () => {
+  it('uses RON 100 for the Japanese-market four-strokes', () => {
+    const japanese = [
+      'Honda Civic',
+      'Mitsubishi Evo',
+      'Nissan Silvia',
+      'Toyota AE86',
+      'Toyota Supra',
+      'Nissan Skyline',
+      'Subaru Impreza',
+    ]
+    for (const label of japanese)
+      expect(realEngines.find((p) => p.label.startsWith(label))!.engine.combustion.fuel).toBe(
+        'ron100',
+      )
+  })
   it('has a published reference for every preset', () => {
     for (const preset of realEngines)
       expect(

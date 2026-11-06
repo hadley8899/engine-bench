@@ -66,7 +66,7 @@ test('engine maps drive the timing, and small injectors run out of fuel', async 
   await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
   await page.getByRole('button', { name: 'Start engine', exact: true }).click()
   await expect(page.getByTestId('ecu')).toContainText('TIMING · MAP')
-  await expect(page.getByTestId('ecu')).toContainText('21.0')
+  await expect(page.getByTestId('ecu')).toContainText('17.0')
   await expect(page.getByTestId('map-live')).toContainText('Running at')
   // Estimated temperatures for each cylinder.
   for (const n of [1, 2, 3, 4])

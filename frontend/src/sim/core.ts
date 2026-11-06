@@ -21,7 +21,14 @@ import type { InductionTelemetry } from './induction'
 import { FUELS, FuelDelivery, LEAN_MISFIRE, RICH_MISFIRE } from './fuel'
 import { BurnedGas, FREEZE } from './chemistry'
 import { partsInertia, Stress, VALVE_SPRINGS } from './parts'
-import { clearanceRatio, emptyEvents, valveEvents } from './cams'
+import {
+  clearanceRatio,
+  emptyEvents,
+  floatedLiftAt,
+  floatFactor,
+  floatSeverity,
+  valveEvents,
+} from './cams'
 import { FourStrokeExhaust } from './exhaust'
 import type { StressTelemetry } from './parts'
 import type { FuelTelemetry } from './fuel'
@@ -154,6 +161,8 @@ export type EcuTelemetry = {
   /** Map load: manifold pressure, Pa, and driver throttle. */
   load: number
   throttle: number
+  /** Electronic throttle plate command after any torque request, 0–1. */
+  throttlePlate: number
 }
 interface Cylinder {
   mass: number
@@ -321,8 +330,13 @@ export class EngineCore {
   /** Crank inertia including any parts heavier or lighter than stock. */
   private inertia: number
   private frictionStatic: number
+  /** Estimated speed at which the fitted springs lose valve control. */
+  private valveFloatLimit: number
   /** Boost target before any push-it offset, Pa. */
   private boostBase = 0
+  /** Optional torque-map request and the resulting electronic-throttle command. */
+  private torqueRequest = Infinity
+  private torqueThrottle = 1
   readonly stress: Stress
   /** The second cam profile is engaged. */
   highCam = false
@@ -354,6 +368,10 @@ export class EngineCore {
     this.inertia = engine.inertia + partsInertia(this.engine)
     this.frictionStatic =
       FMEP_STATIC + VALVE_SPRINGS[this.engine.parts.valveSprings].friction
+    this.valveFloatLimit =
+      this.engine.mechanicalLimit *
+      VALVE_SPRINGS[this.engine.parts.valveSprings].float *
+      floatFactor(this.engine)
     if (engine.induction.kind === 'turbo')
       this.boostBase = engine.induction.boostTarget
     this.crankRadius = engine.stroke / 2
@@ -372,7 +390,10 @@ export class EngineCore {
     this.heatedIntakePort = engine.intakePortModel === 'heated'
     this.sparkAdvance = engine.ignitionAdvance
     this.targetLambda = engine.lambda
-    this.octaneDelay = KNOCK_DELAY * (this.grade.octane / 100) ** 3.402
+    this.octaneDelay =
+      KNOCK_DELAY *
+      (this.grade.octane / 100) ** 3.402 *
+      (engine.combustion.calibration === 'current' ? 0.99 : 1)
     this.pistonSpeedPerRpm = (2 * engine.stroke) / 60
     // burnDuration is quoted for gasoline at 3,000 RPM and full load.
     this.referenceFlame = turbulentFlame(
@@ -424,7 +445,7 @@ export class EngineCore {
       const mass =
         (conditions.pressure * g.volume) / (R * conditions.temperature)
       const gas = new BurnedGas()
-      gas.set(this.grade, 1)
+      gas.set(this.grade, 1, engine.combustion.calibration)
       this.cylinders.push({
         mass,
         energy: mass * internalEnergy(conditions.temperature),
@@ -495,6 +516,8 @@ export class EngineCore {
     core.misfireTime = previous.misfireTime
     core.knockTime = previous.knockTime
     if (core.runnerResidual) core.idleTrim = previous.idleTrim
+    core.torqueRequest = previous.torqueRequest
+    core.torqueThrottle = previous.torqueThrottle
     core.maxSubsteps = previous.maxSubsteps
     core.sound = previous.sound
     core.acoustics.adopt(previous.acoustics)
@@ -585,6 +608,8 @@ export class EngineCore {
     const e = this.engine
     const c = this.conditions
     const rpm = omegaToRpm(this.omega)
+    const valveFloat =
+      e.camMotion === 'legacy' ? 0 : floatSeverity(rpm / this.valveFloatLimit)
     if (rpm >= e.revLimit) this.limited = true
     else if (rpm < e.revLimit - 220) this.limited = false
     this.warning =
@@ -612,9 +637,6 @@ export class EngineCore {
           this.heatedIntakePort ? 0.8 : this.runnerResidual ? 0.6 : 0.38,
         )
       : 0
-    // Idle air bypasses the throttle plate, so the two flows add: the first
-    // few per cent of pedal open the throttle beyond the idle air.
-    const throttle = idle + (1 - idle) * this.controls.throttle
     const switchRpm = e.cams ? e.cams.high?.rpm : e.camSwitch?.rpm
     if (switchRpm)
       this.highCam = this.highCam ? rpm >= switchRpm - 150 : rpm >= switchRpm
@@ -646,6 +668,15 @@ export class EngineCore {
           this.controls.throttle,
           rpm,
         )
+      this.torqueRequest = maps.torque
+        ? lookup(
+            maps.throttle,
+            maps.rpm,
+            maps.torque,
+            this.controls.throttle,
+            rpm,
+          )
+        : Infinity
       const phasers = e.cams?.phasers
       if (phasers && maps.intakeCam && maps.exhaustCam) {
         this.intakeTarget = clamp(
@@ -660,6 +691,23 @@ export class EngineCore {
         )
       }
     }
+    // A torque-based ECU may close the electronic throttle independently of
+    // the pedal. The measured brake torque is already smoothed over 80 ms;
+    // this bounded integral represents the slower cylinder-charge controller.
+    if (
+      maps?.torque &&
+      this.torqueRequest < 19999 &&
+      (this.controls.boostOffset ?? 0) <= 0
+    )
+      this.torqueThrottle = clamp(
+        this.torqueThrottle +
+          (this.torqueRequest - this.torque) * 0.012 * this.dt,
+        0,
+        this.controls.throttle,
+      )
+    else this.torqueThrottle = this.controls.throttle
+    // Idle air bypasses the throttle plate, so the two flows add.
+    const throttle = idle + (1 - idle) * this.torqueThrottle
     // Phasers move towards their targets at a limited rate.
     const phasers = e.cams?.phasers
     if (phasers) {
@@ -788,27 +836,31 @@ export class EngineCore {
         const heldPerMass = cyl.held / cyl.mass
         // Flow area follows lift until the curtain reaches full flow.
         const inlet =
-          deg >= valves.intakeOpen && deg < intakeClose
-            ? Math.min(
+          Math.min(
+            1,
+            valves.intakeRatio *
+              floatedLiftAt(
+                valves.intakeOpen,
+                intakeClose,
                 1,
-                valves.intakeRatio *
-                  Math.sin(
-                    (Math.PI * (deg - valves.intakeOpen)) /
-                      (intakeClose - valves.intakeOpen),
-                  ),
-              ) * valves.intakeArea
-            : 0
+                deg,
+                valves.motion,
+                valveFloat,
+              ),
+          ) * valves.intakeArea
         const exhaust =
-          deg >= valves.exhaustOpen && deg < exhaustClose
-            ? Math.min(
+          Math.min(
+            1,
+            valves.exhaustRatio *
+              floatedLiftAt(
+                valves.exhaustOpen,
+                exhaustClose,
                 1,
-                valves.exhaustRatio *
-                  Math.sin(
-                    (Math.PI * (deg - valves.exhaustOpen)) /
-                      (exhaustClose - valves.exhaustOpen),
-                  ),
-              ) * valves.exhaustArea
-            : 0
+                deg,
+                valves.motion,
+                valveFloat,
+              ),
+          ) * valves.exhaustArea
         // Enthalpy transport across each open valve; reverse flow is supported.
         if (inlet > 0) {
           // Lumped runner: gas momentum driven by manifold-to-cylinder
@@ -990,7 +1042,8 @@ export class EngineCore {
           cyl.heat =
             fires && ignites ? burnable * this.grade.heating * 0.96 : 0
           // The products' chemistry follows this burn's mixture.
-          if (cyl.heat > 0) cyl.gas.set(this.grade, 1 / lambda)
+          if (cyl.heat > 0)
+            cyl.gas.set(this.grade, 1 / lambda, e.combustion.calibration)
           cyl.burnFresh = cyl.heat > 0 ? cyl.fresh : 0
           cyl.spark = ignition
           cyl.sparked = true
@@ -1450,6 +1503,7 @@ export class EngineCore {
             : null,
         load: this.manifold,
         throttle: this.controls.throttle,
+        throttlePlate: this.torqueThrottle,
       },
       road: this.controls.road
         ? { speed: this.vehicle.speed * 3.6, gear: this.controls.road.gear }

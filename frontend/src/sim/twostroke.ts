@@ -68,11 +68,14 @@ const choked = (upstream: number, temperature: number, area: number) =>
   ((area * upstream) / Math.sqrt(R * temperature)) * CHOKED
 /** Port discharge coefficient (sharp-edged port window). */
 const PORT_DISCHARGE = 0.7
+/** Effective coefficient for clean, radiused racing transfer windows. */
+const TUNED_PORT_DISCHARGE = 0.84
 /** Share of a bridged exhaust port's width the bridge blocks. */
 const BRIDGE = 0.1
 /** Effective flowing width of the exhaust port, m. */
 const exhaustWidth = (t: TwoStroke) =>
-  t.exhaustPort.width * (t.exhaustPort.bridge ? 1 - BRIDGE : 1)
+  t.exhaustPort.width * (t.exhaustPort.bridge ? 1 - BRIDGE : 1) +
+  t.exhaustPort.auxiliaryWidth
 /**
  * Two-zone (Benson–Brandham) scavenging by transfer layout: the share of
  * the cylinder's gas the incoming charge displaces before it starts to
@@ -84,6 +87,8 @@ export const SCAVENGING = {
   3: { displacement: 0.35, shortCircuit: 0.15 },
   5: { displacement: 0.45, shortCircuit: 0.1 },
 } as const
+/** Well-directed five-port loop scavenging, fitted to measured efficiency. */
+export const TUNED_SCAVENGING = { displacement: 0.9, shortCircuit: 0.03 } as const
 /**
  * Friction mean effective pressure of a roller-bearing two-stroke per
  * revolution (no valvetrain): static, per m/s and per (m/s)² of mean
@@ -92,6 +97,8 @@ export const SCAVENGING = {
 const FMEP_STATIC = 30000
 const FMEP_LINEAR = 2000
 const FMEP_QUADRATIC = 250
+/** Blair rolling-bearing correlation: FMEP = 150 × stroke × RPM. */
+const ROLLER_FMEP_PER_SPEED = 4500
 /** Idle speed the idle air holds, RPM, and the idle screw's slide opening. */
 const IDLE_RPM = 1400
 const IDLE_OPENING = 0.08
@@ -447,6 +454,7 @@ export class TwoStrokeCore {
   /** Gas in the intake tract between throttle and crankcase, kg. */
   private manifoldMass: number
   private scavenging: { displacement: number; shortCircuit: number }
+  private tunedCharging: boolean
   private direct: boolean
   private idleTrim = 0
   private sparkAdvance: number
@@ -463,6 +471,7 @@ export class TwoStrokeCore {
       throw new Error('TwoStrokeCore runs two-strokes; use createCore.')
     const e = this.engine
     const t = (this.ts = e.twoStroke!)
+    this.tunedCharging = t.chargingModel === 'tuned'
     this.conditions = conditionsSchema.parse(conditions)
     const count = e.cylinders
     this.traces = Array.from({ length: count }, () => new Float32Array(360))
@@ -482,7 +491,10 @@ export class TwoStrokeCore {
     this.chargeFuel = (displacement(e) / count) * (1.2 / this.grade.stoichiometric)
     this.sparkAdvance = e.ignitionAdvance
     this.targetLambda = e.lambda
-    this.octaneDelay = KNOCK_DELAY * (this.grade.octane / 100) ** 3.402
+    this.octaneDelay =
+      KNOCK_DELAY *
+      (this.grade.octane / 100) ** 3.402 *
+      (engine.combustion.calibration === 'current' ? 0.99 : 1)
     this.pistonSpeedPerRpm = (2 * e.stroke) / 60
     this.referenceFlame = turbulentFlame(
       laminarFlame(FUELS.ron95.flame, 1, 700, 1.5e6, 0.08),
@@ -522,7 +534,7 @@ export class TwoStrokeCore {
     this.sparkCut =
       e.limiterCut === 'spark' || e.fuelSystem.kind === 'carburettor'
     this.direct = e.fuelSystem.kind === 'direct'
-    this.scavenging = SCAVENGING[t.transfers.count]
+    this.scavenging = this.tunedCharging ? TUNED_SCAVENGING : SCAVENGING[t.transfers.count]
     this.induction = new InductionSystem(e, conditions, air.density, this.airDensityRatio)
     this.fuel = new FuelDelivery(e, air.density)
     this.lambda = e.lambda
@@ -543,7 +555,7 @@ export class TwoStrokeCore {
       const ccVolume = this.crankcaseMinimum + this.pistonArea * (e.stroke - x)
       const ccMass = (conditions.pressure * ccVolume) / (R * T)
       const gas = new BurnedGas()
-      gas.set(this.grade, 1)
+      gas.set(this.grade, 1, engine.combustion.calibration)
       this.cylinders.push({
         mass,
         energy: mass * internalEnergy(T),
@@ -603,7 +615,7 @@ export class TwoStrokeCore {
         pushed: 0,
         pushedFresh: 0,
         pushedFuel: 0,
-        pipe: new Pipe(segments, conditions.pressure, T),
+        pipe: new Pipe(segments, conditions.pressure, T, T, this.tunedCharging),
         wave: new Float32Array(0),
         waveSlot: -1,
         portMass: 0,
@@ -893,7 +905,7 @@ export class TwoStrokeCore {
 
         // 2. Transfers between crankcase and cylinder.
         const transfer = transferOpen
-          ? PORT_DISCHARGE * t.transfers.width * (x - t.transfers.height)
+          ? (this.tunedCharging ? TUNED_PORT_DISCHARGE : PORT_DISCHARGE) * t.transfers.width * (x - t.transfers.height)
           : 0
         if (transfer > 0) {
           // Gas in the transfer ducts has momentum: driven by the pressure
@@ -1033,7 +1045,8 @@ export class TwoStrokeCore {
             cyl.fresh >= DILUTION_MISFIRE * cyl.mass
           const lit = fires && ignites
           cyl.heat = lit ? burnable * this.grade.heating * 0.96 : 0
-          if (lit) cyl.gas.set(this.grade, 1 / lambda)
+          if (lit)
+            cyl.gas.set(this.grade, 1 / lambda, e.combustion.calibration)
           cyl.burnFresh = lit ? cyl.fresh : 0
           cyl.spark = ignition
           cyl.sparked = true
@@ -1122,8 +1135,11 @@ export class TwoStrokeCore {
         cyl.ccVolume = ccVolume
         indicated += (pressure - crankcase) * derivative
       }
+      const frictionPressure = this.tunedCharging
+        ? ROLLER_FMEP_PER_SPEED * pistonSpeed
+        : FMEP_STATIC + FMEP_LINEAR * pistonSpeed + FMEP_QUADRATIC * pistonSpeed * pistonSpeed
       const friction =
-        (FMEP_STATIC + FMEP_LINEAR * pistonSpeed + FMEP_QUADRATIC * pistonSpeed * pistonSpeed) *
+        frictionPressure *
           this.frictionPerPascal +
         induction.crankTorque +
         fuel.crankTorque
@@ -1498,6 +1514,7 @@ export class TwoStrokeCore {
         boostTarget: null,
         load: this.manifold,
         throttle: this.controls.throttle,
+        throttlePlate: this.controls.throttle,
       },
       road: this.controls.road
         ? { speed: this.vehicle.speed * 3.6, gear: this.controls.road.gear }

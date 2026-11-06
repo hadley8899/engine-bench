@@ -16,7 +16,12 @@ function held(
 ) {
   const core = new EngineCore(engine, conditions)
   core.sound = false
-  core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+  core.setControls({
+    ignition: true,
+    throttle: 1,
+    holdRpm: rpm,
+    indestructible: true,
+  })
   for (let i = 0; i < 48000 * 1.2; i++) core.step()
   let torque = 0
   const samples = Math.round((6 * 120 * 48000) / rpm)
@@ -35,7 +40,7 @@ describe('heated intake-port gas exchange', () => {
     const old: Record<string, unknown> = { ...roadEngine, schemaVersion: 4 }
     delete old.intakePortModel
     const migrated = validateEngine(old)
-    expect(migrated.schemaVersion).toBe(5)
+    expect(migrated.schemaVersion).toBe(10)
     expect(migrated.intakePortModel).toBe('legacy')
   })
 
@@ -74,8 +79,13 @@ describe('heated intake-port gas exchange', () => {
     core.sound = false
     core.setControls({ ignition: true, throttle: 1, holdRpm: 1500 })
     let hottest = 0
+    let hottestWall = 0
     for (let i = 0; i < 48000; i++) {
       core.step()
+      hottestWall = Math.max(
+        hottestWall,
+        enthalpy(core.telemetry().coolant + 10),
+      )
       const cylinders = (
         core as unknown as {
           cylinders: { pushed: number; pushedEnergy: number }[]
@@ -89,9 +99,7 @@ describe('heated intake-port gas exchange', () => {
           )
     }
     expect(hottest).toBeGreaterThan(enthalpy(normalConditions.temperature))
-    expect(hottest).toBeLessThanOrEqual(
-      enthalpy(core.telemetry().coolant + 10) + 1,
-    )
+    expect(hottest).toBeLessThanOrEqual(hottestWall + 1)
   })
 
   it('reduces the K20 low-speed excess before using milder cam phasing', () => {

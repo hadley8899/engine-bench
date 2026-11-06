@@ -53,6 +53,56 @@ export function InductionEditor({
       </TextField>
       {value.kind !== 'none' && (
         <>
+          {(value.kind === 'turbo' || value.kind === 'centrifugal') && (
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Compressor map"
+              value={value.compressorMap}
+              disabled={disabled}
+              onChange={(e) =>
+                onChange((current) =>
+                  current.kind === 'turbo' || current.kind === 'centrifugal'
+                    ? {
+                        ...current,
+                        compressorMap: e.target.value as
+                          | 'legacy'
+                          | 'representative',
+                      }
+                    : current,
+                )
+              }
+            >
+              <MenuItem value="legacy">Legacy ellipse</MenuItem>
+              <MenuItem value="representative">Representative speed lines</MenuItem>
+            </TextField>
+          )}
+          {value.kind === 'turbo' && (
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Turbine map"
+              value={value.turbineMap}
+              disabled={disabled}
+              onChange={(e) =>
+                onChange((current) =>
+                  current.kind === 'turbo'
+                    ? {
+                        ...current,
+                        turbineMap: e.target.value as
+                          | 'legacy'
+                          | 'representative',
+                      }
+                    : current,
+                )
+              }
+            >
+              <MenuItem value="legacy">Legacy nozzle</MenuItem>
+              <MenuItem value="representative">Representative radial map</MenuItem>
+            </TextField>
+          )}
           <div className="field-grid">
             {inductionFields[value.kind].map((f) => (
               <NumberField

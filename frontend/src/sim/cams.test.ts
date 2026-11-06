@@ -3,7 +3,10 @@ import { EngineCore } from './core'
 import {
   camsFromEvents,
   clearanceRatio,
+  floatedLiftAt,
   floatFactor,
+  liftAt,
+  peakMotionAcceleration,
   overlap,
   valveEvents,
 } from './cams'
@@ -64,6 +67,32 @@ describe('camshafts and valve timing', () => {
     ])
     expect(overlap(v)).toBe(20)
   })
+  it('migrates schema-5 builds to legacy motion and valve room', () => {
+    const old: Record<string, unknown> = { ...roadEngine, schemaVersion: 5 }
+    delete old.camMotion
+    delete old.valveRelief
+    const migrated = engineSchema.parse(old)
+    expect(migrated.camMotion).toBe('legacy')
+    expect(migrated.valveRelief).toBeNull()
+  })
+  it('uses zero-velocity polynomial ramps whose lift area and acceleration differ', () => {
+    const area = (motion: EngineDefinition['camMotion']) => {
+      let sum = 0
+      for (let deg = 0; deg < 100; deg += 0.1)
+        sum += liftAt(0, 100, 1, deg, motion) * 0.1
+      return sum
+    }
+    for (const motion of ['gentle', 'performance', 'race'] as const) {
+      expect(liftAt(0, 100, 1, 0, motion)).toBe(0)
+      expect(liftAt(0, 100, 1, 0.001, motion)).toBeLessThan(1e-10)
+      expect(liftAt(0, 100, 1, 99.999, motion)).toBeLessThan(1e-10)
+    }
+    expect(area('performance')).toBeGreaterThan(area('gentle') + 4)
+    expect(area('race')).toBeGreaterThan(area('performance') + 4)
+    expect(peakMotionAcceleration('race')).toBeGreaterThan(
+      peakMotionAcceleration('performance') * 1.5,
+    )
+  })
   it('converts fixed events to profiles without changing a result', () => {
     for (const rpm of [2000, 5500])
       expect(torque(profiled, rpm)).toBe(torque(roadEngine, rpm))
@@ -102,9 +131,46 @@ describe('camshafts and valve timing', () => {
       limit({ ...race, parts: { ...stockParts, valveSprings: 'uprated' } }),
     ).toBeGreaterThan(limit(race))
   })
+  it('separates equal-duration cams by motion and progressively loses control', () => {
+    const gentle = { ...profiled, camMotion: 'gentle' as const }
+    const performance = { ...profiled, camMotion: 'performance' as const }
+    const aggressive = { ...profiled, camMotion: 'race' as const }
+    expect(torque(performance, 6000)).toBeGreaterThan(torque(gentle, 6000))
+    expect(torque(aggressive, 6000)).toBeGreaterThan(torque(performance, 6000))
+    expect(floatFactor(aggressive)).toBeLessThan(floatFactor(performance))
+    expect(floatFactor(performance)).toBeLessThan(floatFactor(gentle))
+    expect(floatFactor({ ...roadEngine, camMotion: 'race' })).toBeLessThan(
+      floatFactor(roadEngine),
+    )
+    expect(floatedLiftAt(0, 240, 0.01, 246, 'performance', 0)).toBe(0)
+    expect(
+      floatedLiftAt(0, 240, 0.01, 246, 'performance', 0.8),
+    ).toBeGreaterThan(0)
+  }, 60000)
+  it('loses power below the failure speed, then can bend a valve', () => {
+    const floating = { ...profiled, revLimit: 10000 }
+    const limit = new Stress(floating)
+      .telemetry(false)
+      .limits.find((item) => item.key === 'valveFloat')!.limit
+    const rpm = Math.round(limit * 0.97)
+    const controlled = {
+      ...floating,
+      mechanicalLimit: Math.min(25000, floating.mechanicalLimit * 1.5),
+    }
+    expect(torque(floating, rpm)).toBeLessThan(torque(controlled, rpm) - 2)
+    const core = new EngineCore(floating, normalConditions)
+    core.sound = false
+    core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+    for (let i = 0; i < 48000 * 3; i++) core.step()
+    expect(core.stress.failure).toBeNull()
+    expect(
+      core.telemetry().stress.limits.find((item) => item.key === 'valveFloat')!
+        .ratio,
+    ).toBeGreaterThan(0.9)
+  }, 60000)
   it('advancing an aggressive intake cam puts a valve into the piston', () => {
     const cams = { ...race.cams!, phasers: { intakeRange: 60, exhaustRange: 0, rate: 400 } }
-    const e = { ...race, compression: 11, cams }
+    const e = { ...race, compression: 11, valveRelief: 0.006, cams }
     expect(clearanceRatio(e, valveEvents(e, false, 0, 0))).toBeLessThan(1)
     expect(clearanceRatio(e, valveEvents(e, false, 60, 0))).toBeGreaterThan(1)
     const maps = flatMaps(e)

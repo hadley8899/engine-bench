@@ -10,6 +10,7 @@ import {
   R,
   temperatureFromEnergy,
 } from './physics'
+import { representativeCompressor, representativeTurbine } from './turboMaps'
 
 /** Calibration constants; see docs/SIMULATION.md for their basis. */
 const SLIP = 0.9
@@ -32,6 +33,8 @@ export type InductionTelemetry = {
   exhaustBackPressure: number
   venting: boolean
   surge: boolean
+  compressorChoked: boolean
+  turbineChoked: boolean
 }
 
 /**
@@ -51,6 +54,8 @@ export class InductionSystem {
   shaftOmega = 0
   wastegate = 0
   surge = false
+  compressorChoked = false
+  turbineChoked = false
   venting = false
   /** Brake torque the induction takes from the crank, Nm. */
   crankTorque = 0
@@ -159,6 +164,8 @@ export class InductionSystem {
     let flow: number
     let work = 0
     this.surge = false
+    this.compressorChoked = false
+    this.turbineChoked = false
     if (c.kind === 'roots') {
       this.shaftOmega = crankOmega * c.driveRatio
       const revs = this.shaftOmega / (2 * Math.PI)
@@ -186,13 +193,37 @@ export class InductionSystem {
       const choke = inletDensity * CHOKE_FLOW * tip * c.compressorDiameter ** 2
       const shutoff =
         (1 + (c.compressorEfficiency * SLIP * tip * tip) / (CP * ta)) ** 3.5
-      // Elliptical speed line: flat near shut-off, steep towards choke.
-      let mapFlow = choke
-      if (ratio > 1)
+      let mapFlow: number
+      let mapEfficiency = c.compressorEfficiency
+      if (c.compressorMap === 'representative') {
+        const point = representativeCompressor(
+          omegaToRpm(this.shaftOmega) /
+            (0.8 * c.maxShaftRpm) /
+            Math.sqrt(ta / 288.15),
+          ratio,
+        )
         mapFlow =
-          ratio < shutoff
-            ? choke * Math.sqrt(1 - ((ratio - 1) / (shutoff - 1)) ** 2)
-            : 0
+          inletDensity *
+          tip *
+          c.compressorDiameter ** 2 *
+          point.flowCoefficient
+        mapEfficiency = clamp(
+          (point.efficiency * c.compressorEfficiency) / 0.76,
+          0.3,
+          c.compressorEfficiency,
+        )
+        this.surge = ratio > 1.05 && point.surge
+        this.compressorChoked = point.choke
+      } else {
+        // Legacy elliptical speed line: flat near shut-off, steep at choke.
+        mapFlow = choke
+        if (ratio > 1)
+          mapFlow =
+            ratio < shutoff
+              ? choke * Math.sqrt(1 - ((ratio - 1) / (shutoff - 1)) ** 2)
+              : 0
+        this.surge = ratio > 1.15 && mapFlow < 0.2 * choke
+      }
       // A slow or stationary wheel still lets the engine draw air through it.
       const pass =
         this.outlet < pa
@@ -200,14 +231,17 @@ export class InductionSystem {
             this.densityRatio
           : 0
       flow = Math.max(mapFlow, pass)
-      this.surge = ratio > 1.15 && mapFlow < 0.2 * choke
       if (ratio > 1 && mapFlow > 0) {
         const fraction = choke > 0 ? mapFlow / choke : 0
-        const efficiency = clamp(
-          c.compressorEfficiency * (1 - 1.5 * (fraction - 0.65) ** 2),
-          0.3,
-          c.compressorEfficiency,
-        )
+        const efficiency =
+          c.compressorMap === 'representative'
+            ? mapEfficiency
+            : clamp(
+                c.compressorEfficiency *
+                  (1 - 1.5 * (fraction - 0.65) ** 2),
+                0.3,
+                c.compressorEfficiency,
+              )
         work = (CP * ta * (ratio ** (1 / 3.5) - 1)) / efficiency
       }
       const power = flow * work
@@ -266,7 +300,7 @@ export class InductionSystem {
     this.exhaustEnergy += energy
     let t = temperatureFromEnergy(this.exhaustEnergy / this.exhaustMass)
     let p = (this.exhaustMass * R * t) / this.exhaustVolume
-    const turbine = massFlow(p as Pascals, pa as Pascals, t, c.turbineArea)
+    let turbine = massFlow(p as Pascals, pa as Pascals, t, c.turbineArea)
     const gate = massFlow(
       p as Pascals,
       pa as Pascals,
@@ -276,10 +310,30 @@ export class InductionSystem {
     let turbinePower = 0
     if (p > pa) {
       const expansion = 1 - (pa / p) ** EXHAUST_EXPONENT
-      const spouting = Math.sqrt(2 * EXHAUST_CP * t * expansion)
-      const blade = (this.shaftOmega * 0.45 * c.compressorDiameter) / spouting
-      const efficiency =
-        c.turbineEfficiency * clamp(1 - ((blade - 0.7) / 0.7) ** 2, 0.15, 1)
+      let efficiency: number
+      if (c.turbineMap === 'representative') {
+        const point = representativeTurbine(
+          omegaToRpm(this.shaftOmega) /
+            (0.8 * c.maxShaftRpm) /
+            Math.sqrt(t / 950),
+          p / pa,
+        )
+        turbine *= point.flowCapacity
+        efficiency = clamp(
+          (point.efficiency * c.turbineEfficiency) / 0.76,
+          0.1,
+          c.turbineEfficiency,
+        )
+        this.turbineChoked = point.choked
+      } else {
+        const spouting = Math.sqrt(2 * EXHAUST_CP * t * expansion)
+        const blade =
+          (this.shaftOmega * 0.45 * c.compressorDiameter) / spouting
+        efficiency =
+          c.turbineEfficiency *
+          clamp(1 - ((blade - 0.7) / 0.7) ** 2, 0.15, 1)
+        this.turbineChoked = p / pa >= 1 / 0.528
+      }
       turbinePower = turbine * EXHAUST_CP * t * expansion * efficiency
     }
     const out = Math.min(turbine + gate, (0.5 * this.exhaustMass) / dt)
@@ -335,6 +389,8 @@ export class InductionSystem {
     this.tailpipeFlow = previous.tailpipeFlow
     this.shaftHz = previous.shaftHz
     this.surge = previous.surge
+    this.compressorChoked = previous.compressorChoked
+    this.turbineChoked = previous.turbineChoked
     this.venting = previous.venting
     // Same pressure and temperature in this engine's manifold volume.
     this.exhaustMass =
@@ -363,6 +419,8 @@ export class InductionSystem {
         this.config.kind === 'turbo' ? this.exhaustPressure - this.ambient : 0,
       venting: this.venting,
       surge: this.surge,
+      compressorChoked: this.compressorChoked,
+      turbineChoked: this.turbineChoked,
     }
   }
 }

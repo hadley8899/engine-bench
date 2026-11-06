@@ -4,6 +4,7 @@ export type MapTable =
   | 'ignition'
   | 'lambda'
   | 'boost'
+  | 'torque'
   | 'intakeCam'
   | 'exhaustCam'
 
@@ -57,6 +58,17 @@ export const MAP_TABLES: Record<
     help: 'Turbo wastegate target (gauge) by RPM and driver throttle.',
     hue: (s) => 200 - 200 * Math.min(1, s * 2),
   },
+  torque: {
+    label: 'Torque request',
+    unit: ' Nm',
+    scale: 1,
+    min: 0,
+    max: 20000,
+    step: 10,
+    digits: 0,
+    help: 'Maximum requested brake torque by RPM and driver throttle. The electronic throttle closes as needed; boost may remain available upstream.',
+    hue: (s) => 200 - 200 * Math.min(1, s * 20),
+  },
   intakeCam: {
     label: 'Intake cam',
     unit: '°',
@@ -94,6 +106,7 @@ export function singleValue(e: EngineDefinition, table: MapTable) {
   if (table === 'ignition') return e.ignitionAdvance
   if (table === 'lambda') return e.lambda
   if (table === 'intakeCam' || table === 'exhaustCam') return 0
+  if (table === 'torque') return 20000
   return e.induction.kind === 'turbo' ? e.induction.boostTarget : 0
 }
 
@@ -110,6 +123,7 @@ export function describeMaps(a: Management | null, b: Management | null) {
     'ignition',
     'lambda',
     'boost',
+    'torque',
     'intakeCam',
     'exhaustCam',
   ] as const) {

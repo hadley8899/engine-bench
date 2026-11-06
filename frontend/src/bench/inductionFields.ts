@@ -205,10 +205,19 @@ export function describeInduction(a: Induction, b: Induction) {
     return [
       `Induction: ${inductionLabels[a.kind]} → ${inductionLabels[b.kind]}`,
     ]
-  return inductionFields[b.kind]
+  const changes = inductionFields[b.kind]
     .filter((f) => read(a, f.key) !== read(b, f.key))
     .map(
       (f) =>
         `${f.label}: ${(read(a, f.key) * f.scale).toFixed(2)} → ${(read(b, f.key) * f.scale).toFixed(2)} ${f.unit}`,
     )
+  if (
+    (a.kind === 'turbo' || a.kind === 'centrifugal') &&
+    (b.kind === 'turbo' || b.kind === 'centrifugal') &&
+    a.compressorMap !== b.compressorMap
+  )
+    changes.push(`Compressor map: ${a.compressorMap} → ${b.compressorMap}`)
+  if (a.kind === 'turbo' && b.kind === 'turbo' && a.turbineMap !== b.turbineMap)
+    changes.push(`Turbine map: ${a.turbineMap} → ${b.turbineMap}`)
+  return changes
 }

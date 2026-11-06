@@ -3,7 +3,7 @@
  * events after phasing, lift, flow-area ratio, valve-float speed and
  * valve-to-piston clearance. Estimates; see docs/SIMULATION.md.
  */
-import type { EngineDefinition, ValveEvent } from './schema'
+import type { CamMotion, EngineDefinition, ValveEvent } from './schema'
 
 /** Discharge coefficient relating a build's flow area to two valves' heads. */
 const DISCHARGE = 0.6
@@ -12,6 +12,8 @@ const FULL_FLOW_LIFT = 0.25
 /** Reference cam for valve float: 240° of duration and lift of 0.3 × diameter. */
 const REFERENCE_DURATION = 240
 const REFERENCE_LIFT = 0.3
+/** Peak dimensionless acceleration of the performance polynomial motion. */
+const REFERENCE_MOTION_ACCELERATION = 43.976187
 /**
  * Lift each spring grade is designed for, as a share of valve diameter.
  * Beyond it the spring runs short of travel and loses control of the valve
@@ -24,14 +26,23 @@ const SPRING_LIFT = { stock: 0.3, uprated: 0.36, race: 0.42 } as const
  * reliefs and the chamber's shape give some room, not all of it.
  */
 const VALVE_ROOM = 0.5
+/** Valve control begins to degrade before the estimated float limit. */
+export const FLOAT_ONSET = 0.88
+const FLOAT_FULL = 1.1
 
 /** Valve head diameter of one of two valves giving this flow area, m. */
 export function valveDiameter(area: number) {
   return Math.sqrt((2 * area) / (Math.PI * DISCHARGE))
 }
 
+/** Effective valve room at overlap TDC, m; null is the legacy assumption. */
+export function effectiveValveRelief(e: EngineDefinition) {
+  return e.valveRelief ?? (VALVE_ROOM * e.stroke) / (e.compression - 1)
+}
+
 /** The events in use at one instant: angles in crank degrees, areas in m². */
 export type ValveEvents = {
+  motion: CamMotion
   intakeOpen: number
   intakeClose: number
   intakeArea: number
@@ -46,6 +57,7 @@ export type ValveEvents = {
 }
 export function emptyEvents(): ValveEvents {
   return {
+    motion: 'legacy',
     intakeOpen: 350,
     intakeClose: 590,
     intakeArea: 0,
@@ -74,6 +86,7 @@ export function valveEvents(
   out: ValveEvents = emptyEvents(),
 ) {
   const cams = e.cams
+  out.motion = e.camMotion
   if (!cams) {
     const cam = e.camSwitch && high ? e.camSwitch : e
     out.intakeOpen = 350
@@ -107,11 +120,76 @@ export function valveEvents(
   return out
 }
 
+/**
+ * Normalised valve lift across an event. Polynomial motions use the regularised
+ * beta(3, b) curve on each half: zero lift velocity and acceleration at the
+ * seat, then progressively more early lift and peak acceleration as b rises.
+ */
+export function motionLift(motion: CamMotion, position: number) {
+  if (!(position > 0 && position < 1)) return 0
+  if (motion === 'legacy') return Math.sin(Math.PI * position)
+  const u = position <= 0.5 ? 2 * position : 2 * (1 - position)
+  const b = motion === 'gentle' ? 4 : motion === 'performance' ? 5 : 7
+  return 1 - (1 - u) ** b * (1 + b * u + (b * (b + 1) * u * u) / 2)
+}
+
+/** Peak |d²lift/d(position)²|, used by the valve-float estimate. */
+export function peakMotionAcceleration(motion: CamMotion) {
+  if (motion === 'legacy') return Math.PI ** 2
+  if (motion === 'gentle') return 32.538141
+  if (motion === 'performance') return REFERENCE_MOTION_ACCELERATION
+  return 72.548496
+}
+
 /** Valve lift (m) at a crank angle, for an event from open to close. */
-export function liftAt(open: number, close: number, lift: number, deg: number) {
-  return deg >= open && deg < close
-    ? lift * Math.sin((Math.PI * (deg - open)) / (close - open))
-    : 0
+export function liftAt(
+  open: number,
+  close: number,
+  lift: number,
+  deg: number,
+  motion: CamMotion = 'legacy',
+) {
+  if (!(deg >= open && deg < close)) return 0
+  // Keep the pre-1.18.0 operation order bit-for-bit for saved builds.
+  if (motion === 'legacy')
+    return lift * Math.sin((Math.PI * (deg - open)) / (close - open))
+  return lift * motionLift(motion, (deg - open) / (close - open))
+}
+
+/** Smooth severity from first loss of control to fully developed float. */
+export function floatSeverity(speedRatio: number) {
+  const x = Math.min(
+    1,
+    Math.max(0, (speedRatio - FLOAT_ONSET) / (FLOAT_FULL - FLOAT_ONSET)),
+  )
+  return x * x * (3 - 2 * x)
+}
+
+/**
+ * Lift with progressive loss of valve control. The commanded curve loses
+ * lift, then a decaying oscillation holds the valve off its seat after close.
+ * This is deterministic so every host and repeated dyno run agrees exactly.
+ */
+export function floatedLiftAt(
+  open: number,
+  close: number,
+  lift: number,
+  deg: number,
+  motion: CamMotion,
+  severity: number,
+) {
+  const commanded = liftAt(open, close, lift, deg, motion)
+  if (!(severity > 0)) return commanded
+  const controlled = commanded * (1 - 0.24 * severity)
+  const after = deg - close
+  if (!(after >= 0 && after < 18)) return controlled
+  const bounce =
+    lift *
+    0.16 *
+    severity *
+    Math.exp(-after / 7) *
+    Math.sin((Math.PI * after) / 3) ** 2
+  return Math.max(controlled, bounce)
 }
 
 /** Degrees during which both valves are open around overlap TDC. */
@@ -132,14 +210,22 @@ export function centrelines(event: { open: number; close: number }, intake: bool
  * build's profiles sets it. Builds without cam profiles return 1.
  */
 export function floatFactor(e: EngineDefinition) {
+  const motionFactor =
+    e.camMotion === 'legacy'
+      ? 1
+      : Math.sqrt(
+          REFERENCE_MOTION_ACCELERATION /
+            peakMotionAcceleration(e.camMotion),
+        )
   const cams = e.cams
-  if (!cams) return 1
+  if (!cams) return motionFactor
   const design = SPRING_LIFT[e.parts.valveSprings]
   const factor = (event: ValveEvent, area: number) => {
     const share = event.lift / valveDiameter(area)
     return (
       ((event.close - event.open) / REFERENCE_DURATION) *
       Math.sqrt(REFERENCE_LIFT / share) *
+      motionFactor *
       Math.min(1, (design / share) ** 2)
     )
   }
@@ -158,14 +244,12 @@ export function floatFactor(e: EngineDefinition) {
 
 /**
  * Valve-to-piston clearance: the largest share of the room available that
- * either valve uses near overlap TDC (300–420°). Room is half the clearance
- * height plus the piston's travel below top dead centre. Above 1 the valve
- * reaches the piston.
+ * either valve uses near overlap TDC (300–420°). New builds store effective
+ * valve relief explicitly; older builds retain half the clearance height.
+ * Piston travel below top dead centre adds room. Above 1 the valve hits.
  */
 export function clearanceRatio(e: EngineDefinition, v: ValveEvents) {
-  const area = (Math.PI * e.bore ** 2) / 4
-  const room =
-    (VALVE_ROOM * (area * e.stroke)) / (e.compression - 1) / area
+  const room = effectiveValveRelief(e)
   const r = e.stroke / 2
   let worst = 0
   for (let deg = 300; deg <= 420; deg += 2) {
@@ -175,8 +259,8 @@ export function clearanceRatio(e: EngineDefinition, v: ValveEvents) {
       e.rodLength -
       Math.sqrt(e.rodLength ** 2 - (r * Math.sin(theta)) ** 2)
     const lift = Math.max(
-      liftAt(v.intakeOpen, v.intakeClose, v.intakeLift, deg),
-      liftAt(v.exhaustOpen, v.exhaustClose, v.exhaustLift, deg),
+      liftAt(v.intakeOpen, v.intakeClose, v.intakeLift, deg, v.motion),
+      liftAt(v.exhaustOpen, v.exhaustClose, v.exhaustLift, deg, v.motion),
     )
     worst = Math.max(worst, lift / (room + drop))
   }

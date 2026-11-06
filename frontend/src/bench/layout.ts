@@ -58,7 +58,11 @@ export const SECTIONS: {
     ],
   },
   { key: 'fuel', label: 'Fuel system', fields: ['fuelSystem', 'fuelSupply'] },
-  { key: 'cams', label: 'Camshaft', fields: ['cams', 'camSwitch'] },
+  {
+    key: 'cams',
+    label: 'Camshaft',
+    fields: ['camMotion', 'valveRelief', 'cams', 'camSwitch'],
+  },
   { key: 'ports', label: 'Ports and pipe', fields: ['twoStroke'] },
   { key: 'combustion', label: 'Combustion and knock', fields: ['combustion'] },
   { key: 'induction', label: 'Forced induction', fields: ['induction'] },

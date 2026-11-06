@@ -76,7 +76,7 @@ describe('four-stroke results', () => {
           [7000, 5],
           [8000, 0],
         ]
-      const management =
+      let management =
         intake && engine.management?.intakeCam
           ? {
               ...engine.management,
@@ -85,9 +85,40 @@ describe('four-stroke results', () => {
               ),
             }
           : engine.management
+      let induction = engine.induction
+      if (engine.name.includes('AXX') && induction.kind === 'turbo') {
+        induction = { ...induction, boostTarget: 60000 }
+        if (management) {
+          const { torque: _torque, ...withoutTorque } = management
+          void _torque
+          const plateau = withoutTorque.rpm.indexOf(1800)
+          const strip = (table: number[][] | undefined) =>
+            table?.map((row) => row.filter((_, i) => i !== plateau))
+          management = {
+            ...withoutTorque,
+            rpm: withoutTorque.rpm.filter((_, i) => i !== plateau),
+            ignition: strip(withoutTorque.ignition)!,
+            lambda: strip(withoutTorque.lambda)!,
+            boost: strip(management.boost)!.map((row) =>
+              row.map(() => 60000),
+            ),
+            ...(withoutTorque.intakeCam
+              ? { intakeCam: strip(withoutTorque.intakeCam) }
+              : {}),
+            ...(withoutTorque.exhaustCam
+              ? { exhaustCam: strip(withoutTorque.exhaustCam) }
+              : {}),
+          }
+        }
+      }
       return {
         ...engine,
+        induction,
+        ignitionAdvance: engine.name === roadEngine.name ? 20 : engine.ignitionAdvance,
         intakePortModel: 'legacy' as const,
+        camMotion: 'legacy' as const,
+        valveRelief: null,
+        combustion: { ...engine.combustion, calibration: 'legacy' as const },
         management,
         exhaust: { ...engine.exhaust, pressureWaves: false },
       }
@@ -106,17 +137,17 @@ describe('four-stroke results', () => {
       'f53479f9d23ec6bf',
     ])
     expect(builds.map(fingerprint)).toEqual([
-      'cd2a69a339d071db',
-      '2b9057d62f3b8098',
-      'e11fde5347d7b999',
-      '99bb1e482649d458',
-      '3fe65567074fd09f',
-      '3a5bad561dc0b214',
-      '087555fd2f01fea3',
-      '3c37d7953bb897db',
-      'b80f2a4409bb4e08',
-      'ac86ca07b895f239',
-      '31c0a39575c12223',
+      'ce063ca483fd9c24',
+      '925e5314a818d04a',
+      'e6271eb9aa12f839',
+      '790a521d195cf22b',
+      '04b8604a291819a4',
+      '13a009c80ce8ba48',
+      '941944876cfb5533',
+      'ed76506f31b2d0e3',
+      '2a753154ad86f0d0',
+      '452abe66377f5696',
+      '105de6d84b8df030',
     ])
   })
 })

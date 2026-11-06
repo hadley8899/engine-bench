@@ -548,6 +548,14 @@ function describeChanges(a: Run | null, e: EngineDefinition, c: Conditions) {
           ? 'Cam profiles: profiles → fixed events'
           : 'Cam profiles changed',
     )
+  if ((a.engine.camMotion ?? 'legacy') !== e.camMotion)
+    changes.push(
+      `Valve motion: ${a.engine.camMotion ?? 'legacy'} → ${e.camMotion}`,
+    )
+  if ((a.engine.valveRelief ?? null) !== e.valveRelief)
+    changes.push(
+      `Valve relief: ${a.engine.valveRelief === null ? 'legacy estimate' : `${(a.engine.valveRelief * 1000).toFixed(1)} mm`} → ${e.valveRelief === null ? 'legacy estimate' : `${(e.valveRelief * 1000).toFixed(1)} mm`}`,
+    )
   // Runs before 1.12.0 had a single cam.
   if (
     JSON.stringify(a.engine.camSwitch ?? null) !==
@@ -1640,6 +1648,25 @@ export function BenchPage() {
         onClick: () => changeLayout({ view: 'workshop', section: 'combustion' }),
       },
     })
+  const valveFloat = telemetry.stress.limits.find(
+    (limit) => limit.key === 'valveFloat',
+  )
+  if (
+    experiment.engine.cycle === 'four-stroke' &&
+    experiment.engine.camMotion !== 'legacy' &&
+    valveFloat &&
+    valveFloat.ratio >= 0.88 &&
+    !failure
+  )
+    messages.push({
+      key: 'valve-float',
+      severity: 'warning',
+      text: `Valve control is becoming unstable at ${Math.round(valveFloat.ratio * 100)}% of the estimated float limit. Power is falling and the valves may seat erratically before a failure. Reduce RPM, fit stronger springs or choose a gentler cam motion.`,
+      action: {
+        label: 'Open camshaft',
+        onClick: () => changeLayout({ view: 'workshop', section: 'cams' }),
+      },
+    })
   if (telemetry.warning && !failure)
     messages.push({
       key: 'warning',
@@ -1972,9 +1999,18 @@ export function BenchPage() {
                             {telemetry.induction.surge && (
                               <em className="boost-flag warn">SURGE</em>
                             )}
+                            {telemetry.induction.compressorChoked && (
+                              <em className="boost-flag warn">COMP CHOKE</em>
+                            )}
+                            {telemetry.induction.turbineChoked && (
+                              <em className="boost-flag warn">TURB CHOKE</em>
+                            )}
                             {telemetry.induction.kind !== 'turbo' &&
                               !telemetry.induction.venting &&
-                              !telemetry.induction.surge && <span>Normal</span>}
+                              !telemetry.induction.surge &&
+                              !telemetry.induction.compressorChoked && (
+                                <span>Normal</span>
+                              )}
                           </strong>
                         </div>
                       </div>

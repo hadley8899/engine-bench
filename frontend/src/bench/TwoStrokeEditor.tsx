@@ -1,7 +1,7 @@
 import { Button, FormControlLabel, MenuItem, Switch, TextField } from '@mui/material'
 import { pipeSegments, validateEngine } from '../sim/schema'
 import type { EngineDefinition, TwoStroke, TwoStrokePipe } from '../sim/schema'
-import { portTiming, SCAVENGING } from '../sim/twostroke'
+import { portTiming, SCAVENGING, TUNED_SCAVENGING } from '../sim/twostroke'
 import { NumberField } from './NumberField'
 import { intakeLabels, pipeLabels, setIntakeKind } from './twoStrokeFields'
 import type { TwoStrokeIntakeKind } from '../sim/schema'
@@ -147,7 +147,9 @@ export function TwoStrokeEditor({
   const pipe = t.pipe
   const setChamber = (patch: (p: Chamber) => Chamber) =>
     set((x) => ({ ...x, pipe: patch(x.pipe as Chamber) }))
-  const scavenging = SCAVENGING[t.transfers.count]
+  const scavenging = t.chargingModel === 'tuned'
+    ? TUNED_SCAVENGING
+    : SCAVENGING[t.transfers.count]
   return (
     <div className="two-stroke-editor" data-testid="two-stroke-editor">
       {problem && (
@@ -211,6 +213,7 @@ export function TwoStrokeEditor({
       <div className="field-grid">
         <Field label="Top edge below deck" unit="mm" value={t.exhaustPort.height} min={Math.round(0.25 * stroke)} max={Math.round(stroke - 4)} step={0.1} disabled={disabled} help="Lower numbers (a higher port) open earlier: more blowdown and a higher, narrower power band." onValue={(v) => set((x) => ({ ...x, exhaustPort: { ...x.exhaustPort, height: v } }))} />
         <Field label="Width" unit="mm" value={t.exhaustPort.width} min={5} max={Math.floor(bore * (t.exhaustPort.bridge ? 1.05 : 0.75))} step={0.5} disabled={disabled} help="Chordal width. More than 0.75 × bore needs a bridge so the rings do not snag." onValue={(v) => set((x) => ({ ...x, exhaustPort: { ...x.exhaustPort, width: v } }))} />
+        <Field label="Auxiliary width" unit="mm" value={t.exhaustPort.auxiliaryWidth} min={0} max={Math.max(0, Math.floor(bore * 1.6 - t.exhaustPort.width * 1000))} step={0.5} disabled={disabled} help="Total effective width of the auxiliary exhaust windows. They add early blowdown area without widening the main ring-crossing window." onValue={(v) => set((x) => ({ ...x, exhaustPort: { ...x.exhaustPort, auxiliaryWidth: v } }))} />
       </div>
       <FormControlLabel
         control={<Switch checked={t.exhaustPort.bridge} disabled={disabled} onChange={(_, v) => set((x) => ({ ...x, exhaustPort: { ...x.exhaustPort, bridge: v } }))} />}
@@ -218,6 +221,10 @@ export function TwoStrokeEditor({
       />
       <h3>Transfer ports</h3>
       <div className="field-grid">
+        <TextField select size="small" label="Charging model" value={t.chargingModel} disabled={disabled} helperText={t.chargingModel === 'tuned' ? 'Balanced pipe · directed loop scavenging · roller-bearing friction' : 'Original 1.14 model for saved-build compatibility'} onChange={(e) => set((x) => ({ ...x, chargingModel: e.target.value as 'legacy' | 'tuned' }))}>
+          <MenuItem value="legacy">Legacy</MenuItem>
+          <MenuItem value="tuned">Tuned racing</MenuItem>
+        </TextField>
         <TextField select size="small" label="Transfer ports" value={t.transfers.count} disabled={disabled} helperText={`Scavenging estimate: ${Math.round(scavenging.shortCircuit * 100)}% short-circuits`} onChange={(e) => set((x) => ({ ...x, transfers: { ...x.transfers, count: Number(e.target.value) as 2 | 3 | 5 } }))}>
           <MenuItem value={2}>2 (simple loop)</MenuItem>
           <MenuItem value={3}>3 (with boost port)</MenuItem>

@@ -1,4 +1,9 @@
-import type { EngineDefinition, FuelSupply, Induction } from '../sim/schema'
+import type {
+  CamMotion,
+  EngineDefinition,
+  FuelSupply,
+  Induction,
+} from '../sim/schema'
 import { valveDiameter } from '../sim/cams'
 
 type Turbo = Extract<Induction, { kind: 'turbo' }>
@@ -120,10 +125,11 @@ export const camGrades: {
   intake: number
   exhaust: number
   lift: number
+  motion: Exclude<CamMotion, 'legacy'>
 }[] = [
-  { label: 'Mild', note: 'Smooth idle and strong low-speed torque.', intake: 230, exhaust: 225, lift: 0.27 },
-  { label: 'Fast road', note: 'More top end; a little lumpy at idle.', intake: 260, exhaust: 255, lift: 0.32 },
-  { label: 'Race', note: 'Top end only: weak below mid-range, a rough idle and harder on springs.', intake: 290, exhaust: 285, lift: 0.37 },
+  { label: 'Mild', note: 'Smooth polynomial ramps and strong low-speed torque.', intake: 230, exhaust: 225, lift: 0.27, motion: 'gentle' },
+  { label: 'Fast road', note: 'Faster ramps and more top end; a little lumpy at idle.', intake: 260, exhaust: 255, lift: 0.32, motion: 'performance' },
+  { label: 'Race', note: 'Very fast ramps: more lift area, a rough idle and harder on springs.', intake: 290, exhaust: 285, lift: 0.37, motion: 'race' },
 ]
 export function applyCamGrade(e: EngineDefinition, grade: (typeof camGrades)[number]) {
   const cams = e.cams
@@ -147,6 +153,7 @@ export function applyCamGrade(e: EngineDefinition, grade: (typeof camGrades)[num
   }
   return {
     ...e,
+    camMotion: grade.motion,
     cams: {
       ...cams,
       intake: fit(cams.intake, grade.intake, e.intakeArea, [300, 400], [520, 660]),
@@ -157,7 +164,8 @@ export function applyCamGrade(e: EngineDefinition, grade: (typeof camGrades)[num
 export function matchCamGrade(e: EngineDefinition) {
   return camGrades.findIndex((g) => {
     const fitted = applyCamGrade(e, g).cams
-    return JSON.stringify(fitted?.intake) === JSON.stringify(e.cams?.intake) &&
+    return e.camMotion === g.motion &&
+      JSON.stringify(fitted?.intake) === JSON.stringify(e.cams?.intake) &&
       JSON.stringify(fitted?.exhaust) === JSON.stringify(e.cams?.exhaust)
   })
 }

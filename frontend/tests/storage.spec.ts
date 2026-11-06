@@ -121,15 +121,17 @@ test('a two-stroke build and its run save, reload and load back', async ({ page 
   await expect(page.getByTestId('command-bar')).toContainText('two-stroke single')
   await openSection(page, 'Ports and pipe')
   await expect(page.getByTestId('port-timing')).toContainText('83° ATDC')
+  await expect(page.getByRole('combobox', { name: 'Charging model' })).toHaveText('Tuned racing')
+  await expect(page.getByLabel('Auxiliary width (mm)')).toHaveValue('20')
   const history = page.locator('.run-entry').filter({ hasText: name })
   await expect(history).toHaveCount(1)
   expect(errors).toEqual([])
 })
 
-test('a schema 5 heated-port multibank build and immutable run persist', async ({ page }) => {
+test('a schema 10 mapped cam-motion multibank build and immutable run persist', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  const name = `Stage 12.2 V8 ${test.info().project.name} ${Date.now()}`
+  const name = `Stage 12.4 V8 ${test.info().project.name} ${Date.now()}`
   await page.goto('/login')
   await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
   await page.getByLabel('Password', { exact: true }).fill('password')
@@ -138,6 +140,17 @@ test('a schema 5 heated-port multibank build and immutable run persist', async (
   await openSection(page, 'Starting build')
   await page.getByRole('button', { name: 'GM LS3 6.2 V8', exact: true }).click()
   await page.getByLabel('Build name', { exact: true }).fill(name)
+  await openSection(page, 'Camshaft')
+  await page.getByRole('combobox', { name: 'Valve motion' }).click()
+  await page.getByRole('option', { name: 'Gentle polynomial' }).click()
+  await page.getByLabel('Effective valve relief (mm)').fill('5.2')
+  await openSection(page, 'Combustion')
+  await page.getByRole('combobox', { name: 'Fuel' }).click()
+  await page.getByRole('option', { name: 'RON 100 Japanese premium' }).click()
+  await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
+  await openMode(page, 'Maps')
+  await page.getByRole('switch', { name: 'Use engine-management maps' }).check()
+  await expect(page.getByRole('tab', { name: 'Torque request' })).toBeVisible()
   await page.getByRole('button', { name: 'Stop & rebuild engine', exact: true }).click()
   await openMode(page, 'Dyno')
   await page.getByLabel('Start RPM', { exact: true }).fill('2000')
@@ -159,6 +172,55 @@ test('a schema 5 heated-port multibank build and immutable run persist', async (
   await expect(
     page.getByRole('switch', { name: 'Simulate exhaust pressure waves' }),
   ).toBeChecked()
+  await openSection(page, 'Camshaft')
+  await expect(page.getByRole('combobox', { name: 'Valve motion' })).toHaveText(
+    'Gentle polynomial',
+  )
+  await expect(page.getByLabel('Effective valve relief (mm)')).toHaveValue('5.2')
+  await openSection(page, 'Combustion')
+  await expect(page.getByRole('combobox', { name: 'Fuel' })).toHaveText(
+    'RON 100 Japanese premium',
+  )
+  await openMode(page, 'Maps')
+  await expect(page.getByRole('tab', { name: 'Torque request' })).toBeVisible()
   await expect(page.locator('.run-entry').filter({ hasText: name })).toHaveCount(1)
   expect(errors).toEqual([])
+})
+
+test('schema 10 representative turbo maps persist', async ({ page }) => {
+  const name = `Stage 12 turbo maps ${test.info().project.name} ${Date.now()}`
+  await page.goto('/login')
+  await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
+  await page.getByLabel('Password', { exact: true }).fill('password')
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await page.waitForURL((url) => url.pathname === '/')
+  await openSection(page, 'Starting build')
+  await page.getByRole('button', { name: 'Turbo hot hatch', exact: true }).click()
+  await page.getByLabel('Build name', { exact: true }).fill(name)
+  await openSection(page, 'Forced induction')
+  await expect(page.getByRole('combobox', { name: 'Compressor map' })).toHaveText(
+    'Representative speed lines',
+  )
+  await expect(page.getByRole('combobox', { name: 'Turbine map' })).toHaveText(
+    'Representative radial map',
+  )
+  await page.getByRole('button', { name: 'Stop & rebuild engine' }).click()
+  await openMode(page, 'Library')
+  await page.getByLabel('Save to workspace').click()
+  await page.getByRole('option', { name: /personal/ }).click()
+  await page.getByRole('button', { name: 'Save as new build', exact: true }).click()
+  await expect(page.getByText(`Saved ${name}, revision 1`, { exact: false })).toBeVisible()
+  await page.reload()
+  const build = page
+    .locator('.library-entry')
+    .filter({ hasText: name })
+    .filter({ has: page.getByRole('button', { name: 'Load build', exact: true }) })
+  await build.getByRole('button', { name: 'Load build', exact: true }).click()
+  await openSection(page, 'Forced induction')
+  await expect(page.getByRole('combobox', { name: 'Compressor map' })).toHaveText(
+    'Representative speed lines',
+  )
+  await expect(page.getByRole('combobox', { name: 'Turbine map' })).toHaveText(
+    'Representative radial map',
+  )
 })

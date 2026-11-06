@@ -9,6 +9,7 @@ import {
 import {
   camsFromEvents,
   clearanceRatio,
+  effectiveValveRelief,
   floatFactor,
   overlap,
   valveEvents,
@@ -95,6 +96,82 @@ function describe(cams: Pick<Cams, 'intake' | 'exhaust'>) {
   return `Duration ${Math.round(cams.intake.close - cams.intake.open)}° intake, ${Math.round(cams.exhaust.close - cams.exhaust.open)}° exhaust · centrelines ${Math.round(iCentre)}° ATDC and ${Math.round(eCentre)}° BTDC · lobe separation ${Math.round((iCentre + eCentre) / 2)}° · overlap ${Math.round(Math.max(0, cams.exhaust.close - cams.intake.open))}°`
 }
 
+const motionOptions = [
+  ['legacy', 'Legacy half-sine'],
+  ['gentle', 'Gentle polynomial'],
+  ['performance', 'Performance polynomial'],
+  ['race', 'Race polynomial'],
+] as const
+
+function MotionSelect({
+  engine,
+  onChange,
+  disabled,
+}: {
+  engine: EngineDefinition
+  onChange: Update
+  disabled?: boolean
+}) {
+  return (
+    <TextField
+      select
+      size="small"
+      label="Valve motion"
+      value={engine.camMotion}
+      disabled={disabled}
+      helperText={
+        engine.camMotion === 'legacy'
+          ? 'Compatibility curve: no seating ramp and non-zero opening velocity.'
+          : 'Polynomial seating ramps start and finish at zero velocity and acceleration.'
+      }
+      onChange={(event) =>
+        onChange((current) => ({
+          ...current,
+          camMotion: event.target.value as EngineDefinition['camMotion'],
+        }))
+      }
+    >
+      {motionOptions.map(([value, label]) => (
+        <MenuItem key={value} value={value}>
+          {label}
+        </MenuItem>
+      ))}
+    </TextField>
+  )
+}
+
+function ReliefField({
+  engine,
+  onChange,
+  disabled,
+}: {
+  engine: EngineDefinition
+  onChange: Update
+  disabled?: boolean
+}) {
+  return (
+    <NumberField
+      size="small"
+      label="Effective valve relief (mm)"
+      value={Math.round(effectiveValveRelief(engine) * 10000) / 10}
+      disabled={disabled}
+      error={
+        engine.valveRelief !== null &&
+        !(engine.valveRelief >= 0.0005 && engine.valveRelief <= 0.02)
+      }
+      helperText={
+        engine.valveRelief === null
+          ? 'Legacy half-clearance estimate; edit to store this engine’s room.'
+          : 'Effective room at overlap TDC, including piston pockets.'
+      }
+      slotProps={{ htmlInput: { min: 0.5, max: 20, step: 0.1 } }}
+      onValueChange={(value) =>
+        onChange((current) => ({ ...current, valveRelief: value / 1000 }))
+      }
+    />
+  )
+}
+
 /**
  * Camshafts: fixed events with an optional two-stage switch (as before
  * model 1.13.0), or full cam profiles with lift, a high-lift profile and
@@ -155,6 +232,8 @@ export function CamEditor({
           </MenuItem>
         ))}
       </TextField>
+      <MotionSelect engine={engine} onChange={onChange} disabled={disabled} />
+      <ReliefField engine={engine} onChange={onChange} disabled={disabled} />
       <div className="field-grid">
         <EventEditor
           title="Intake"
@@ -321,9 +400,10 @@ export function CamEditor({
         {cams.phasers
           ? 'The Intake cam and Exhaust cam tabs in Engine maps set the phaser targets by RPM and load (positive advances: the valve opens and closes earlier). Advancing the intake adds overlap and low-speed torque; retarding it helps the top end.'
           : 'Fixed cams. Turn on variable cam timing to phase them with RPM and load.'}{' '}
-        Flow follows lift until the valve curtain reaches its full area (lift
+        Flow follows the selected ramp until the valve curtain reaches its full area (lift
         of about a quarter of the valve diameter). More duration moves torque
-        up the rev range; more overlap roughens the idle.
+        up the rev range; faster motion adds lift area and acceleration, and
+        more overlap roughens the idle.
       </p>
       <Button
         size="small"
@@ -364,6 +444,8 @@ function LegacyCam({
         exhaust from 35° BBDC to 10° ATDC (overlap{' '}
         {overlap(valveEvents(engine, false, 0, 0))}°).
       </p>
+      <MotionSelect engine={engine} onChange={onChange} disabled={disabled} />
+      <ReliefField engine={engine} onChange={onChange} disabled={disabled} />
       <Button
         variant="outlined"
         size="small"

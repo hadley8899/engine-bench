@@ -35,6 +35,8 @@ const axx: EngineDefinition = {
   stroke: 0.0928,
   rodLength: 0.144,
   compression: 10.5,
+  // Effective overlap-TDC room, including the production piston reliefs.
+  valveRelief: 0.0049,
   // Inferred: valve areas, intake closing, runners, burn and inertia.
   intakeArea: 0.00072,
   exhaustArea: 0.00062,
@@ -47,14 +49,17 @@ const axx: EngineDefinition = {
   revLimit: 6800,
   limiterCut: 'fuel',
   mechanicalLimit: 7200,
-  // K03-sized turbo; turbine and boost calibrated to the published curve.
+  // K03-sized turbo; 0.9 bar is the documented peak boost. MED 9.1's
+  // torque-based electronic throttle meters charge to the published curve.
   induction: {
     ...inductionDefaults.turbo,
+    compressorMap: 'legacy',
+    turbineMap: 'legacy',
     compressorDiameter: 0.046,
     turbineArea: 0.00022,
     shaftInertia: 0.000018,
     maxShaftRpm: 230000,
-    boostTarget: 60000,
+    boostTarget: 90000,
     intercooler: { effectiveness: 0.55, pressureDrop: 12000 },
   },
   fuelSystem: fuelSystemDefaults.direct,
@@ -72,6 +77,29 @@ const axx: EngineDefinition = {
 // The ECU enriches at full boost, as production engines do to protect the
 // turbine and pistons; elsewhere it holds λ 1.
 const axxMaps = flatMaps(axx)
+// The published plateau starts at 1,800 RPM, so keep that corner explicit
+// rather than interpolating it between the generic 1,500/2,000 RPM columns.
+const axxPlateau = axxMaps.rpm.findIndex((rpm) => rpm > 1800)
+axxMaps.rpm.splice(axxPlateau, 0, 1800)
+for (const table of [axxMaps.ignition, axxMaps.lambda, axxMaps.boost])
+  for (const row of table) row.splice(axxPlateau, 0, row[axxPlateau - 1])
+axxMaps.torque = axxMaps.throttle.map((pedal) =>
+  axxMaps.rpm.map(
+    (rpm) =>
+      pedal *
+      byRpm(
+        [
+          [1000, 170],
+          [1500, 239],
+          [1800, 280],
+          [4700, 280],
+          [5500, 254],
+          [6500, 218],
+        ],
+        rpm,
+      ),
+  ),
+)
 axxMaps.lambda = axxMaps.load.map((load) =>
   axxMaps.rpm.map((rpm) =>
     load >= 150000 && rpm >= 3500 ? (rpm >= 5000 ? 0.88 : 0.93) : 1,
@@ -161,6 +189,7 @@ const k20a: EngineDefinition = {
   stroke: 0.086,
   rodLength: 0.139,
   compression: 11.7,
+  valveRelief: 0.004,
   // Low cam; VTEC's high cam takes over at 5,200 RPM.
   intakeArea: 0.0007,
   exhaustArea: 0.00068,
@@ -175,7 +204,7 @@ const k20a: EngineDefinition = {
   mechanicalLimit: 9000,
   induction: { kind: 'none' },
   fuelSystem: fuelSystemDefaults.port,
-  combustion: { ...combustionDefaults, fuel: 'ron98' },
+  combustion: { ...combustionDefaults, fuel: 'ron100' },
   management: null,
   fuelSupply: { injectorFlow: 360, maxDuty: 0.85, pumpFlow: 130 },
   exhaust: {
@@ -200,6 +229,7 @@ const evo: EngineDefinition = {
   stroke: 0.088,
   rodLength: 0.15,
   compression: 8.8,
+  valveRelief: 0.0056,
   intakeArea: 0.00078,
   exhaustArea: 0.00068,
   intakeClose: 590,
@@ -214,6 +244,8 @@ const evo: EngineDefinition = {
   // TD05HR-sized turbo; boost tapers with RPM through the boost map.
   induction: {
     ...inductionDefaults.turbo,
+    compressorMap: 'legacy',
+    turbineMap: 'legacy',
     compressorDiameter: 0.056,
     turbineArea: 0.00033,
     shaftInertia: 0.00003,
@@ -222,7 +254,7 @@ const evo: EngineDefinition = {
     intercooler: { effectiveness: 0.7, pressureDrop: 8000 },
   },
   fuelSystem: fuelSystemDefaults.port,
-  combustion: { ...combustionDefaults, fuel: 'ron98' },
+  combustion: { ...combustionDefaults, fuel: 'ron100' },
   management: null,
   fuelSupply: { injectorFlow: 560, maxDuty: 0.85, pumpFlow: 190 },
   exhaust: { ...tunedExhaustDefaults, headerLength: 0.3, silencer: 'absorptive' },
@@ -236,6 +268,7 @@ const sr20: EngineDefinition = {
   stroke: 0.086,
   rodLength: 0.1363,
   compression: 8.5,
+  valveRelief: 0.0054,
   intakeArea: 0.00075,
   exhaustArea: 0.00065,
   intakeClose: 590,
@@ -250,6 +283,8 @@ const sr20: EngineDefinition = {
   // T28 ball-bearing-sized turbo.
   induction: {
     ...inductionDefaults.turbo,
+    compressorMap: 'legacy',
+    turbineMap: 'legacy',
     compressorDiameter: 0.054,
     turbineArea: 0.0006,
     shaftInertia: 0.00002,
@@ -258,7 +293,7 @@ const sr20: EngineDefinition = {
     intercooler: { effectiveness: 0.65, pressureDrop: 8000 },
   },
   fuelSystem: fuelSystemDefaults.port,
-  combustion: { ...combustionDefaults, fuel: 'ron98' },
+  combustion: { ...combustionDefaults, fuel: 'ron100' },
   management: null,
   fuelSupply: { injectorFlow: 480, maxDuty: 0.85, pumpFlow: 160 },
   exhaust: { ...tunedExhaustDefaults, headerLength: 0.3, silencer: 'absorptive' },
@@ -272,6 +307,7 @@ const ae86: EngineDefinition = {
   stroke: 0.077,
   rodLength: 0.1055,
   compression: 9.4,
+  valveRelief: 0.0039,
   intakeArea: 0.0006,
   exhaustArea: 0.0006,
   intakeClose: 585,
@@ -285,7 +321,7 @@ const ae86: EngineDefinition = {
   mechanicalLimit: 8000,
   induction: { kind: 'none' },
   fuelSystem: fuelSystemDefaults.port,
-  combustion: { ...combustionDefaults, fuel: 'ron98' },
+  combustion: { ...combustionDefaults, fuel: 'ron100' },
   management: null,
   fuelSupply: { injectorFlow: 190, maxDuty: 0.85, pumpFlow: 90 },
   exhaust: { ...tunedExhaustDefaults, headerLength: 0.5, collector: '4-2-1' },
@@ -320,7 +356,12 @@ const rd350: EngineDefinition = {
   starterTorque: 50,
   induction: { kind: 'none' },
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.028, chokes: 2, acceleratorPump: false },
-  combustion: { burnRate: 'predictive', fuel: 'ron95', knockControl: false },
+  combustion: {
+    burnRate: 'predictive',
+    fuel: 'ron95',
+    knockControl: false,
+    calibration: 'current',
+  },
   management: null,
   fuelSupply: null,
   exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.35 },
@@ -328,7 +369,7 @@ const rd350: EngineDefinition = {
   cams: null,
   camSwitch: null,
   twoStroke: {
-    exhaustPort: { height: 0.0289, width: 0.06, bridge: true },
+    exhaustPort: { height: 0.0289, width: 0.06, bridge: true, auxiliaryWidth: 0 },
     transfers: { count: 5, height: 0.0415, width: 0.085 },
     intake: { kind: 'reed', area: 0.0016, stiffness: 500 },
     crankcaseCompression: 1.35,
@@ -345,6 +386,7 @@ const rd350: EngineDefinition = {
     },
     powerValve: null,
     crankPhase: 180,
+    chargingModel: 'legacy',
   },
 }
 
@@ -373,7 +415,7 @@ const dt125: EngineDefinition = {
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.028, chokes: 1, acceleratorPump: false },
   exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.3 },
   twoStroke: {
-    exhaustPort: { height: dtExhaust, width: 0.041, bridge: false },
+    exhaustPort: { height: dtExhaust, width: 0.041, bridge: false, auxiliaryWidth: 0 },
     transfers: { count: 5, height: 0.0395, width: 0.07 },
     intake: { kind: 'reed', area: 0.0011, stiffness: 500 },
     crankcaseCompression: 1.35,
@@ -390,12 +432,13 @@ const dt125: EngineDefinition = {
     },
     powerValve: { rpm: 6500, drop: 0.003 },
     crankPhase: 180,
+    chargingModel: 'legacy',
   },
 }
 
-// Racing two-strokes. The model's charging falls short of tuned racing
-// engines, so these make about 70% of their published torque; the shapes,
-// speeds and hardware follow the sources (docs/PRESETS.md).
+// Racing two-strokes use the opt-in tuned charging path and are calibrated to
+// their documented comparison points. Shapes, speeds and hardware provenance
+// remain recorded in docs/PRESETS.md.
 const racing = (
   name: string,
   bore: number,
@@ -413,7 +456,12 @@ const racing = (
   ignitionAdvance: 16,
   burnDuration: 45,
   lambda: 0.88,
-  combustion: { burnRate: 'predictive', fuel: 'ron98', knockControl: false },
+  combustion: {
+    burnRate: 'predictive',
+    fuel: 'ron98',
+    knockControl: false,
+    calibration: 'current',
+  },
   exhaust: { ...exhaustDefaults, catalyst: false, silencer: 'absorptive', tailpipeLength: 0.3 },
   ...rest,
 })
@@ -426,7 +474,7 @@ const yz125: EngineDefinition = racing('Yamaha YZ125', 0.054, 0.0545, 8.6, 0.026
   intakeRunnerLength: 0.18,
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.038, chokes: 1, acceleratorPump: false },
   twoStroke: {
-    exhaustPort: { height: 0.0265, width: 0.056, bridge: true },
+    exhaustPort: { height: 0.0265, width: 0.056, bridge: true, auxiliaryWidth: 0.02 },
     transfers: { count: 5, height: 0.0395, width: 0.085 },
     intake: { kind: 'reed', area: 0.0024, stiffness: 550 },
     crankcaseCompression: 1.5,
@@ -444,6 +492,7 @@ const yz125: EngineDefinition = racing('Yamaha YZ125', 0.054, 0.0545, 8.6, 0.026
     },
     powerValve: { rpm: 8500, drop: 0.004 },
     crankPhase: 180,
+    chargingModel: 'tuned',
   },
 })
 const yz250: EngineDefinition = racing('Yamaha YZ250', 0.0664, 0.072, 8.9, 0.0375, {
@@ -455,10 +504,10 @@ const yz250: EngineDefinition = racing('Yamaha YZ250', 0.0664, 0.072, 8.9, 0.037
   intakeRunnerLength: 0.2,
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.038, chokes: 1, acceleratorPump: false },
   twoStroke: {
-    exhaustPort: { height: 0.0375, width: 0.069, bridge: true },
+    exhaustPort: { height: 0.0375, width: 0.069, bridge: true, auxiliaryWidth: 0.02 },
     transfers: { count: 5, height: 0.053, width: 0.095 },
     intake: { kind: 'reed', area: 0.0028, stiffness: 500 },
-    crankcaseCompression: 1.4,
+    crankcaseCompression: 1.65,
     pipe: {
       kind: 'chamber',
       header: { length: 0.17, diameter: 0.048 },
@@ -468,11 +517,15 @@ const yz250: EngineDefinition = racing('Yamaha YZ250', 0.0664, 0.072, 8.9, 0.037
         { length: 0.14, diameter: 0.13 },
       ],
       belly: { length: 0.16 },
-      baffle: [{ length: 0.24, diameter: 0.028 }],
+      baffle: [
+        { length: 0.16, diameter: 0.06 },
+        { length: 0.2, diameter: 0.028 },
+      ],
       stinger: { length: 0.24, diameter: 0.026 },
     },
     powerValve: { rpm: 6000, drop: 0.005 },
     crankPhase: 180,
+    chargingModel: 'tuned',
   },
 })
 const rs125: EngineDefinition = racing('Aprilia RS125 (Rotax)', 0.054, 0.0545, 8, 0.028, {
@@ -484,7 +537,7 @@ const rs125: EngineDefinition = racing('Aprilia RS125 (Rotax)', 0.054, 0.0545, 8
   intakeRunnerLength: 0.18,
   fuelSystem: { kind: 'carburettor', chokeDiameter: 0.034, chokes: 1, acceleratorPump: false },
   twoStroke: {
-    exhaustPort: { height: 0.028, width: 0.055, bridge: true },
+    exhaustPort: { height: 0.028, width: 0.055, bridge: true, auxiliaryWidth: 0.012 },
     transfers: { count: 5, height: 0.0398, width: 0.076 },
     intake: { kind: 'reed', area: 0.0016, stiffness: 600 },
     crankcaseCompression: 1.4,
@@ -502,6 +555,7 @@ const rs125: EngineDefinition = racing('Aprilia RS125 (Rotax)', 0.054, 0.0545, 8
     },
     powerValve: { rpm: 8000, drop: 0.004 },
     crankPhase: 180,
+    chargingModel: 'tuned',
   },
 })
 
@@ -519,6 +573,7 @@ const twoJzBase: EngineDefinition = {
   stroke: 0.086,
   rodLength: 0.142,
   compression: 8.5,
+  valveRelief: 0.0057,
   intakeArea: 0.00072,
   exhaustArea: 0.00062,
   inertia: 0.3,
@@ -526,6 +581,8 @@ const twoJzBase: EngineDefinition = {
   mechanicalLimit: 7200,
   induction: {
     ...inductionDefaults.turbo,
+    compressorMap: 'legacy',
+    turbineMap: 'legacy',
     compressorDiameter: 0.065,
     turbineArea: 0.00052,
     shaftInertia: 0.000045,
@@ -534,6 +591,7 @@ const twoJzBase: EngineDefinition = {
     intercooler: { effectiveness: 0.62, pressureDrop: 9000 },
   },
   fuelSupply: { injectorFlow: 440, maxDuty: 0.85, pumpFlow: 190 },
+  combustion: { ...combustionDefaults, fuel: 'ron100' },
 }
 const twoJz: EngineDefinition = {
   ...twoJzBase,
@@ -550,11 +608,14 @@ const rb26Base: EngineDefinition = {
   stroke: 0.0737,
   rodLength: 0.1215,
   compression: 8.5,
+  valveRelief: 0.0049,
   inertia: 0.26,
   revLimit: 8000,
   mechanicalLimit: 8400,
   induction: {
     ...inductionDefaults.turbo,
+    compressorMap: 'legacy',
+    turbineMap: 'legacy',
     compressorDiameter: 0.06,
     turbineArea: 0.00048,
     shaftInertia: 0.00004,
@@ -582,11 +643,14 @@ const ej20Base: EngineDefinition = {
   stroke: 0.075,
   rodLength: 0.13,
   compression: 8,
+  valveRelief: 0.0054,
   inertia: 0.18,
   revLimit: 7600,
   mechanicalLimit: 8000,
   induction: {
     ...inductionDefaults.turbo,
+    compressorMap: 'legacy',
+    turbineMap: 'legacy',
     compressorDiameter: 0.052,
     turbineArea: 0.0003,
     shaftInertia: 0.000025,
@@ -616,6 +680,7 @@ const ls3: EngineDefinition = {
   stroke: 0.092,
   rodLength: 0.1547,
   compression: 10.7,
+  valveRelief: 0.0047,
   intakeArea: 0.001,
   exhaustArea: 0.00085,
   intakeClose: 600,
@@ -671,23 +736,39 @@ function vTwin250(
   }
 }
 
-const apriliaRs250 = vTwin250('Aprilia RS250', 0.056, 0.0506, 12, 0.034)
+const apriliaRs250Base = vTwin250('Aprilia RS250', 0.056, 0.0506, 12, 0.034)
+const apriliaPipe = apriliaRs250Base.twoStroke!.pipe
+const apriliaRs250: EngineDefinition = {
+  ...apriliaRs250Base,
+  twoStroke: {
+    ...apriliaRs250Base.twoStroke!,
+    exhaustPort: { ...apriliaRs250Base.twoStroke!.exhaustPort, auxiliaryWidth: 0.03 },
+    pipe: apriliaPipe.kind === 'chamber' ? {
+      ...apriliaPipe,
+      header: { ...apriliaPipe.header, length: apriliaPipe.header.length * 1.05 },
+      diffuser: apriliaPipe.diffuser.map((c) => ({ ...c, length: c.length * 1.05 })),
+      belly: { ...apriliaPipe.belly, length: apriliaPipe.belly.length * 1.05 },
+      baffle: apriliaPipe.baffle.map((c) => ({ ...c, length: c.length * 1.05 })),
+    } : apriliaPipe,
+  },
+}
 const hondaRs250rBase = vTwin250('Honda RS250R', 0.054, 0.0545, 12, 0.038)
 const hondaPipe = hondaRs250rBase.twoStroke!.pipe
 const hondaRs250r: EngineDefinition = {
   ...hondaRs250rBase,
+  burnDuration: 40,
   twoStroke: {
     ...hondaRs250rBase.twoStroke!,
-    exhaustPort: { height: 0.027, width: 0.055, bridge: true },
+    exhaustPort: { height: 0.027, width: 0.055, bridge: true, auxiliaryWidth: 0.031 },
     transfers: { count: 5, height: 0.04, width: 0.086 },
     intake: { kind: 'reed', area: 0.003, stiffness: 550 },
-    crankcaseCompression: 1.65,
+    crankcaseCompression: 1.85,
     pipe: hondaPipe.kind === 'chamber' ? {
       ...hondaPipe,
-      header: { ...hondaPipe.header, length: hondaPipe.header.length * 0.88 },
-      diffuser: hondaPipe.diffuser.map((c) => ({ ...c, length: c.length * 0.88 })),
-      belly: { ...hondaPipe.belly, length: hondaPipe.belly.length * 0.88 },
-      baffle: hondaPipe.baffle.map((c) => ({ ...c, length: c.length * 0.88 })),
+      header: { ...hondaPipe.header, length: hondaPipe.header.length * 0.924 },
+      diffuser: hondaPipe.diffuser.map((c) => ({ ...c, length: c.length * 0.924 })),
+      belly: { ...hondaPipe.belly, length: hondaPipe.belly.length * 0.924 },
+      baffle: hondaPipe.baffle.map((c) => ({ ...c, length: c.length * 0.924 })),
       stinger: { ...hondaPipe.stinger, length: hondaPipe.stinger.length * 0.88 },
     } : hondaPipe,
   },
@@ -699,13 +780,15 @@ export const realEngines: RealEngine[] = [
     description:
       'The 2005 Golf GTI’s EA113 2.0 TFSI (AXX): turbocharged direct injection on RON 98, with a K03-sized turbo that runs out of breath above 4,700 RPM. Push the boost and see what the cast pistons take.',
     rated: '147 kW at 5,700 RPM · 280 Nm at 1,800–4,700 RPM (VW)',
-    // 42° of intake phasing (SSP 337): neutral at 1,000 RPM, advanced
-    // while the turbo spools, then held where the ECU limits torque.
+    // 42° of intake phasing (SSP 337); the RPM curve is calibrated after
+    // the performance-motion lift-area change.
     engine: phased(axx, axxMaps, 42, [
-      [1000, 0],
-      [1500, 30],
-      [2000, 5],
+      [1000, -20],
+      [1500, 3],
+      [2000, -8],
       [2500, 0],
+      [6000, 0],
+      [6500, -20],
     ]),
   },
   {
@@ -730,8 +813,8 @@ export const realEngines: RealEngine[] = [
       }),
       50,
       [
-        [1500, -20],
-        [2500, 0],
+        [1500, -27],
+        [2500, -10],
         [3500, 0],
         [4000, -5],
         [4500, -25],
@@ -739,7 +822,7 @@ export const realEngines: RealEngine[] = [
         [5500, 0],
         [6000, 5],
         [7000, 5],
-        [8000, 0],
+        [8000, -15],
       ],
     ),
   },
@@ -753,6 +836,7 @@ export const realEngines: RealEngine[] = [
       management: shapedMaps(evo, {
         boost: [
           [3000, 125000],
+          [3500, 113000],
           [4000, 122000],
           [6500, 105000],
         ],
@@ -837,14 +921,14 @@ export const realEngines: RealEngine[] = [
   {
     label: 'Aprilia RS250',
     description:
-      'Aprilia’s road-going 249 cc 90° V-twin with reed induction, exhaust valves and twin 34 mm carburettors. The current pipe model undercharges racing two-strokes, so output remains deliberately low.',
+      'Aprilia’s road-going 249 cc 90° V-twin with reed induction, exhaust valves and twin 34 mm carburettors, calibrated with the tuned charging model.',
     rated: '249 cc · 56 × 50.6 mm · 90° V-twin (Aprilia workshop manual)',
     engine: apriliaRs250,
   },
   {
     label: 'Honda RS250R',
     description:
-      'Honda’s 250 GP production racer: a 90° two-stroke V-twin. Port and pipe dimensions are calibrated estimates pending Stage 12’s charging fix.',
+      'Honda’s 250 GP production racer: a 90° two-stroke V-twin. Port and pipe dimensions are calibrated estimates fitted to the period comparison figure.',
     rated: '249 cc · 54 × 54.5 mm · about 63 kW in period race trim',
     engine: hondaRs250r,
   },
@@ -858,22 +942,22 @@ export const realEngines: RealEngine[] = [
   {
     label: 'Yamaha YZ125',
     description:
-      'Yamaha’s 125 motocross racer: a reed-valve single with YPVS and a 38 mm carburettor that lives above 10,000 RPM and revs to 12,500. The model makes about two thirds of its dyno power: its charging falls short of tuned racing two-strokes.',
-    rated: '26.7 kW (35.8 hp) at 11,670 RPM · 22.3 Nm at 10,940 RPM (Dirt Bike magazine dyno); the model makes about 65%',
+      'Yamaha’s 125 motocross racer: a reed-valve single with YPVS and a 38 mm carburettor that lives above 10,000 RPM and revs to 12,500, calibrated to the published dyno points.',
+    rated: '26.7 kW (35.8 hp) at 11,670 RPM · 22.3 Nm at 10,940 RPM (Dirt Bike magazine dyno)',
     engine: yz125,
   },
   {
     label: 'Yamaha YZ250',
     description:
-      'The 249 cc YZ250 motocross single (66.4 × 72 mm since 1999), with YPVS and a reed valve. Big midrange, a 9,000 RPM redline. The model makes about two thirds of its rated power.',
-    rated: '35 kW (47 hp) at 8,800 RPM · 41.5 Nm at 7,500 RPM (published figures); the model makes about 65–70%',
+      'The 249 cc YZ250 motocross single (66.4 × 72 mm since 1999), with YPVS and a reed valve. Big midrange, a 9,000 RPM redline, calibrated to the published comparison points.',
+    rated: '35 kW (47 hp) at 8,800 RPM · 41.5 Nm at 7,500 RPM (published figures)',
     engine: yz250,
   },
   {
     label: 'Aprilia RS125',
     description:
-      'The Rotax-engined RS125 road racer replica: a 124.8 cc single with a reed valve and power valve, in the unrestricted tune of Aprilia’s technical sheet. The model makes about 70% of the claim.',
-    rated: '21.0 kW (28.2 bhp), 19.0 Nm (Aprilia claim; speeds not published); the model makes about 70%',
+      'The Rotax-engined RS125 road racer replica: a 124.8 cc single with a reed valve and power valve, in the unrestricted tune of Aprilia’s technical sheet.',
+    rated: '21.0 kW (28.2 bhp), 19.0 Nm (Aprilia claim; speeds not published)',
     engine: rs125,
   },
 ]

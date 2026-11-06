@@ -86,8 +86,15 @@ export class Pipe {
   private f2: Float64Array
   private f3: Float64Array
   private f4: Float64Array
+  /** Well-balanced integral of p dA in each cell's momentum equation. */
+  private areaSource: Float64Array
+  /** Allocation-free result of stationaryMap. */
+  private mappedRho = 0
+  private mappedU = 0
+  private mappedP = 0
   private ambientPressure: number
   private ambientDensity: number
+  private readonly wellBalanced: boolean
   /** Mass flow leaving the outlet over the last advance, kg/s (sound source). */
   outletFlow = 0
   /** Totals passed through each end since construction, for balance checks. */
@@ -104,10 +111,13 @@ export class Pipe {
     ambientPressure: number,
     ambientTemperature: number,
     startTemperature = ambientTemperature,
+    wellBalanced = true,
+    cellLength = CELL,
   ) {
+    this.wellBalanced = wellBalanced
     const length = segments.reduce((s, g) => s + g.length, 0)
     this.length = length
-    const n = Math.max(4, Math.round(length / CELL))
+    const n = Math.max(4, Math.round(length / cellLength))
     this.cells = n
     this.dx = length / n
     this.area = new Float64Array(n)
@@ -170,6 +180,7 @@ export class Pipe {
     this.f2 = new Float64Array(n + 1)
     this.f3 = new Float64Array(n + 1)
     this.f4 = new Float64Array(n + 1)
+    this.areaSource = make()
     this.ambientPressure = ambientPressure
     this.ambientDensity = ambientPressure / (R * ambientTemperature)
     const density = ambientPressure / (R * startTemperature)
@@ -360,6 +371,49 @@ export class Pipe {
       this.lu[i + 1] = ur
       this.lp[i + 1] = pr
     }
+    /*
+     * At a varying-area face, reconstruct each neighbouring cell along its
+     * local stationary isentropic nozzle solution. Ordinary HLLC states do
+     * not contain area, so without this step a pressure wave barely sees a
+     * sharp expansion. Using the same stationary states for the p dA source
+     * makes a steady subsonic flow an exact discrete equilibrium instead of
+     * feeding a spurious cone oscillation.
+     */
+    if (this.wellBalanced) {
+      for (let i = 0; i < n; i++) {
+        const a = this.area[i]
+        const leftArea = this.faceArea[i]
+        const rightArea = this.faceArea[i + 1]
+        this.stationaryMap(rho[i], u[i], p[i], a, leftArea)
+        const leftMomentum =
+          (this.mappedRho * this.mappedU * this.mappedU + this.mappedP) *
+          leftArea
+        if (Math.abs(leftArea - a) > 1e-14) {
+          this.rr[i] = this.mappedRho
+          this.ru[i] = this.mappedU
+          this.rp[i] = this.mappedP
+          this.rf[i] = yf[i]
+          this.rb[i] = yb[i]
+        }
+        this.stationaryMap(rho[i], u[i], p[i], a, rightArea)
+        const rightMomentum =
+          (this.mappedRho * this.mappedU * this.mappedU + this.mappedP) *
+          rightArea
+        if (Math.abs(rightArea - a) > 1e-14) {
+          this.lr[i + 1] = this.mappedRho
+          this.lu[i + 1] = this.mappedU
+          this.lp[i + 1] = this.mappedP
+          this.lf[i + 1] = yf[i]
+          this.lb[i + 1] = yb[i]
+        }
+        this.areaSource[i] = rightMomentum - leftMomentum
+      }
+    } else {
+      // Schema 4 and older two-strokes retain the original source term and
+      // unreconstructed faces so their recorded model remains reproducible.
+      for (let i = 0; i < n; i++)
+        this.areaSource[i] = p[i] * (this.faceArea[i + 1] - this.faceArea[i])
+    }
     this.hllc(1, n - 1)
     // Port face: the cylinder's flow and its momentum flux, ṁu = ṁ²/ρA,
     // which is positive both ways (backflow carries negative momentum out).
@@ -397,7 +451,7 @@ export class Pipe {
       this.q0[i] -= r * (this.f0[i + 1] - this.f0[i])
       this.q1[i] -=
         r * (this.f1[i + 1] - this.f1[i]) -
-        r * p[i] * (this.faceArea[i + 1] - this.faceArea[i]) +
+        r * this.areaSource[i] +
         0.5 * FRICTION * rho[i] * v * Math.abs(v) * wall
       const loss = WALL_HEAT * (this.t[i] - PIPE_WALL) * wall
       this.q2[i] -= r * (this.f2[i + 1] - this.f2[i]) + loss
@@ -412,6 +466,79 @@ export class Pipe {
     this.heatLost += heat
     this.primitives()
     return this.f0[n]
+  }
+
+  /**
+   * Map a primitive state from one area to another on the same isentropic
+   * stationary nozzle branch. This is the exact calorically-perfect-gas
+   * area–Mach relation using the cell's local gamma; the main gas model may
+   * still vary cv with temperature. If the requested throat would choke the
+   * state, it is bounded at Mach 1.
+   */
+  private stationaryMap(
+    density: number,
+    velocity: number,
+    pressure: number,
+    fromArea: number,
+    toArea: number,
+  ) {
+    if (Math.abs(toArea - fromArea) <= 1e-14 || Math.abs(velocity) < 1e-9) {
+      this.mappedRho = density
+      this.mappedU = velocity
+      this.mappedP = pressure
+      return
+    }
+    const temperature = pressure / (density * R)
+    const g = gamma(temperature)
+    const a = 0.5 * (g - 1)
+    const exponent = (g + 1) / (2 * (g - 1))
+    const sound = Math.sqrt(g * R * temperature)
+    const mach = Math.min(20, Math.abs(velocity) / sound)
+    const logAreaMach = (m: number) =>
+      exponent * Math.log((2 * (1 + a * m * m)) / (g + 1)) - Math.log(m)
+    const logTarget = Math.max(0, Math.log(toArea / fromArea) + logAreaMach(mach))
+    let lo: number
+    let hi: number
+    let mappedMach: number
+    if (mach <= 1) {
+      lo = 1e-9
+      hi = 1
+      mappedMach = Math.min(1, Math.max(lo, mach * fromArea / toArea))
+    } else {
+      lo = 1
+      hi = Math.max(2, mach)
+      while (logAreaMach(hi) < logTarget && hi < 20) hi *= 2
+      hi = Math.min(20, hi)
+      mappedMach = Math.min(hi, Math.max(lo, mach))
+    }
+    // Safeguarded Newton iteration on log(A/A*). The derivative is
+    // analytic. Smooth cone cells need one iteration; the steeper area
+    // changes that materially reflect a wave take a second. This replaces
+    // the old 36-step bisection while retaining a deterministic branch.
+    const iterations = Math.max(toArea / fromArea, fromArea / toArea) > 1.12 ? 2 : 1
+    for (let k = 0; k < iterations; k++) {
+      const m2 = mappedMach * mappedMach
+      const residual = logAreaMach(mappedMach) - logTarget
+      if (mach <= 1) {
+        if (residual > 0) lo = mappedMach
+        else hi = mappedMach
+      } else if (residual < 0) lo = mappedMach
+      else hi = mappedMach
+      const derivative = ((g + 1) * mappedMach) / (2 * (1 + a * m2)) - 1 / mappedMach
+      const next = mappedMach - residual / derivative
+      mappedMach = next > lo && next < hi && Number.isFinite(next) ? next : (lo + hi) / 2
+    }
+    const stagnationTerm = 1 + a * mach * mach
+    const mappedTerm = 1 + a * mappedMach * mappedMach
+    const mappedTemperature = (temperature * stagnationTerm) / mappedTerm
+    const mappedPressure =
+      pressure * (stagnationTerm / mappedTerm) ** (g / (g - 1))
+    this.mappedRho = mappedPressure / (R * mappedTemperature)
+    this.mappedU =
+      Math.sign(velocity) *
+      mappedMach *
+      Math.sqrt(g * R * mappedTemperature)
+    this.mappedP = mappedPressure
   }
   /**
    * HLLC fluxes through faces first to last (Davis wave-speed estimates

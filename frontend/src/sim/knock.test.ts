@@ -16,7 +16,12 @@ import { BurnedGas, richProducts } from './chemistry'
 
 const unprotected: EngineDefinition = {
   ...roadEngine,
+  ignitionAdvance: 20,
   combustion: { ...combustionDefaults, knockControl: false },
+}
+const protectedKnocking: EngineDefinition = {
+  ...roadEngine,
+  ignitionAdvance: 20,
 }
 const turbo = starterBuilds.find((b) => b.label === 'Turbo hot hatch')!.engine
 
@@ -26,10 +31,17 @@ function hold(
   rpm: number,
   conditions: Conditions = normalConditions,
   seconds = 1.2,
+  advanceOffset = 0,
 ) {
   const core = new EngineCore(engine, conditions)
   core.sound = false
-  core.setControls({ ignition: true, throttle: 1, holdRpm: rpm })
+  core.setControls({
+    ignition: true,
+    throttle: 1,
+    holdRpm: rpm,
+    indestructible: true,
+    advanceOffset,
+  })
   for (let i = 0; i < 48000 * seconds; i++) core.step()
   let torque = 0
   const n = 48000 * 0.2
@@ -50,6 +62,23 @@ function hold(
 }
 
 describe('knock', () => {
+  it('makes the RON 95 Road engine knock when advanced far beyond MBT', () => {
+    const engine = {
+      ...roadEngine,
+      combustion: { ...roadEngine.combustion, knockControl: false },
+    }
+    const normal = hold(engine, 4000)
+    const advanced = hold(
+      engine,
+      4000,
+      normalConditions,
+      1.2,
+      50 - roadEngine.ignitionAdvance,
+    )
+    expect(normal.knock).toBeLessThan(1)
+    expect(advanced.knock).toBeGreaterThan(1)
+    expect(advanced.intensity).toBeGreaterThan(0)
+  })
   it('rises with spark advance', () => {
     const k = [12, 18, 24].map(
       (a) => hold({ ...unprotected, ignitionAdvance: a }, 2000).knock,
@@ -102,7 +131,7 @@ describe('knock', () => {
   it('ECU knock control retards the knocking engine and recovers', () => {
     const off = hold(unprotected, 1200)
     expect(off.retard).toBe(0)
-    const on = hold(roadEngine, 1200, normalConditions, 3)
+    const on = hold(protectedKnocking, 1200, normalConditions, 3)
     expect(on.retard).toBeGreaterThan(2)
     expect(on.intensity).toBeLessThan(off.intensity)
     // Once the knock stops, the timing creeps back.
@@ -119,7 +148,7 @@ describe('knock', () => {
     expect(core.telemetry().knock.index).toEqual([0, 0, 0, 0])
   })
   it('dyno samples record knock and retard', () => {
-    const test = new DynoTest(roadEngine, normalConditions, {
+    const test = new DynoTest(protectedKnocking, normalConditions, {
       ...defaultProcedure,
       startRpm: 1200,
       endRpm: 3000,
@@ -174,6 +203,16 @@ describe('combustion', () => {
     delete legacy.combustion
     expect(validateEngine(legacy).combustion).toEqual(legacyCombustion)
   })
+  it('keeps schema-9 builds on the legacy combustion calibration', () => {
+    const old: Record<string, unknown> = {
+      ...roadEngine,
+      schemaVersion: 9,
+      combustion: { ...roadEngine.combustion },
+    }
+    delete (old.combustion as Record<string, unknown>).calibration
+    expect(validateEngine(old).combustion.calibration).toBe('legacy')
+    expect(combustionDefaults.calibration).toBe('current')
+  })
   it('E85 meters to its own stoichiometric ratio and needs more fuel', () => {
     const e85 = hold(
       { ...unprotected, combustion: { ...unprotected.combustion, fuel: 'e85' } },
@@ -212,6 +251,10 @@ describe('rich-burn products', () => {
     const phi = 1 / 0.85
     expect(richProducts(FUELS.ron95, phi).heat / phi).toBeCloseTo(0.8, 1)
     expect(richProducts(FUELS.e85, phi).heat / phi).toBeCloseTo(0.8, 1)
+    expect(richProducts(FUELS.ron95, phi, 'legacy').heat).toBeCloseTo(
+      0.9401,
+      3,
+    )
   })
 })
 
@@ -237,14 +280,18 @@ describe('burned-gas dissociation', () => {
     expect(held(rich, 1740).held).toBeCloseTo(frozen, 3)
     expect(held(rich, 3000).held - frozen).toBeLessThan(held(1, 3000).held / 2)
   })
-  it('puts best power slightly rich, with torque flat from λ 0.9 to 1', () => {
+  it('puts best power at λ 0.86–0.9', () => {
     const torque = (lambda: number) =>
       hold({ ...unprotected, lambda }, 4500, normalConditions, 2).torque
     const stoichiometric = torque(1)
-    const best = torque(0.95)
-    expect(best).toBeGreaterThan(stoichiometric)
-    expect(torque(0.9)).toBeGreaterThan(stoichiometric * 0.995)
-    expect(torque(0.8)).toBeLessThan(best * 0.99)
+    const samples = [0.84, 0.86, 0.88, 0.9, 0.92].map((lambda) => ({
+      lambda,
+      torque: torque(lambda),
+    }))
+    const best = samples.reduce((a, b) => (b.torque > a.torque ? b : a))
+    expect(best.lambda).toBeGreaterThanOrEqual(0.86)
+    expect(best.lambda).toBeLessThanOrEqual(0.9)
+    expect(best.torque).toBeGreaterThan(stoichiometric)
     expect(torque(1.1)).toBeLessThan(stoichiometric * 0.95)
   }, 40000)
 })

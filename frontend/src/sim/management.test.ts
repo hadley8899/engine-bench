@@ -36,10 +36,10 @@ function hold(engine: EngineDefinition, rpm: number, throttle = 1) {
 /** A copy of the maps with every cell of one table set by a function. */
 function withTable(
   m: Management,
-  name: 'ignition' | 'lambda' | 'boost',
+  name: 'ignition' | 'lambda' | 'boost' | 'torque',
   cell: (row: number, rpm: number) => number,
 ): Management {
-  const rows = name === 'boost' ? m.throttle : m.load
+  const rows = name === 'boost' || name === 'torque' ? m.throttle : m.load
   return { ...m, [name]: rows.map((r) => m.rpm.map((c) => cell(r, c))) }
 }
 
@@ -122,6 +122,47 @@ describe('engine-management maps', () => {
     expect(r.t.ecu.boostTarget).toBe(40000)
     expect(r.t.induction.boost).toBeLessThan(55000)
     expect(hold(turbo, 4500).t.induction.boost).toBeGreaterThan(80000)
+  })
+  it('a torque request closes the electronic throttle independently of the pedal', () => {
+    const stable = {
+      ...turbo,
+      induction: {
+        ...turbo.induction,
+        compressorMap: 'legacy' as const,
+        turbineMap: 'legacy' as const,
+      },
+    }
+    const maps = withTable(flatMaps(stable), 'torque', (pedal) => 180 * pedal)
+    const limited = hold({ ...stable, management: maps }, 4500)
+    const open = hold(stable, 4500)
+    expect(limited.t.ecu.throttle).toBe(1)
+    expect(limited.t.ecu.throttlePlate).toBeLessThan(0.95)
+    expect(limited.torque).toBeGreaterThan(165)
+    expect(limited.torque).toBeLessThan(195)
+    expect(open.torque).toBeGreaterThan(limited.torque + 40)
+  })
+  it('a positive boost-tune offset explicitly bypasses the production torque request', () => {
+    const stable = {
+      ...turbo,
+      induction: {
+        ...turbo.induction,
+        compressorMap: 'legacy' as const,
+        turbineMap: 'legacy' as const,
+      },
+    }
+    const maps = withTable(flatMaps(stable), 'torque', (pedal) => 180 * pedal)
+    const engine = { ...stable, management: maps }
+    const core = new EngineCore(engine, normalConditions)
+    core.sound = false
+    core.setControls({
+      ignition: true,
+      throttle: 1,
+      holdRpm: 4500,
+      boostOffset: 10000,
+    })
+    for (let i = 0; i < 48000 * 1.7; i++) core.step()
+    expect(core.telemetry().ecu.throttlePlate).toBe(1)
+    expect(core.torque).toBeGreaterThan(220)
   })
   it('rejects tables that do not match their axes', () => {
     const m = flatMaps(roadEngine)

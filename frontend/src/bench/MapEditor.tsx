@@ -68,7 +68,7 @@ function Cell({
 }
 
 /**
- * Ignition, target λ and boost tables by RPM and load. The cell nearest the
+ * Ignition, target λ, boost and torque-request tables. The cell nearest the
  * running engine's operating point is outlined.
  */
 export function MapEditor({
@@ -90,12 +90,14 @@ export function MapEditor({
   const camMaps = !!maps?.intakeCam && !!maps?.exhaustCam
   const shown: MapTable =
     (table === 'boost' && !turbo) ||
+    (table === 'torque' && !maps?.torque) ||
     ((table === 'intakeCam' || table === 'exhaustCam') && !camMaps)
       ? 'ignition'
       : table
   const spec = MAP_TABLES[shown]
-  const rows = maps ? (shown === 'boost' ? maps.throttle : maps.load) : []
-  const rowAxis = shown === 'boost' ? 'throttle' : 'load'
+  const pedalTable = shown === 'boost' || shown === 'torque'
+  const rows = maps ? (pedalTable ? maps.throttle : maps.load) : []
+  const rowAxis = pedalTable ? 'throttle' : 'load'
   const update = (fn: (m: Management) => Management) =>
     onChange((m) => (m ? fn(m) : m))
   const setCell = (r: number, c: number, v: number) =>
@@ -133,7 +135,7 @@ export function MapEditor({
   const increasing = (a: number[]) =>
     a.map((v, i) => (i > 0 && v <= a[i - 1]) || (i < a.length - 1 && v >= a[i + 1]))
 
-  const liveRow = live ? (shown === 'boost' ? live.throttle : live.load) : 0
+  const liveRow = live ? (pedalTable ? live.throttle : live.load) : 0
   const liveCell =
     maps && live
       ? { r: nearest(rows, liveRow), c: nearest(maps.rpm, live.rpm) }
@@ -142,8 +144,8 @@ export function MapEditor({
     maps && live
       ? lookup(rows, maps.rpm, maps[shown]!, liveRow, live.rpm) * spec.scale
       : null
-  const rowScale = shown === 'boost' ? 100 : 0.001
-  const rowLimits = shown === 'boost' ? [0, 100] : [10, 500]
+  const rowScale = pedalTable ? 100 : 0.001
+  const rowLimits = pedalTable ? [0, 100] : [10, 500]
   const badRows = increasing(rows)
   const badRpm = maps ? increasing(maps.rpm) : []
 
@@ -162,6 +164,7 @@ export function MapEditor({
             <Tab value="ignition" label="Ignition" />
             <Tab value="lambda" label="Target λ" />
             {turbo && <Tab value="boost" label="Boost" />}
+            {maps.torque && <Tab value="torque" label="Torque request" />}
             {camMaps && <Tab value="intakeCam" label="Intake cam" />}
             {camMaps && <Tab value="exhaustCam" label="Exhaust cam" />}
           </Tabs>
@@ -173,10 +176,13 @@ export function MapEditor({
           {liveValue !== null && live && (
             <p className="map-live" data-testid="map-live">
               Running at {Math.round(live.rpm).toLocaleString()} RPM,{' '}
-              {shown === 'boost'
+              {pedalTable
                 ? `${Math.round(live.throttle * 100)}% throttle`
                 : `${Math.round(live.load / 1000)} kPa`}
               : <b>{liveValue.toFixed(spec.digits)}{spec.unit}</b>
+              {shown === 'torque' && (
+                <> · plate {Math.round(live.throttlePlate * 100)}%</>
+              )}
             </p>
           )}
           <div className="map-scroll">
@@ -184,7 +190,7 @@ export function MapEditor({
               <thead>
                 <tr>
                   <th className="map-corner">
-                    {shown === 'boost' ? 'Throttle %' : 'kPa'} \ RPM
+                    {pedalTable ? 'Throttle %' : 'kPa'} \ RPM
                   </th>
                   {maps.rpm.map((r, i) => (
                     <th key={i}>
@@ -213,7 +219,7 @@ export function MapEditor({
                         <Cell
                           value={value * rowScale}
                           digits={0}
-                          label={`${shown === 'boost' ? 'Throttle' : 'Load'} breakpoint ${r + 1}`}
+                          label={`${pedalTable ? 'Throttle' : 'Load'} breakpoint ${r + 1}`}
                           invalid={badRows[r]}
                           className="axis"
                           disabled={disabled}
@@ -244,7 +250,7 @@ export function MapEditor({
                             <Cell
                               value={v}
                               digits={spec.digits}
-                              label={`${spec.label} at ${rpm} RPM, ${shown === 'boost' ? `${Math.round(value * 100)}% throttle` : `${Math.round(value / 1000)} kPa`}`}
+                              label={`${spec.label} at ${rpm} RPM, ${pedalTable ? `${Math.round(value * 100)}% throttle` : `${Math.round(value / 1000)} kPa`}`}
                               invalid={v < spec.min || v > spec.max}
                               disabled={disabled}
                               onSelect={(extend) =>
@@ -333,7 +339,7 @@ export function MapToggle({
       />
       <p className="cranking-note">
         {engine.management
-          ? 'Ignition, target λ and boost come from the tables in the Engine maps panel beside the bench.'
+          ? 'Ignition, target λ, boost and any torque request come from the tables in the Engine maps panel beside the bench.'
           : 'Off: the engine uses its single ignition advance, mixture λ and boost target everywhere. Turning maps on starts from those values, so nothing changes until you edit a cell.'}
       </p>
     </div>

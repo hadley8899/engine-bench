@@ -6,7 +6,12 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { EngineDefinition, Metres } from '../sim/schema'
 import type { Telemetry } from '../sim/core'
 import { pistonTravel, phaseName, wrap } from '../sim/physics'
-import { emptyEvents, liftAt, valveEvents } from '../sim/cams'
+import {
+  emptyEvents,
+  floatedLiftAt,
+  floatSeverity,
+  valveEvents,
+} from '../sim/cams'
 
 /** Drawn valve lift for a real lift, m: 9 mm draws 0.1 units. */
 const drawnLift = (lift: number) =>
@@ -1384,6 +1389,9 @@ export function EngineView({
         exhaustPhase,
         frameEvents,
       )
+      const floatRatio =
+        t?.stress.limits.find((limit) => limit.key === 'valveFloat')?.ratio ?? 0
+      const floating = options.current.slow ? 0 : floatSeverity(floatRatio)
       if (t && t.sample !== lastSample) {
         lastSample = t.sample
         receivedAt = now
@@ -1455,21 +1463,25 @@ export function EngineView({
           head +
           0.16 * u -
           u *
-            liftAt(
+            floatedLiftAt(
               events.intakeOpen,
               events.intakeClose,
               drawnLift(events.intakeLift),
               degrees,
+              events.motion,
+              floating,
             )
         valves[i][1].position.y =
           head +
           0.16 * u -
           u *
-            liftAt(
+            floatedLiftAt(
               events.exhaustOpen,
               events.exhaustClose,
               drawnLift(events.exhaustLift),
               degrees,
+              events.motion,
+              floating,
             )
       }
       for (let i = 0; i < 4; i++)
