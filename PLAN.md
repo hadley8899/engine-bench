@@ -4,7 +4,7 @@ Updated: 6 November 2026
 
 ## Active delivery goal
 
-Stage 12, fidelity and release readiness, is in progress. Stage 12.1 is complete (model 1.16.0, engine schema 4): an opt-in four-stroke exhaust waveguide makes primary length, collector layout and cam overlap affect gas exchange and torque, while older builds retain their exact fixed-boundary results. Stage 11's layouts and presets remain complete as recorded below. Stage 12.2, naturally aspirated low-speed torque, is next; Stage 13's 3D overhaul follows Stage 12. Phase 2's human first-use check remains open and does not block later work.
+Stage 12, fidelity and release readiness, is in progress. Stages 12.1 and 12.2 are complete. Model 1.16.0/schema 4 added opt-in four-stroke exhaust pressure waves; model 1.17.0/schema 5 adds an opt-in heated intake port and returns runner residual with bounded enthalpy, reducing the naturally aspirated low-speed torque excess without moving legacy results. Stage 12.3, valve ramps and realistic cam acceleration profiles, is next; Stage 13's 3D overhaul follows Stage 12. Phase 2's human first-use check remains open and does not block later work.
 
 Direction set by the user on 2 November 2026: make the bench fun and interesting to play with. The order of work is now:
 
@@ -12,7 +12,7 @@ Direction set by the user on 2 November 2026: make the bench fun and interesting
 2. Stage 6, tuning, temperatures and limits — complete. Combustion and knock (1.6.0), ignition/λ/boost maps with fuel-supply limits (1.7.0), per-cylinder temperatures (1.8.0), enrichment cooling (1.9.0), dissociation (1.10.0) and parts with estimated limits, failures and push-it tests (1.11.0).
 3. Stage 7, famous real engines — complete for the planned set: VW 2.0 TFSI (AXX), Honda K20A, Mitsubishi 4G63T, Nissan SR20DET, Toyota 4A-GE, Toyota 2JZ-GTE, Nissan RB26DETT, Subaru EJ20 and GM LS3.
 4. Stage 8, camshafts and valve timing — complete (model 1.13.0; user decision of 4 November 2026 to do it after the famous inline-fours).
-The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November), as are two-stroke engines (Stage 10, 5 November) and other layouts with their famous engines (Stage 11, 6 November). Next comes fidelity and release readiness (Stage 12) and, last, the 3D overhaul (Stage 13; user decision, 4 November 2026).
+The UI revision (Stage 9) is complete (brought forward by the user on 4 November 2026; its first-use check moved to the end of the plan on 5 November), as are two-stroke engines (Stage 10, 5 November) and other layouts with their famous engines (Stage 11, 6 November). Fidelity and release readiness (Stage 12) is in progress through 12.2; the 3D overhaul remains last (Stage 13; user decision, 4 November 2026).
 
 ## Product direction
 
@@ -375,7 +375,7 @@ Known model gaps to fix (user request, 4 November 2026). Each is recorded with i
 Gas exchange and cams:
 
 - [x] Model exhaust pressure waves so header length, collector type and cam overlap affect scavenging and power, not only sound. Model 1.16.0 uses a bounded digital waveguide with pressure/admittance scattering at 4-1 or paired 4-2-1 collectors. New schema-4 builds opt in; older builds default off and keep their exact results. Trend, compatibility, preset, browser and performance evidence is in `docs/VERIFICATION.md` and assumptions in `docs/SIMULATION.md`.
-- [ ] Reduce naturally aspirated low-speed torque, which runs high: the K20A was 28 Nm over Honda's curve at 1,500 RPM and the Golf 22 Nm over at 1,000 RPM before cam phasing hid it. Review low-speed volumetric efficiency, residual and wall heat.
+- [x] Reduce naturally aspirated low-speed torque, which ran high: the K20A was 28 Nm over Honda's curve at 1,500 RPM and the Golf 22 Nm over at 1,000 RPM before cam phasing hid it. Model 1.17.0/schema 5 adds an opt-in water-jacketed intake-port heat exchanger whose residence-time effect is strongest at low flow, and carries bounded enthalpy with residual gas pushed into and returned from a runner. New builds and presets opt in; older builds default to the legacy port and reproduce the 1.16.0 hashes exactly. The unphased K20 loses more than 8 Nm at 1,500 RPM; after a milder phasing calibration it makes 161 Nm there against Honda's 160 Nm curve. Assumptions, preset results and regression evidence are in `docs/SIMULATION.md`, `docs/PRESETS.md` and `docs/VERIFICATION.md`.
 - [ ] Add valve ramps and realistic cam acceleration profiles in place of half-sine lift, so a cam's aggressiveness can differ at the same duration and lift.
 - [ ] Make valve float progressive (lost power and erratic seating) before it bends a valve, and give valve-to-piston room per engine (valve reliefs), rather than half the clearance height for every build.
 
@@ -404,8 +404,8 @@ Sound:
 
 Checks:
 
-- [x] Run the backend tests in Docker after the schema changes. On 6 November, model 1.16.0 and engine schema 4 passed all 35 Pest tests (196 assertions); the isolated browser-storage API also passed all six cases in Chromium and Firefox against its dedicated test database, including a pressure-wave V8 and immutable run.
-- [x] Make the existing browser suite reliable. On 6 November the complete Chromium run passed all 39 enabled tests in one run (three isolated storage tests skipped there and passed separately in Chromium and Firefox), including emergency stop, loaded stall, over-boost, Golf, sign-in navigation and the Stage 12.1 pressure-wave workflow. The Stage 12.1 workflow also passed in Firefox.
+- [x] Run the backend tests in Docker after the schema changes. On 6 November, model 1.17.0 and engine schema 5 passed all 35 Pest tests (196 assertions); the isolated browser-storage API also passed all six cases in Chromium and Firefox against its dedicated test database, including a heated-port multibank build and immutable run.
+- [x] Make the existing browser suite reliable. On 6 November the Stage 12.1 pressure-wave and Stage 12.2 heated-port worker workflows passed in Chromium and Firefox, and the isolated storage cases passed separately in both browsers. The complete Chromium result and final rerun details are recorded in `docs/VERIFICATION.md`.
 
 Release readiness:
 

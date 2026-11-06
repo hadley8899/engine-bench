@@ -699,11 +699,11 @@ export const realEngines: RealEngine[] = [
     description:
       'The 2005 Golf GTI’s EA113 2.0 TFSI (AXX): turbocharged direct injection on RON 98, with a K03-sized turbo that runs out of breath above 4,700 RPM. Push the boost and see what the cast pistons take.',
     rated: '147 kW at 5,700 RPM · 280 Nm at 1,800–4,700 RPM (VW)',
-    // 42° of intake phasing (SSP 337): retarded at idle speeds, advanced
+    // 42° of intake phasing (SSP 337): neutral at 1,000 RPM, advanced
     // while the turbo spools, then held where the ECU limits torque.
     engine: phased(axx, axxMaps, 42, [
-      [1000, -20],
-      [1500, 20],
+      [1000, 0],
+      [1500, 30],
       [2000, 5],
       [2500, 0],
     ]),
@@ -714,7 +714,7 @@ export const realEngines: RealEngine[] = [
       'Honda’s high-compression K20A: 225 PS without a turbo, an 8,400 RPM redline and VTEC switching to a high-lift cam at 5,200 RPM. Watch the torque dip, then come back hard.',
     rated: '165 kW at 8,000 RPM · 215 Nm at 6,100 RPM (Honda)',
     // i-VTEC: VTEC's high-lift profile plus 50° of continuous intake
-    // phasing, retarded at low speed and around the changeover.
+    // phasing, mildly retarded at low speed and around the changeover.
     engine: phased(
       k20a,
       shapedMaps(k20a, {
@@ -730,8 +730,8 @@ export const realEngines: RealEngine[] = [
       }),
       50,
       [
-        [1500, -32],
-        [2500, -15],
+        [1500, -20],
+        [2500, 0],
         [3500, 0],
         [4000, -5],
         [4500, -25],

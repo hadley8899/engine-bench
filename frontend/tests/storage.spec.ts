@@ -126,10 +126,10 @@ test('a two-stroke build and its run save, reload and load back', async ({ page 
   expect(errors).toEqual([])
 })
 
-test('a schema 4 pressure-wave multibank build and immutable run persist', async ({ page }) => {
+test('a schema 5 heated-port multibank build and immutable run persist', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  const name = `Stage 11 V8 ${test.info().project.name} ${Date.now()}`
+  const name = `Stage 12.2 V8 ${test.info().project.name} ${Date.now()}`
   await page.goto('/login')
   await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
   await page.getByLabel('Password', { exact: true }).fill('password')

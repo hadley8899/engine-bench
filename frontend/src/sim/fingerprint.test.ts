@@ -37,14 +37,61 @@ function fingerprint(engine: EngineDefinition) {
 }
 
 describe('four-stroke results', () => {
-  it('keeps legacy builds bit-for-bit and pins pressure-wave results', { timeout: 120000 }, () => {
+  it('keeps legacy builds bit-for-bit and pins current results', { timeout: 120000 }, () => {
     const builds = [roadEngine, sportEngine, ...realEngines.map((p) => p.engine)].filter(
       (e) => e.cycle === 'four-stroke',
     )
-    const legacy = builds.map((engine) => ({
-      ...engine,
-      exhaust: { ...engine.exhaust, pressureWaves: false },
-    }))
+    const shaped = (rpm: number[], points: [number, number][]) =>
+      rpm.map((speed) => {
+        if (speed <= points[0][0]) return points[0][1]
+        for (let i = 1; i < points.length; i++)
+          if (speed <= points[i][0])
+            return Math.round(
+              points[i - 1][1] +
+                ((points[i][1] - points[i - 1][1]) *
+                  (speed - points[i - 1][0])) /
+                  (points[i][0] - points[i - 1][0]),
+            )
+        return points[points.length - 1][1]
+      })
+    const legacy = builds.map((engine) => {
+      let intake: [number, number][] | null = null
+      if (engine.name.includes('AXX'))
+        intake = [
+          [1000, -20],
+          [1500, 20],
+          [2000, 5],
+          [2500, 0],
+        ]
+      if (engine.name.includes('K20A'))
+        intake = [
+          [1500, -32],
+          [2500, -15],
+          [3500, 0],
+          [4000, -5],
+          [4500, -25],
+          [5000, -10],
+          [5500, 0],
+          [6000, 5],
+          [7000, 5],
+          [8000, 0],
+        ]
+      const management =
+        intake && engine.management?.intakeCam
+          ? {
+              ...engine.management,
+              intakeCam: engine.management.intakeCam.map(() =>
+                shaped(engine.management!.rpm, intake),
+              ),
+            }
+          : engine.management
+      return {
+        ...engine,
+        intakePortModel: 'legacy' as const,
+        management,
+        exhaust: { ...engine.exhaust, pressureWaves: false },
+      }
+    })
     expect(legacy.map(fingerprint)).toEqual([
       '1f4a150343025205',
       'dce91837020d0507',
@@ -59,17 +106,17 @@ describe('four-stroke results', () => {
       'f53479f9d23ec6bf',
     ])
     expect(builds.map(fingerprint)).toEqual([
-      'f50500494fbffd81',
-      '80f696624b71e988',
-      'edb12e049c3d63f4',
-      '4148c73131a1fc51',
-      'c483cf890f8b7003',
-      'd02a7057b432d379',
-      '6521583bfb0db0b9',
-      '20220ca5c26baf9f',
-      '0e12d0107a573bb0',
-      '4e41f1115dd98c91',
-      'b6c5dbb1914dd551',
+      'cd2a69a339d071db',
+      '2b9057d62f3b8098',
+      'e11fde5347d7b999',
+      '99bb1e482649d458',
+      '3fe65567074fd09f',
+      '3a5bad561dc0b214',
+      '087555fd2f01fea3',
+      '3c37d7953bb897db',
+      'b80f2a4409bb4e08',
+      'ac86ca07b895f239',
+      '31c0a39575c12223',
     ])
   })
 })

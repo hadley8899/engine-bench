@@ -26,7 +26,8 @@
         "eb-0d-1.14.0",
         "eb-0d-1.14.1",
         "eb-0d-1.15.0",
-        "eb-0d-1.16.0"
+        "eb-0d-1.16.0",
+        "eb-0d-1.17.0"
       ]
     },
     "id": {
@@ -59,6 +60,10 @@
             {
               "type": "number",
               "const": 4
+            },
+            {
+              "type": "number",
+              "const": 5
             }
           ]
         },
@@ -152,6 +157,14 @@
           "type": "number",
           "minimum": 0.05,
           "maximum": 1.5
+        },
+        "intakePortModel": {
+          "default": "legacy",
+          "type": "string",
+          "enum": [
+            "legacy",
+            "heated"
+          ]
         },
         "ignitionAdvance": {
           "type": "number",

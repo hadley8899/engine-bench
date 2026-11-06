@@ -28,7 +28,7 @@ Other sources list the BWA as mechanically the same. Volkswagen's later CCTA/CAE
 | Intercooler | Effectiveness 0.55, 12 kPa drop | Inferred: a modest side-mounted cooler |
 | Full-load mixture | λ 0.93 at 3,500–5,000 RPM and λ 0.88 above, from 150 kPa manifold pressure; λ 1 elsewhere (engine-management maps) | Inferred: typical production enrichment |
 | Ignition | 14° BTDC with knock control | Inferred |
-| Cam phasing (1.13.0) | Intake phaser, 42° range: −20° at 1,000 RPM, +20° at 1,500, +5° at 2,000, 0° from 2,500 (all loads) | Range sourced (1); map calibrated. Profiles are the calibrated fixed events converted exactly |
+| Cam phasing (1.13.0; recalibrated 1.17.0) | Intake phaser, 42° range: 0° at 1,000 RPM, +30° at 1,500, +5° at 2,000, 0° from 2,500 (all loads) | Range sourced (1); map calibrated. Profiles are the calibrated fixed events converted exactly |
 | Valve areas, intake closing (585°), runners, burn duration, inertia | As in the file | Inferred; the SSP gives only 42° of intake cam phasing, which the model's fixed timing cannot represent |
 | Rev limit / mechanical limit | 6,800 / 7,200 RPM | Inferred; the published curve runs to 7,000 RPM |
 | Parts | Cast pistons, stock rods, MLS gasket, bolts, stock springs | Inferred from the SSP's description of the production parts (strengthened crank and valve seats, uprated springs relative to the NA FSI, sodium-filled exhaust valves) |
@@ -41,9 +41,9 @@ Steady full load in normal air (the S337_008 curve read at 500 RPM steps, agains
 | RPM | 1,000 | 1,500 | 2,000 | 2,500–4,000 | 4,500 | 5,000 | 5,500 | 6,000 | 6,500 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Published, Nm | 170 | 239 | 280 | 280 | 280 | 271 | 254 | 236 | 218 |
-| Preset, Nm | 192 | 224 | 283 | 283–287 | 277 | 266 | 253 | 235 | 211 |
+| Preset, Nm | 171 | 232 | 280 | 278–283 | 278 | 268 | 256 | 239 | 216 |
 
-Model 1.13.0's intake phasing brought the old fixed-boundary result to 172 Nm at 1,000 RPM, 244 at 1,500 and 288 at 2,000; the RMS deviation fell from about 9 to 5 Nm. With model 1.16.0 pressure waves the held points are 170, 240, 288, 285–290, 281, 270, 258, 241 and 217 Nm from 1,000 through 6,500 RPM: every published point remains within 10 Nm. A standard 1,500–6,600 RPM sweep reaches 152.5 kW at about 6,070 RPM and 291 Nm at 3,860 RPM. Before phasing (1.11.0), the largest deviations were +22 Nm at 1,000 RPM and −15 Nm at 1,500, where the model's turbo spools later and its naturally aspirated torque is higher. `src/sim/presets.test.ts` holds the rated points to the recorded tolerances.
+Model 1.13.0's intake phasing brought the old fixed-boundary result to 172 Nm at 1,000 RPM, 244 at 1,500 and 288 at 2,000; the RMS deviation fell from about 9 to 5 Nm. Model 1.17.0's heated port reduces the naturally aspirated part of low-speed filling, so the compensating map no longer retards the cam at 1,000 RPM and uses +30° rather than +20° while the turbo spools at 1,500. The held points are now 171, 232, 280, 278–283, 278, 268, 256, 239 and 216 Nm from 1,000 through 6,500 RPM: every published point remains within 8 Nm. A standard 1,500–6,600 RPM sweep reaches 151.5 kW near 6,070 RPM and 284 Nm near 3,550 RPM. `src/sim/presets.test.ts` holds the rated points to the recorded tolerances.
 
 **Known deviation: boost.** At the published 0.9 bar, the model makes about 350–370 Nm instead of 280 Nm, so the preset's boost target is calibrated to 0.6 bar. The model overestimates boosted torque at a given manifold pressure by about 20%. It probably has too little knock-limited spark retard, too little charge heating and too weak residual and back-pressure effects compared with the real K03 at high load. So boost changes on this preset are relative to the model's 0.6 bar, and absolute boost numbers should not be compared with a real car's logs.
 
@@ -66,7 +66,7 @@ Added with model 1.12.0 (4 November 2026). It is the only preset besides the Gol
 | Bore × stroke, compression | 86 × 86 mm, 11.7:1 | Sourced |
 | Rated output | 165 kW at 8,000 RPM, 215 Nm at 6,100 RPM | Sourced |
 | VTEC | High cam from 5,200 RPM: intake area 1,200 mm², exhaust 800 mm², intake closing 615°; low cam 700 mm², 680 mm², 575° | Switch speed calibrated to the curve's crossover; profiles inferred and calibrated. Since 1.13.0 these are cam profiles converted exactly |
-| i-VTC (1.13.0) | Intake phaser, 50° range: −32° at 1,500 RPM, −15° at 2,500, 0° at 3,500, −25° at 4,500 around the changeover, +5° from 6,000 (all loads) | Range inferred; map calibrated to the curve |
+| i-VTC (1.13.0; recalibrated 1.17.0) | Intake phaser, 50° range: −20° at 1,500 RPM, 0° at 2,500 and 3,500, −25° at 4,500 around the changeover, +5° from 6,000 (all loads) | Range inferred; map calibrated to the curve |
 | Rod length | 139 mm | Inferred (common figure; not confirmed by a source found) |
 | Ignition | 12° BTDC at 1,500 RPM rising to 24° from 4,000 RPM at full load (map) | Calibrated: limits low-speed knock on RON 98 at 11.7:1 |
 | Mixture | λ 0.92 at 4,000 RPM to 0.88 from 6,000 RPM at full load (map) | Inferred |
@@ -80,9 +80,9 @@ The curve was read from the image, so expect about ±5 Nm of reading error.
 | RPM | 1,500 | 2,500 | 3,500 | 4,500 | 5,500 | 6,000 | 7,000 | 8,000 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Honda, Nm | ~160 | ~186 | ~204 | ~187 | ~208 | ~218 | ~210 | ~190 |
-| Preset, Nm | 188 | 192 | 200 | 198 | 207 | 212 | 209 | 192 |
+| Preset, Nm | 161 | 186 | 195 | 187 | 203 | 215 | 212 | 192 |
 
-With model 1.16.0 pressure waves the preset makes 158, 182, 202, 193, 211, 220, 215 and 195 Nm at those speeds: the largest deviation is +5 Nm. Retarding the intake still removes 1.12.0's +28 Nm excess at 1,500 RPM and deepens the dip before VTEC. A standard sweep gives 164.9 kW at about 8,170 RPM and 220 Nm at about 6,280. The real i-VTC map is not published, so this phasing is a fit to the curve, not Honda's calibration.
+With model 1.17.0 the preset makes 161, 186, 195, 187, 203, 215, 212 and 192 Nm at those speeds: the largest deviation is −9 Nm. Before phasing, heating the slow charge lowers the 1,500 RPM result from 188 to 177 Nm; the calibrated cam now needs −20° rather than the old −32° to reach Honda's curve, and needs no compensating retard at 2,500 RPM. A standard sweep gives 162.7 kW near 8,170 RPM and 216 Nm near 6,380 RPM. The real i-VTC map is not published, so this phasing remains a fit to the curve, not Honda's calibration.
 
 ## Mitsubishi 4G63T, Lancer Evolution VIII
 
@@ -108,7 +108,7 @@ No manufacturer torque curve was found, so the preset is calibrated to the two r
 
 ### Calibration and deviation
 
-With model 1.16.0 pressure waves the preset makes 387 Nm at 3,500 RPM against the rated 383 Nm. At 6,500 RPM it makes 312 Nm (213 kW) against 302 Nm (206 kW). Between those points the shape is the model's own: 378 Nm at 2,500 RPM and 353 at 5,500. A standard sweep gives 214.1 kW at about 6,490 RPM and 393 Nm at about 3,550. Unlike the Golf, this preset reaches its rated torque at roughly the real boost, so the model's boosted overestimate (see the Golf) is not consistent between engines. On stock parts, a boost push at 4,300 RPM cracks a cast piston at 1.4 bar above the map.
+With model 1.17.0 the preset makes 381 Nm at 3,500 RPM against the rated 383 Nm. At 6,500 RPM it makes 311 Nm (212 kW) against 302 Nm (206 kW). Between those points the shape is the model's own: 372 Nm at 2,500 RPM and 350 at 5,500. A standard sweep reaches about 386 Nm and 211 kW. Unlike the Golf, this preset reaches its rated torque at roughly the real boost, so the model's boosted overestimate (see the Golf) is not consistent between engines. On stock parts, a boost push at 4,300 RPM cracks a cast piston at 1.4 bar above the map.
 
 ## Nissan SR20DET, Silvia S15 Spec-R
 
@@ -134,7 +134,7 @@ No manufacturer torque curve was found; calibrated to the two rated points.
 
 ### Calibration and deviation
 
-With VTC and model 1.16.0 pressure waves the preset makes 280 Nm at 4,800 RPM against the rated 275 Nm, and 282 Nm (189 kW) at 6,400 RPM against 274 Nm (184 kW). It holds about 277–285 Nm from 3,000 to 6,400 RPM. A standard sweep gives 193.5 kW at about 6,700 RPM and 285 Nm. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
+With VTC and model 1.17.0 the preset makes 278 Nm at 4,800 RPM against the rated 275 Nm, and 281 Nm (188 kW) at 6,400 RPM against 274 Nm (184 kW). Its broad plateau remains the model's own because no published curve was found. A standard sweep through 6,200 RPM reaches about 284 Nm and 183 kW. On stock parts, a boost push at 4,500 RPM cracks a cast piston at 1.8 bar above the map.
 
 ## Toyota 4A-GE (16-valve), AE86
 
@@ -156,7 +156,7 @@ No manufacturer torque curve was found; calibrated to the two Japanese rated poi
 
 ### Calibration and deviation
 
-With model 1.16.0 pressure waves, at 5,200 RPM the preset makes 151 Nm against the rated 149 Nm. At 6,600 RPM it makes 134 Nm (92.6 kW) against 127 Nm (88 kW). A standard sweep gives 93.8 kW at about 6,490 RPM and 152 Nm at about 4,810. Not represented: T-VIS, the intake runner valve that improved low-speed torque.
+With model 1.17.0, at 5,200 RPM the preset makes 148 Nm against the rated 149 Nm. At 6,600 RPM it makes 133 Nm (91.6 kW) against 127 Nm (88 kW). A standard sweep through 6,200 RPM reaches about 91 kW and 149 Nm. Not represented: T-VIS, the intake runner valve that improved low-speed torque.
 
 ## Yamaha RD350LC (4L0)
 
@@ -288,19 +288,19 @@ Added with model 1.15.0. All use the ordinary cylinder model; there is no preset
 
 ### Toyota 2JZ-GTE — Supra RZ
 
-Toyota's [1993 A80 Supra launch release](https://global.toyota/en/detail/7868203) gives a 3.0-litre inline-six, sequential twin turbos, 206 kW at 5,600 RPM and 44.0 kg-m (431 Nm) at 3,600 RPM. Bore × stroke (86.0 × 86.0 mm), 8.5:1 compression and the 1–5–3–6–2–4 order come from Toyota repair manual RM502U; rod length is inferred. Valve areas, runner, single equivalent turbo, intercooler, maps, inertia and limits are calibrated estimates. With model 1.16.0 pressure waves it makes 437.9 Nm at 3,600 RPM (+6.9) and 208.2 kW at 5,600 RPM (+2.2). Sequential changeover is not represented.
+Toyota's [1993 A80 Supra launch release](https://global.toyota/en/detail/7868203) gives a 3.0-litre inline-six, sequential twin turbos, 206 kW at 5,600 RPM and 44.0 kg-m (431 Nm) at 3,600 RPM. Bore × stroke (86.0 × 86.0 mm), 8.5:1 compression and the 1–5–3–6–2–4 order come from Toyota repair manual RM502U; rod length is inferred. Valve areas, runner, single equivalent turbo, intercooler, maps, inertia and limits are calibrated estimates. With model 1.17.0 it makes 430.2 Nm at 3,600 RPM (−0.8) and 206.2 kW at 5,600 RPM (+0.2). Sequential changeover is not represented.
 
 ### Nissan RB26DETT — Skyline GT-R R34
 
-Nissan's [Heritage Collection R34](https://www.nissan-global.com/EN/HERITAGE_COLLECTION/280_skyline_gt-r_v-spec_ii.html) gives 2,568 cc, inline-six DOHC twin turbo, 206 kW at 6,800 RPM and 392 Nm at 4,400 RPM. Bore × stroke (86.0 × 73.7 mm), 8.5:1 compression and 1–5–3–6–2–4 come from Nissan's R34 service manual; the geometry calculates to 2,568.7 cc while Nissan labels it 2,568. Rod length, breathing, equivalent turbo and maps are inferred/calibrated. With model 1.16.0 pressure waves it makes 393.7 Nm at 4,400 RPM (+1.7) and 208.8 kW at 6,800 RPM (+2.8). The individual ceramic turbos and six-throttle intake are not represented.
+Nissan's [Heritage Collection R34](https://www.nissan-global.com/EN/HERITAGE_COLLECTION/280_skyline_gt-r_v-spec_ii.html) gives 2,568 cc, inline-six DOHC twin turbo, 206 kW at 6,800 RPM and 392 Nm at 4,400 RPM. Bore × stroke (86.0 × 73.7 mm), 8.5:1 compression and 1–5–3–6–2–4 come from Nissan's R34 service manual; the geometry calculates to 2,568.7 cc while Nissan labels it 2,568. Rod length, breathing, equivalent turbo and maps are inferred/calibrated. With model 1.17.0 it makes 390.2 Nm at 4,400 RPM (−1.8) and 207.6 kW at 6,800 RPM (+1.6). The individual ceramic turbos and six-throttle intake are not represented.
 
 ### Subaru EJ20 — Impreza WRX STI
 
-Subaru's [31 October 2000 release](https://www.subaru.co.jp/news/archives/00_10_12/10_31_1.html) gives a 1,994 cc turbo boxer-four, 92.0 × 75.0 mm, 8.0:1, 206 kW at 6,400 RPM and 373 Nm at 4,000 RPM. It also identifies AVCS. Rod length, valve events/areas, turbo and maps are inferred/calibrated; the present preset does not reproduce a published cam map. With model 1.16.0 pressure waves it makes 375.2 Nm at 4,000 RPM (+2.2) and 204.6 kW at 6,400 RPM (−0.7%). Unequal header lengths and bank-specific pulses are not solved, so its familiar exhaust note is only approximated by firing order and the synthesiser.
+Subaru's [31 October 2000 release](https://www.subaru.co.jp/news/archives/00_10_12/10_31_1.html) gives a 1,994 cc turbo boxer-four, 92.0 × 75.0 mm, 8.0:1, 206 kW at 6,400 RPM and 373 Nm at 4,000 RPM. It also identifies AVCS. Rod length, valve events/areas, turbo and maps are inferred/calibrated; the present preset does not reproduce a published cam map. With model 1.17.0 it makes 371.3 Nm at 4,000 RPM (−1.7) and 203.9 kW at 6,400 RPM (−1.0%). Unequal header lengths and bank-specific pulses are not solved, so its familiar exhaust note is only approximated by firing order and the synthesiser.
 
 ### GM LS3 6.2 V8
 
-Chevrolet Performance's [LS3 specification](https://www.chevrolet.com/performance-parts/crate-engines/ls-lsx-engines/ls3-engine) gives a 6.2-litre Gen IV V8, 103.25 × 92.0 mm, 10.7:1, 430 hp (321 kW) at 5,900 RPM, 425 lb-ft (576 Nm) at 4,600 RPM and a 6,600 RPM maximum recommendation. It also specifies hypereutectic pistons and powdered-metal rods; the preset leaves the simulator's generic stock-part limits because those are model estimates. Rod length, effective valve areas/events and exhaust are inferred/calibrated. With model 1.16.0 pressure waves it makes 585.1 Nm at 4,600 RPM (+9.1) and 318.0 kW at 5,900 RPM (−0.9%). The cross-plane 1–8–4–3–6–5–7–2 order is represented; pushrods, the real hydraulic-roller cam and bank-specific four-primary collectors are not.
+Chevrolet Performance's [LS3 specification](https://www.chevrolet.com/performance-parts/crate-engines/ls-lsx-engines/ls3-engine) gives a 6.2-litre Gen IV V8, 103.25 × 92.0 mm, 10.7:1, 430 hp (321 kW) at 5,900 RPM, 425 lb-ft (576 Nm) at 4,600 RPM and a 6,600 RPM maximum recommendation. It also specifies hypereutectic pistons and powdered-metal rods; the preset leaves the simulator's generic stock-part limits because those are model estimates. Rod length, effective valve areas/events and exhaust are inferred/calibrated. With model 1.17.0 it makes 568.0 Nm at 4,600 RPM (−8.0) and 313.0 kW at 5,900 RPM (−2.5%). The cross-plane 1–8–4–3–6–5–7–2 order is represented; pushrods, the real hydraulic-roller cam and bank-specific four-primary collectors are not.
 
 `src/sim/presets.test.ts` holds the four rated points to their stated tolerances and checks displacement, no failure and less than 95% estimated stress. Full published curves were not found for these exact specifications, so the interface describes them as calibrated approximations rather than replicas.
 

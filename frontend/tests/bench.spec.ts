@@ -758,7 +758,9 @@ test('the K20A preset switches to its VTEC high cam when revved', async ({
   await page.getByRole('button', { name: 'Start engine' }).click()
   const rpm = async () =>
     Number((await page.getByTestId('rpm').innerText()).replace(/[^\d]/g, ''))
-  await expect.poll(rpm).toBeGreaterThan(500)
+  // Let the high-compression engine finish cranking before flooring it. The
+  // heated-port model can make a full-load 500 RPM start transient knock.
+  await expect.poll(rpm).toBeGreaterThan(850)
   await expect(page.getByTestId('high-cam')).toHaveCount(0)
   await page.getByRole('heading', { level: 1 }).click()
   await page.keyboard.down('Space')

@@ -48,6 +48,7 @@ export const SECTIONS: {
       'exhaustArea',
       'intakeClose',
       'intakeRunnerLength',
+      'intakePortModel',
       'ignitionAdvance',
       'burnDuration',
       'lambda',

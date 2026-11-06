@@ -29,6 +29,7 @@ import type { TwoStrokeTelemetry } from './twostroke'
 import {
   atmosphere,
   clamp,
+  CP,
   CV_A,
   CV_B,
   CYCLE,
@@ -49,6 +50,10 @@ import {
 export const EXHAUST_BACKFLOW_TEMPERATURE = 650
 export const WALL_HEAT = 3
 export const WALL_ABOVE_COOLANT = 80
+/** Intake-port wall is water-jacketed and cooler than the combustion deck. */
+export const INTAKE_PORT_WALL_ABOVE_COOLANT = 10
+/** Total port-to-charge conductance per cubic metre of displacement, W/K/m³. */
+export const INTAKE_PORT_CONDUCTANCE = 3500
 const FMEP_STATIC = 60000
 const FMEP_LINEAR = 4200
 const FMEP_QUADRATIC = 430
@@ -189,6 +194,8 @@ interface Cylinder {
   pushed: number
   pushedFresh: number
   pushedFuel: number
+  /** Enthalpy carried by gas held in the intake runner, J. */
+  pushedEnergy: number
   /**
    * Burned charge in the cylinder (air basis), kg, and the heat its burn
    * released, J. Both leave with the gas and dilute as fresh charge arrives.
@@ -291,8 +298,15 @@ export class EngineCore {
    * only: 1.5.0 re-inducted it as fresh air.
    */
   private runnerResidual: boolean
+  /** Schema-5 intake heating and hot-runner-residual compatibility switch. */
+  private heatedIntakePort: boolean
   private idleTrim = 0
   private runnerVolume: number
+  private portConductance: number
+  private minimumPortFlow: number
+  private portFlow = 0
+  /** Charge temperature immediately upstream of the intake valve, K. */
+  intakePortTemperature: number
   /** Spark advance and λ the ECU commands this step. */
   private sparkAdvance: number
   private targetLambda: number
@@ -355,6 +369,7 @@ export class EngineCore {
     this.chargeFuel =
       (displacement(engine) / count) * (1.2 / this.grade.stoichiometric)
     this.runnerResidual = engine.combustion.burnRate === 'predictive'
+    this.heatedIntakePort = engine.intakePortModel === 'heated'
     this.sparkAdvance = engine.ignitionAdvance
     this.targetLambda = engine.lambda
     this.octaneDelay = KNOCK_DELAY * (this.grade.octane / 100) ** 3.402
@@ -366,6 +381,7 @@ export class EngineCore {
     )
     this.acoustics = new Acoustics(engine, conditions.temperature)
     this.intakeEnthalpy = enthalpy(conditions.temperature)
+    this.intakePortTemperature = conditions.temperature
     this.exhaustEnthalpy = enthalpy(EXHAUST_BACKFLOW_TEMPERATURE)
     this.woschniBore = 3.26 * engine.bore ** -0.2
     this.manifold = conditions.pressure
@@ -382,6 +398,9 @@ export class EngineCore {
       runnerArea * engine.intakeRunnerLength,
       (this.pistonArea * engine.stroke) / 2,
     )
+    this.portConductance = INTAKE_PORT_CONDUCTANCE * displacement(engine)
+    this.minimumPortFlow =
+      (air.density * displacement(engine) * 300 * 0.3) / 120
     this.sparkCut =
       engine.limiterCut === 'spark' || engine.fuelSystem.kind === 'carburettor'
     this.airDensityRatio =
@@ -434,6 +453,7 @@ export class EngineCore {
         pushed: 0,
         pushedFresh: 0,
         pushedFuel: 0,
+        pushedEnergy: 0,
         burned: 0,
         burnedHeat: 0,
         burnFresh: 0,
@@ -492,6 +512,10 @@ export class EngineCore {
       core.boostBase = engine.induction.boostTarget
     core.fuel.adopt(previous.fuel)
     core.exhaustWaves.adopt(previous.exhaustWaves)
+    if (core.heatedIntakePort && previous.heatedIntakePort) {
+      core.portFlow = previous.portFlow
+      core.intakePortTemperature = previous.intakePortTemperature
+    }
     const p = previous.engine
     const sameGeometry =
       p.bore === engine.bore &&
@@ -536,6 +560,7 @@ export class EngineCore {
       cyl.pushed = old.pushed
       cyl.pushedFresh = old.pushedFresh
       cyl.pushedFuel = old.pushedFuel
+      cyl.pushedEnergy = old.pushedEnergy
       if (engine.combustion.knockControl) cyl.retard = old.retard
       cyl.knock = old.knock
       cyl.knockOpen = old.knockOpen
@@ -577,14 +602,14 @@ export class EngineCore {
       this.idleTrim = clamp(
         this.idleTrim + (950 - rpm) * IDLE_INTEGRAL * this.dt,
         0,
-        0.3,
+        this.heatedIntakePort ? 0.5 : 0.3,
       )
     else if (!this.controls.ignition) this.idleTrim = 0
     const idle = this.controls.ignition
       ? clamp(
           0.09 + this.idleTrim + (950 - rpm) * 0.0004,
           0,
-          this.runnerResidual ? 0.6 : 0.38,
+          this.heatedIntakePort ? 0.8 : this.runnerResidual ? 0.6 : 0.38,
         )
       : 0
     // Idle air bypasses the throttle plate, so the two flows add: the first
@@ -672,11 +697,28 @@ export class EngineCore {
       : induction.supply - fuel.inletLoss
     const targetMap = supply * (0.04 + 0.95 * throttle)
     // Charge air after any compressor, intercooler and fuel evaporation.
-    const intakeTemperature = induction.chargeTemperature - fuel.manifoldCooling
+    const manifoldTemperature =
+      induction.chargeTemperature - fuel.manifoldCooling
+    // A lumped water-jacketed port acts as a heat exchanger. At low mass
+    // flow the charge spends longer against the hot wall; at high flow the
+    // exponential NTU term naturally approaches the manifold temperature.
+    const portWall = this.coolant + INTAKE_PORT_WALL_ABOVE_COOLANT
+    const portWallEnthalpy = enthalpy(portWall)
+    this.intakePortTemperature = this.heatedIntakePort
+      ? portWall -
+        (portWall - manifoldTemperature) *
+          Math.exp(
+            -this.portConductance /
+              (Math.max(this.portFlow, this.minimumPortFlow) * CP),
+          )
+      : manifoldTemperature
+    const intakeTemperature = this.intakePortTemperature
     const intakeEnthalpy =
       induction.boosted || fuel.manifoldCooling > 0
         ? enthalpy(intakeTemperature)
-        : this.intakeEnthalpy
+        : this.heatedIntakePort
+          ? enthalpy(intakeTemperature)
+          : this.intakeEnthalpy
     const intakeDensity =
       (this.airDensity * c.temperature) / (c.pressure * intakeTemperature)
     const meanBackPressure = turbo ? induction.exhaustPressure : c.pressure
@@ -795,19 +837,25 @@ export class EngineCore {
             )
             const dm = flow * dt
             cyl.mass += dm
-            cyl.energy += dm * (intakeEnthalpy - fuel.cylinderCooling)
             // Gas pushed back earlier returns first, as it left.
             const back = Math.min(dm, cyl.pushed)
+            let returnedEnergy = 0
             if (back > 0) {
               const share = back / cyl.pushed
               const fresh = cyl.pushedFresh * share
               const burned = cyl.pushedFuel * share
+              returnedEnergy = cyl.pushedEnergy * share
               cyl.fresh += fresh
               cyl.fuel += burned
               cyl.pushed -= back
               cyl.pushedFresh -= fresh
               cyl.pushedFuel -= burned
+              cyl.pushedEnergy -= returnedEnergy
             }
+            cyl.energy += this.heatedIntakePort
+              ? returnedEnergy +
+                (dm - back) * (intakeEnthalpy - fuel.cylinderCooling)
+              : dm * (intakeEnthalpy - fuel.cylinderCooling)
             cyl.fresh += dm - back
             cyl.fuel += (dm - back) * fuel.fuelPerAir
             freshMass += dm - back
@@ -828,6 +876,16 @@ export class EngineCore {
               cyl.pushed += dm
               cyl.pushedFresh += cyl.fresh * (1 - kept)
               cyl.pushedFuel += cyl.fuel * (1 - kept)
+              if (this.heatedIntakePort)
+                // The thin runner inventory rapidly approaches its
+                // water-jacketed wall; retain hot residual energy without
+                // unrealistically returning exhaust-temperature gas.
+                cyl.pushedEnergy +=
+                  dm *
+                  Math.min(
+                    outflowEnthalpy + heldPerMass,
+                    portWallEnthalpy,
+                  )
               // Only the gas near the valve returns as it left: up to the
               // runner's volume or half the swept volume. The rest mixes
               // into the plenum and returns as fresh charge.
@@ -838,6 +896,7 @@ export class EngineCore {
                 cyl.pushed = room
                 cyl.pushedFresh *= share
                 cyl.pushedFuel *= share
+                cyl.pushedEnergy *= share
               }
             }
             cyl.fresh *= kept
@@ -1075,6 +1134,10 @@ export class EngineCore {
     for (let i = 0; i < this.exhaustFlow.length; i++)
       this.exhaustFlow[i] /= this.dt
     this.exhaustWaves.step(this.exhaustFlow)
+    if (this.heatedIntakePort) {
+      const flow = Math.max(0, freshMass / this.dt)
+      this.portFlow += ((flow - this.portFlow) * this.dt) / 0.05
+    }
     induction.step(
       this.dt,
       this.omega,

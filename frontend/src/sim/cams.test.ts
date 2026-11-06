@@ -89,7 +89,7 @@ describe('camshafts and valve timing', () => {
     for (let i = 0; i < 48000; i++) core.step()
     expect(core.telemetry().ecu.camPhase).toEqual({ intake: 30, exhaust: 0 })
     expect(torque(e, 2000)).toBeGreaterThan(torque(profiled, 2000) + 3)
-    expect(torque(e, 6500)).toBeGreaterThan(torque(profiled, 6500) + 3)
+    expect(torque(e, 6700)).toBeGreaterThan(torque(profiled, 6700) + 3)
   }, 60000)
   it('a big cam floats stock springs sooner; uprated springs restore it', () => {
     expect(floatFactor(roadEngine)).toBe(1)

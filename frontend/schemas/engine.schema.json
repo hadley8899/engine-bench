@@ -19,6 +19,10 @@
         {
           "type": "number",
           "const": 4
+        },
+        {
+          "type": "number",
+          "const": 5
         }
       ]
     },
@@ -112,6 +116,14 @@
       "type": "number",
       "minimum": 0.05,
       "maximum": 1.5
+    },
+    "intakePortModel": {
+      "default": "legacy",
+      "type": "string",
+      "enum": [
+        "legacy",
+        "heated"
+      ]
     },
     "ignitionAdvance": {
       "type": "number",

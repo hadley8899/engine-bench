@@ -50,8 +50,11 @@ import { z } from 'zod'
  * 1.16.0: optional four-stroke exhaust pressure waves make primary length,
  * collector layout and valve overlap affect gas exchange. Engine schema 4
  * stores the opt-in; older builds keep the legacy ambient-pressure boundary.
+ * 1.17.0: an optional heated-intake-port model reduces low-speed volumetric
+ * efficiency and preserves the energy of residual gas pushed into a runner.
+ * Engine schema 5 stores the opt-in; older builds keep 1.16.0 results.
  */
-export const MODEL_VERSION = 'eb-0d-1.16.0'
+export const MODEL_VERSION = 'eb-0d-1.17.0'
 /** Runs recorded by earlier model versions remain readable as history. */
 export const MODEL_VERSIONS = [
   'eb-0d-1.0.0',
@@ -71,6 +74,7 @@ export const MODEL_VERSIONS = [
   'eb-0d-1.14.0',
   'eb-0d-1.14.1',
   'eb-0d-1.15.0',
+  'eb-0d-1.16.0',
   MODEL_VERSION,
 ] as const
 const intercoolerSchema = z.strictObject({
@@ -510,8 +514,8 @@ export const twoStrokeSchema = z.strictObject({
 })
 export type TwoStroke = z.infer<typeof twoStrokeSchema>
 
-/** Schema 2 adds cycles, schema 3 layouts, schema 4 exhaust pressure waves. */
-export const ENGINE_SCHEMA_VERSION = 4
+/** Schema 2 adds cycles, 3 layouts, 4 exhaust waves, 5 intake-port heat. */
+export const ENGINE_SCHEMA_VERSION = 5
 
 // Ranges are the envelope the model has been stress-tested across
 // (core.test.ts), not claims about buildable engines.
@@ -521,6 +525,7 @@ export const engineSchema = z.strictObject({
     z.literal(2),
     z.literal(3),
     z.literal(4),
+    z.literal(5),
   ]),
   name: z.string().trim().min(1).max(80),
   cycle: z.enum(['four-stroke', 'two-stroke']).default('four-stroke'),
@@ -550,6 +555,8 @@ export const engineSchema = z.strictObject({
   intakeClose: z.number().min(550).max(610),
   // Defaulted so builds saved before runners were modelled stay valid.
   intakeRunnerLength: z.number().min(0.05).max(1.5).default(0.3),
+  // Builds saved before 1.17.0 keep the unheated-port result exactly.
+  intakePortModel: z.enum(['legacy', 'heated']).default('legacy'),
   ignitionAdvance: z.number().min(5).max(38),
   burnDuration: z.number().min(35).max(75),
   lambda: z.number().min(0.8).max(1.15),
@@ -671,7 +678,7 @@ export function validateEngine(value: unknown): EngineDefinition {
     if (e.twoStroke)
       throw new Error('A four-stroke has valves, not two-stroke ports.')
   } else twoStrokeProblems(e)
-  // Older builds read as schema 4; missing pressureWaves defaults false.
+  // Older builds read as schema 5; compatibility fields retain their model.
   return { ...e, schemaVersion: ENGINE_SCHEMA_VERSION }
 }
 /**
@@ -808,6 +815,7 @@ export const roadEngine: EngineDefinition = {
   exhaustArea: 0.0006,
   intakeClose: 590,
   intakeRunnerLength: 0.3,
+  intakePortModel: 'heated',
   ignitionAdvance: 20,
   burnDuration: 52,
   lambda: 1,

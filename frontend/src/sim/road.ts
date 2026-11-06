@@ -43,7 +43,7 @@ export const vehicles = {
       tyreRadius: 0.31,
       dragArea: 0.66,
       rolling: 0.011,
-      launchRpm: 900,
+      launchRpm: 1000,
       clutchCapacity: 600,
       gear: 1,
     },

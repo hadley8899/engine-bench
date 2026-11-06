@@ -41,3 +41,25 @@ test('Stage 12.1 pressure-wave tuning is explicit and runs through the dyno work
   await expect(page.getByTestId('run-summary')).toContainText('vs Baseline')
   expect(errors).toEqual([])
 })
+
+test('Stage 12.2 heated-port K20 completes a low-speed worker pull', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/')
+  await openSection(page, 'Starting build')
+  await page
+    .getByRole('button', { name: 'Honda Civic Type R FD2 K20A', exact: true })
+    .click()
+  await expect(page.getByTestId('command-bar')).toContainText('K20A')
+
+  await openMode(page, 'Dyno')
+  await page.getByLabel('Start RPM', { exact: true }).fill('1500')
+  await page.getByLabel('End RPM', { exact: true }).fill('2500')
+  await page.getByRole('button', { name: 'Quick test', exact: true }).click()
+  await expect(page.getByTestId('run-summary')).toContainText('COMPLETE', {
+    timeout: 60000,
+  })
+  expect(errors).toEqual([])
+})

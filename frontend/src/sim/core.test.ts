@@ -570,7 +570,7 @@ describe('calibrated full-load trends', () => {
     const long = { ...roadEngine, intakeRunnerLength: 0.6 }
     const short = { ...roadEngine, intakeRunnerLength: 0.15 }
     expect(heldTorque(long, 3500)).toBeGreaterThan(heldTorque(short, 3500) + 10)
-    expect(heldTorque(long, 6000)).toBeLessThan(heldTorque(short, 6000))
+    expect(heldTorque(long, 6500)).toBeLessThan(heldTorque(short, 6500))
   })
 })
 
